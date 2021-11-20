@@ -1,0 +1,28 @@
+[package]
+name = "netsblox-ast"
+version = "0.1.0"
+authors = ["Devin Jean <emailcruzjean@yahoo.com>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dragazo/netsblox-ast"
+documentation = "https://docs.rs/netsblox-ast"
+description = """
+A crate for parsing NetsBlox project files into an AST for use in code generation.
+"""
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "netsblox_ast"
+path = "src/lib.rs"
+
+[[bin]]
+name = "netsblox_ast"
+path = "src/main.rs"
+
+[dependencies]
+regex = "1.5.4"
+xml-rs = "0.8.4"
+lazy_static = "1.4.0"
+linked-hash-map = "0.5.4"
+serde = { version = "1.0.127", features = ["derive"], optional = true }
