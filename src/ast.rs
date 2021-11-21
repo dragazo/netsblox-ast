@@ -95,6 +95,11 @@ pub enum ProjectError {
     UnknownBlockMetaType { role: String, sprite: String, meta_type: String },
     BlockWithoutType { role: String, sprite: String },
     BlockChildCount { role: String, sprite: String, block_type: String, needed: usize, got: usize },
+    
+    BlockMissingOption { role: String, sprite: String, block_type: String },
+    BlockOptionUnknown { role: String, sprite: String, block_type: String, got: String },
+
+    InvalidBoolLiteral { role: String, sprite: String },
 }
 #[derive(Debug)]
 pub enum Error {
@@ -103,6 +108,8 @@ pub enum Error {
     UnknownBlockType { role: String, sprite: String, block_type: String },
     DerefAssignment { role: String, sprite: String },
     UndefinedVariable { role: String, sprite: String, name: String },
+    BlockOptionNotConst { role: String, sprite: String, block_type: String },
+    BlockOptionNotSelected { role: String, sprite: String, block_type: String },
 }
 
 #[derive(Debug)]
@@ -151,7 +158,8 @@ pub struct Script {
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Stmt {
-    Assign { var: VariableRef, value: Expr, comment: Option<String> },
+    Assign { vars: Vec<VariableRef>, value: Expr, comment: Option<String> },
+    AddAssign { var: VariableRef, value: Expr, comment: Option<String> },
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -165,7 +173,52 @@ pub enum Value {
 pub enum Expr {
     Value(Value),
     Variable { var: VariableRef, comment: Option<String> },
+
+    Add { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Sub { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Mul { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Div { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Mod { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Pow { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+
+    And { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Or { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+
+    RefEq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Eq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Less { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    Greater { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+
+    RandInt { lower: Box<Expr>, upper: Box<Expr>, comment: Option<String> },
+
+    Not { value: Box<Expr>, comment: Option<String> },
+    Round { value: Box<Expr>, comment: Option<String> },
+
+    Strlen { value: Box<Expr>, comment: Option<String> },
+    UnicodeToChar { value: Box<Expr>, comment: Option<String> },
+    CharToUnicode { value: Box<Expr>, comment: Option<String> },
+
+    Neg { value: Box<Expr>, comment: Option<String> },
+    Abs { value: Box<Expr>, comment: Option<String> },
+    Sqrt { value: Box<Expr>, comment: Option<String> },
+    Floor { value: Box<Expr>, comment: Option<String> },
+    Ceil { value: Box<Expr>, comment: Option<String> },
+    
+    Sin { value: Box<Expr>, comment: Option<String> },
+    Cos { value: Box<Expr>, comment: Option<String> },
+    Tan { value: Box<Expr>, comment: Option<String> },
+    
+    Asin { value: Box<Expr>, comment: Option<String> },
+    Acos { value: Box<Expr>, comment: Option<String> },
+    Atan { value: Box<Expr>, comment: Option<String> },
+
+    LogE { value: Box<Expr>, comment: Option<String> },
+    Log2 { value: Box<Expr>, comment: Option<String> },
+    Log10 { value: Box<Expr>, comment: Option<String> },
+    
+    ExpE { value: Box<Expr>, comment: Option<String> },
+    Exp2 { value: Box<Expr>, comment: Option<String> },
+    Exp10 { value: Box<Expr>, comment: Option<String> },
 }
 impl Expr {
     fn is_evaluated(&self) -> bool {
@@ -214,18 +267,31 @@ impl<'a> ScriptInfo<'a> {
     }
     fn parse_block(&mut self, stmt_xml: &Xml) -> Result<Stmt, Error> {
         let s = match stmt_xml.attr("s") {
-            None => { println!("here {:#?}", stmt_xml); return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }) }
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
             Some(v) => v.value.as_str(),
         };
         Ok(match s {
-            "doSetVar" => {
+            "doDeclareVariables" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 1);
+                let mut vars = vec![];
+                for var in stmt_xml.children[0].children.iter() {
+                    let name = var.text.clone();
+                    let var = VariableDef { name: name.clone(), value: Expr::Value(Value::Literal("0".into())) };
+                    vars.push(VariableRef { name: name.clone(), location: VarLocation::Local });
+                    self.locals.insert(name, var);
+                }
+                Stmt::Assign { vars, value: Expr::Value(Value::Literal("0".into())), comment }
+            }
+            "doSetVar" | "doChangeVar" => {
                 let comment = check_children_get_comment!(self, stmt_xml, s => 2);
                 let var = match stmt_xml.children[0].name.as_str() {
                     "l" => self.reference_var(stmt_xml.children[0].text.clone())?,
                     _ => return Err(Error::DerefAssignment { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() }),
                 };
                 let value = self.parse_expr(&stmt_xml.children[1])?;
-                Stmt::Assign { var, value, comment }
+
+                if s == "doSetVar" { Stmt::Assign { vars: vec![var], value, comment } }
+                else { Stmt::AddAssign { var, value, comment } }
             }
             _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
@@ -268,13 +334,93 @@ impl<'a> ScriptInfo<'a> {
                     None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
                     Some(v) => v.value.as_str(),
                 };
-                Ok(match s {
-                    "reportProduct" => {
+                macro_rules! binary_op {
+                    ($self:ident, $root:ident, $s:expr => $res:path : $left:ident, $right:ident) => {{
                         let comment = check_children_get_comment!(self, expr, s => 2);
-                        let left = Box::new(self.parse_expr(&expr.children[0])?);
-                        let right = Box::new(self.parse_expr(&expr.children[1])?);
-                        Expr::Mul { left, right, comment }
+                        let $left = Box::new(self.parse_expr(&expr.children[0])?);
+                        let $right = Box::new(self.parse_expr(&expr.children[1])?);
+                        $res { $left, $right, comment }
+                    }};
+                    ($self:ident, $root:ident, $s:expr => $res:path) => { binary_op! { $self, $root, $s => $res : left, right } }
+                }
+                macro_rules! unary_op {
+                    ($self:ident, $root:ident, $s:expr => $res:path : $val:ident) => {{
+                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let $val = Box::new(self.parse_expr(&expr.children[0])?);
+                        $res { $val, comment }
+                    }};
+                    ($self:ident, $root:ident, $s:expr => $res:path) => { unary_op! { $self, $root, $s => $res : value } }
+                }
+                Ok(match s {
+                    "reportSum" => binary_op!(self, expr, s => Expr::Add),
+                    "reportDifference" => binary_op!(self, expr, s => Expr::Sub),
+                    "reportProduct" => binary_op!(self, expr, s => Expr::Mul),
+                    "reportQuotient" => binary_op!(self, expr, s => Expr::Div),
+                    "reportModulus" => binary_op!(self, expr, s => Expr::Mod),
+                    "reportPower" => binary_op!(self, expr, s => Expr::Pow),
+
+                    "reportAnd" => binary_op!(self, expr, s => Expr::And),
+                    "reportOr" => binary_op!(self, expr, s => Expr::Or),
+                    
+                    "reportIsIdentical" => binary_op!(self, expr, s => Expr::RefEq),
+                    "reportEquals" => binary_op!(self, expr, s => Expr::Eq),
+                    "reportLessThan" => binary_op!(self, expr, s => Expr::Less),
+                    "reportGreaterThan" => binary_op!(self, expr, s => Expr::Greater),
+                    
+                    "reportRandom" => binary_op!(self, expr, s => Expr::RandInt : lower, upper),
+                    
+                    "reportNot" => unary_op!(self, expr, s => Expr::Not),
+                    "reportRound" => unary_op!(self, expr, s => Expr::Round),
+
+                    "reportStringSize" => unary_op!(self, expr, s => Expr::Strlen),
+                    "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
+                    "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
+
+                    "reportBoolean" => match expr.get(&["l", "bool"]) {
+                        Some(v) if v.text == "true" => Expr::Value(Value::Bool(true)),
+                        Some(v) if v.text == "false" => Expr::Value(Value::Bool(false)),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
                     }
+                    "reportMonadic" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let func = match expr.children[0].get(&["option"]) {
+                            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                            Some(f) => {
+                                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                                f.text.as_str()
+                            }
+                        };
+                        let value = Box::new(self.parse_expr(&expr.children[1])?);
+                        match func {
+                            "id" => *value,
+
+                            "neg" => Expr::Neg { value, comment },
+                            "abs" => Expr::Abs { value, comment },
+                            "sqrt" => Expr::Sqrt { value, comment },
+                            "floor" => Expr::Floor { value, comment },
+                            "ceiling" => Expr::Ceil { value, comment },
+
+                            "sin" => Expr::Sin { value, comment },
+                            "cos" => Expr::Cos { value, comment },
+                            "tan" => Expr::Tan { value, comment },
+
+                            "asin" => Expr::Asin { value, comment },
+                            "acos" => Expr::Acos { value, comment },
+                            "atan" => Expr::Atan { value, comment },
+
+                            "ln" => Expr::LogE { value, comment },
+                            "lg" => Expr::Log2 { value, comment },
+                            "log" => Expr::Log10 { value, comment },
+
+                            "e^" => Expr::ExpE { value, comment },
+                            "2^" => Expr::Exp2 { value, comment },
+                            "10^" => Expr::Exp10 { value, comment },
+
+                            "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
+                        }
+                    }
+
                     _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
                 })
             }
