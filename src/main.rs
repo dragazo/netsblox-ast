@@ -11,7 +11,8 @@ fn main() {
     let input = &args[1];
     if input.ends_with(".xml") {
         let xml = BufReader::new(File::open(input).expect("failed to open file"));
-        netsblox_ast::parse(xml).expect("failed to translate");
+        let res = netsblox_ast::parse(xml).expect("failed to translate");
+        println!("{:?}", res);
     }
     else {
         eprintln!("unknown input file type");

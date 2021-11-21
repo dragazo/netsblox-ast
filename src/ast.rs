@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::iter;
 
 use linked_hash_map::LinkedHashMap;
 
@@ -90,19 +91,27 @@ pub enum ProjectError {
     BoolNoValue { role: String, sprite: String },
     BoolUnknownValue { role: String, sprite: String, value: String },
     UnnamedSprite { role: String },
+
+    UnknownBlockMetaType { role: String, sprite: String, meta_type: String },
+    BlockWithoutType { role: String, sprite: String },
+    BlockChildCount { role: String, sprite: String, block_type: String, needed: usize, got: usize },
 }
 #[derive(Debug)]
 pub enum Error {
     InvalidXml { error: xml::reader::Error },
     InvalidProject { error: ProjectError },
     UnknownBlockType { role: String, sprite: String, block_type: String },
+    DerefAssignment { role: String, sprite: String },
+    UndefinedVariable { role: String, sprite: String, name: String },
 }
 
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Project {
     pub name: String,
     pub roles: Vec<Role>,
 }
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Role {
     pub name: String,
@@ -110,25 +119,53 @@ pub struct Role {
     pub globals: Vec<VariableDef>,
     pub sprites: Vec<Sprite>,
 }
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Sprite {
     pub name: String,
     pub fields: Vec<VariableDef>,
+    pub scripts: Vec<Script>,
 }
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariableDef {
     pub name: String,
-    pub init_value: Expr,
+    pub value: Expr,
 }
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct VariableRef {
+    pub name: String,
+    pub location: VarLocation,
+}
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum VarLocation {
+    Global, Field, Local,
+}
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Script {
+    pub stmts: Vec<Stmt>,
+}
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Stmt {
+    Assign { var: VariableRef, value: Expr, comment: Option<String> },
+}
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
     Literal(String),
     Bool(bool),
     List(Vec<Expr>),
 }
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Expr {
     Value(Value),
+    Variable { var: VariableRef, comment: Option<String> },
+    Mul { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
 }
 impl Expr {
     fn is_evaluated(&self) -> bool {
@@ -143,14 +180,64 @@ impl Expr {
     }
 }
 
-struct BlockInfo<'a> {
+macro_rules! check_children_get_comment {
+    ($self:ident, $root:ident, $s:expr => $req:literal) => {{
+        let s = $s;
+        #[allow(unused_comparisons)]
+        if $root.children.len() < $req {
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.sprite.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $root.children.len() } });
+        }
+        match $root.children.get($req) {
+            Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
+            None => None,
+        }
+    }}
+}
+struct ScriptInfo<'a> {
     sprite: &'a SpriteInfo<'a>,
-    name: String,
     locals: LinkedHashMap<String, VariableDef>,
 }
-impl<'a> BlockInfo<'a> {
-    fn new(sprite: &'a SpriteInfo, name: String) -> Self {
-        Self { sprite, name, locals: Default::default() }
+impl<'a> ScriptInfo<'a> {
+    fn new(sprite: &'a SpriteInfo) -> Self {
+        Self { sprite, locals: Default::default() }
+    }
+    fn parse(mut self, script: &Xml) -> Result<Script, Error> {
+        let mut stmts = vec![];
+        for stmt_xml in script.children.iter() {
+            match stmt_xml.name.as_str() {
+                "block" => stmts.push(self.parse_block(stmt_xml)?),
+                x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
+            }
+        }
+
+        Ok(Script { stmts })
+    }
+    fn parse_block(&mut self, stmt_xml: &Xml) -> Result<Stmt, Error> {
+        let s = match stmt_xml.attr("s") {
+            None => { println!("here {:#?}", stmt_xml); return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }) }
+            Some(v) => v.value.as_str(),
+        };
+        Ok(match s {
+            "doSetVar" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 2);
+                let var = match stmt_xml.children[0].name.as_str() {
+                    "l" => self.reference_var(stmt_xml.children[0].text.clone())?,
+                    _ => return Err(Error::DerefAssignment { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() }),
+                };
+                let value = self.parse_expr(&stmt_xml.children[1])?;
+                Stmt::Assign { var, value, comment }
+            }
+            _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+        })
+    }
+    fn reference_var(&self, name: String) -> Result<VariableRef, Error> {
+        let locations = [(&self.locals, VarLocation::Local), (&self.sprite.fields, VarLocation::Field), (&self.sprite.role.globals, VarLocation::Global)];
+        for (sym_table, location) in locations {
+            if sym_table.contains_key(&name) {
+                return Ok(VariableRef { name, location })
+            }
+        }
+        Err(Error::UndefinedVariable { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), name })
     }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
         match expr.name.as_str() {
@@ -171,6 +258,26 @@ impl<'a> BlockInfo<'a> {
                 }
                 Ok(Expr::Value(Value::List(values)))
             }
+            "block" => {
+                if let Some(var) = expr.attr("var") {
+                    let comment = check_children_get_comment!(self, expr, "var" => 0);
+                    let var = self.reference_var(var.value.clone())?;
+                    return Ok(Expr::Variable { var, comment });
+                }
+                let s = match expr.attr("s") {
+                    None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                    Some(v) => v.value.as_str(),
+                };
+                Ok(match s {
+                    "reportProduct" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let left = Box::new(self.parse_expr(&expr.children[0])?);
+                        let right = Box::new(self.parse_expr(&expr.children[1])?);
+                        Expr::Mul { left, right, comment }
+                    }
+                    _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+                })
+            }
             x => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
         }
     }
@@ -187,7 +294,7 @@ impl<'a> SpriteInfo<'a> {
     }
     fn parse(mut self, sprite: &Xml) -> Result<Sprite, Error> {
         if let Some(fields) = sprite.get(&["variables"]) {
-            let dummy_block = BlockInfo::new(&self, "fields".into());
+            let dummy_script = ScriptInfo::new(&self);
 
             let mut defs = vec![];
             for def in fields.children.iter().filter(|v| v.name == "variable") {
@@ -195,25 +302,42 @@ impl<'a> SpriteInfo<'a> {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedField { role: self.role.name.clone(), sprite: self.name } }),
                     Some(x) => x.value.to_owned(),
                 };
-                let init_value = match def.children.get(0) {
+                let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::FieldNoValue { role: self.role.name.clone(), sprite: self.name, name } }),
-                    Some(x) => dummy_block.parse_expr(x)?,
+                    Some(x) => dummy_script.parse_expr(x)?,
                 };
-                if !init_value.is_evaluated() {
+                if !value.is_evaluated() {
                     return Err(Error::InvalidProject { error: ProjectError::FieldNotEvaluated { role: self.role.name.clone(), sprite: self.name, name } });
                 }
-                defs.push((name, init_value));
+                defs.push((name, value));
             }
 
-            for (name, init_value) in defs {
-                if let Some(prev) = self.fields.insert(name.clone(), VariableDef { name, init_value }) {
+            for (name, value) in defs {
+                if let Some(prev) = self.fields.insert(name.clone(), VariableDef { name, value }) {
                     return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), sprite: self.name, name: prev.name } });
                 }
             }
         }
 
+        let mut scripts = vec![];
+        if let Some(scripts_xml) = sprite.get(&["scripts"]) {
+            for script_xml in scripts_xml.children.iter() {
+                match script_xml.children.as_slice() {
+                    [] => continue,
+                    [stmt] => {
+                        if stmt.attr("var").is_some() { continue }
+                        if let Some(s) = stmt.attr("s") {
+                            if s.value.starts_with("report") { continue }
+                        }
+                    }
+                    _ => (),
+                }
+                scripts.push(ScriptInfo::new(&self).parse(script_xml)?);
+            }
+        }
+
         let fields = self.fields.into_iter().map(|(_, v)| v).collect();
-        Ok(Sprite { name: self.name, fields })
+        Ok(Sprite { name: self.name, fields, scripts })
     }
 }
 
@@ -243,7 +367,7 @@ impl RoleInfo {
 
         if let Some(globals) = content.get(&["variables"]) {
             let dummy_sprite = SpriteInfo::new(&self, "global".into());
-            let dummy_block = BlockInfo::new(&dummy_sprite, "global".into());
+            let dummy_script = ScriptInfo::new(&dummy_sprite);
 
             let mut defs = vec![];
             for def in globals.children.iter().filter(|v| v.name == "variable") {
@@ -251,18 +375,18 @@ impl RoleInfo {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedGlobal { role } }),
                     Some(x) => x.value.to_owned(),
                 };
-                let init_value = match def.children.get(0) {
+                let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::GlobalNoValue { role, name } }),
-                    Some(x) => dummy_block.parse_expr(x)?,
+                    Some(x) => dummy_script.parse_expr(x)?,
                 };
-                if !init_value.is_evaluated() {
+                if !value.is_evaluated() {
                     return Err(Error::InvalidProject { error: ProjectError::GlobalNotEvaluated { role, name } });
                 }
-                defs.push((name, init_value));
+                defs.push((name, value));
             }
 
-            for (name, init_value) in defs {
-                if let Some(prev) = self.globals.insert(name.clone(), VariableDef { name, init_value }) {
+            for (name, value) in defs {
+                if let Some(prev) = self.globals.insert(name.clone(), VariableDef { name, value }) {
                     return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role, name: prev.name } });
                 }
             }
@@ -270,7 +394,7 @@ impl RoleInfo {
 
         let mut sprites = vec![];
         if let Some(sprites_xml) = stage.get(&["sprites"]) {
-            for sprite in sprites_xml.children.iter().filter(|s| s.name == "sprite") {
+            for sprite in iter::once(stage).chain(sprites_xml.children.iter().filter(|s| s.name == "sprite")) {
                 let name = match sprite.attr("name") {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedSprite { role } }),
                     Some(x) => x.value.clone(),
