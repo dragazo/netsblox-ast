@@ -100,6 +100,7 @@ pub enum ProjectError {
     BlockOptionUnknown { role: String, sprite: String, block_type: String, got: String },
 
     InvalidBoolLiteral { role: String, sprite: String },
+    NonConstantUpvar { role: String, sprite: String, block_type: String },
 }
 #[derive(Debug)]
 pub enum Error {
@@ -139,13 +140,13 @@ pub struct VariableDef {
     pub name: String,
     pub value: Expr,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariableRef {
     pub name: String,
     pub location: VarLocation,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VarLocation {
     Global, Field, Local,
@@ -153,22 +154,38 @@ pub enum VarLocation {
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Script {
+    pub hat: Option<Hat>,
     pub stmts: Vec<Stmt>,
+}
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Hat {
+    OnFlag,
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Stmt {
     Assign { vars: Vec<VariableRef>, value: Expr, comment: Option<String> },
     AddAssign { var: VariableRef, value: Expr, comment: Option<String> },
+
+    Loop { stmts: Vec<Stmt>, comment: Option<String> },
+    ForLoop { var: VariableRef, first: Expr, last: Expr, stmts: Vec<Stmt>, comment: Option<String> },
+    UntilLoop { condition: Expr, stmts: Vec<Stmt>, comment: Option<String> },
+    Repeat { times: Expr, stmts: Vec<Stmt>, comment: Option<String> },
+    
+    If { condition: Expr, then: Vec<Stmt>, comment: Option<String> },
+    IfElse { condition: Expr, then: Vec<Stmt>, otherwise: Vec<Stmt>, comment: Option<String> },
+
+    Sleep { seconds: Expr, comment: Option<String> },
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
     Literal(String),
     Bool(bool),
     List(Vec<Expr>),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Expr {
     Value(Value),
@@ -219,6 +236,8 @@ pub enum Expr {
     ExpE { value: Box<Expr>, comment: Option<String> },
     Exp2 { value: Box<Expr>, comment: Option<String> },
     Exp10 { value: Box<Expr>, comment: Option<String> },
+    
+    Concat { values: Vec<Expr>, comment: Option<String> },
 }
 impl Expr {
     fn is_evaluated(&self) -> bool {
@@ -234,18 +253,36 @@ impl Expr {
 }
 
 macro_rules! check_children_get_comment {
-    ($self:ident, $root:ident, $s:expr => $req:literal) => {{
+    ($self:ident, $expr:ident, $s:expr => $req:literal) => {{
         let s = $s;
         #[allow(unused_comparisons)]
-        if $root.children.len() < $req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.sprite.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $root.children.len() } });
+        if $expr.children.len() < $req {
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.sprite.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $expr.children.len() } });
         }
-        match $root.children.get($req) {
+        match $expr.children.get($req) {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         }
     }}
 }
+macro_rules! binary_op {
+    ($self:ident, $expr:ident, $s:expr => $res:path : $left:ident, $right:ident) => {{
+        let comment = check_children_get_comment!($self, $expr, $s => 2);
+        let $left = $self.parse_expr(&$expr.children[0])?.into();
+        let $right = $self.parse_expr(&$expr.children[1])?.into();
+        $res { $left, $right, comment }
+    }};
+    ($self:ident, $expr:ident, $s:expr => $res:path) => { binary_op! { $self, $expr, $s => $res : left, right } }
+}
+macro_rules! unary_op {
+    ($self:ident, $expr:ident, $s:expr => $res:path : $val:ident) => {{
+        let comment = check_children_get_comment!($self, $expr, $s => 1);
+        let $val = $self.parse_expr(&$expr.children[0])?.into();
+        $res { $val, comment }
+    }};
+    ($self:ident, $expr:ident, $s:expr => $res:path) => { unary_op! { $self, $expr, $s => $res : value } }
+}
+
 struct ScriptInfo<'a> {
     sprite: &'a SpriteInfo<'a>,
     locals: LinkedHashMap<String, VariableDef>,
@@ -254,16 +291,32 @@ impl<'a> ScriptInfo<'a> {
     fn new(sprite: &'a SpriteInfo) -> Self {
         Self { sprite, locals: Default::default() }
     }
-    fn parse(mut self, script: &Xml) -> Result<Script, Error> {
+    fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
+        if script.children.is_empty() { return Ok(Script { hat: None, stmts: vec![] }) }
+
+        let (hat, stmts_xml) = match self.parse_hat(&script.children[0])? {
+            None => (None, script.children.as_slice()),
+            Some(hat) => (Some(hat), &script.children[1..]),
+        };
+
         let mut stmts = vec![];
-        for stmt_xml in script.children.iter() {
+        for stmt_xml in stmts_xml {
             match stmt_xml.name.as_str() {
                 "block" => stmts.push(self.parse_block(stmt_xml)?),
                 x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
             }
         }
-
-        Ok(Script { stmts })
+        Ok(Script { hat, stmts })
+    }
+    fn parse_hat(&self, stmt_xml: &Xml) -> Result<Option<Hat>, Error> {
+        let s = match stmt_xml.attr("s") {
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+            Some(v) => v.value.as_str(),
+        };
+        Ok(Some(match s {
+            "receiveGo" => Hat::OnFlag,
+            _ => return Ok(None),
+        }))
     }
     fn parse_block(&mut self, stmt_xml: &Xml) -> Result<Stmt, Error> {
         let s = match stmt_xml.attr("s") {
@@ -293,6 +346,45 @@ impl<'a> ScriptInfo<'a> {
                 if s == "doSetVar" { Stmt::Assign { vars: vec![var], value, comment } }
                 else { Stmt::AddAssign { var, value, comment } }
             }
+            "doFor" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 4);
+                let var = match stmt_xml.children[0].name.as_str() {
+                    "l" => stmt_xml.children[0].text.as_str(),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                };
+                let first = self.parse_expr(&stmt_xml.children[1])?;
+                let last = self.parse_expr(&stmt_xml.children[2])?;
+                let stmts = self.parse(&stmt_xml.children[3])?.stmts;
+
+                self.locals.insert(var.to_owned(), VariableDef { name: var.to_owned(), value: first.clone() });
+                let var = self.reference_var(var.to_owned())?;
+                debug_assert_eq!(var.location, VarLocation::Local);
+                Stmt::ForLoop { var, first, last, stmts, comment }
+            }
+            "doRepeat" | "doUntil" | "doIf" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 2);
+                let expr = self.parse_expr(&stmt_xml.children[0])?;
+                let stmts = self.parse(&stmt_xml.children[1])?.stmts;
+                match s {
+                    "doRepeat" => Stmt::Repeat { times: expr, stmts, comment },
+                    "doUntil" => Stmt::UntilLoop { condition: expr, stmts, comment },
+                    "doIf" => Stmt::If { condition: expr, then: stmts, comment },
+                    _ => unreachable!(),
+                }
+            }
+            "doForever" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 1);
+                let stmts = self.parse(&stmt_xml.children[0])?.stmts;
+                Stmt::Loop { stmts, comment }
+            }
+            "doIfElse" => {
+                let comment = check_children_get_comment!(self, stmt_xml, s => 3);
+                let condition = self.parse_expr(&stmt_xml.children[0])?;
+                let then = self.parse(&stmt_xml.children[1])?.stmts;
+                let otherwise = self.parse(&stmt_xml.children[2])?.stmts;
+                Stmt::IfElse { condition, then, otherwise, comment }
+            }
+            "doWait" => unary_op!(self, stmt_xml, s => Stmt::Sleep : seconds),
             _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -334,23 +426,6 @@ impl<'a> ScriptInfo<'a> {
                     None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
                     Some(v) => v.value.as_str(),
                 };
-                macro_rules! binary_op {
-                    ($self:ident, $root:ident, $s:expr => $res:path : $left:ident, $right:ident) => {{
-                        let comment = check_children_get_comment!(self, expr, s => 2);
-                        let $left = Box::new(self.parse_expr(&expr.children[0])?);
-                        let $right = Box::new(self.parse_expr(&expr.children[1])?);
-                        $res { $left, $right, comment }
-                    }};
-                    ($self:ident, $root:ident, $s:expr => $res:path) => { binary_op! { $self, $root, $s => $res : left, right } }
-                }
-                macro_rules! unary_op {
-                    ($self:ident, $root:ident, $s:expr => $res:path : $val:ident) => {{
-                        let comment = check_children_get_comment!(self, expr, s => 1);
-                        let $val = Box::new(self.parse_expr(&expr.children[0])?);
-                        $res { $val, comment }
-                    }};
-                    ($self:ident, $root:ident, $s:expr => $res:path) => { unary_op! { $self, $root, $s => $res : value } }
-                }
                 Ok(match s {
                     "reportSum" => binary_op!(self, expr, s => Expr::Add),
                     "reportDifference" => binary_op!(self, expr, s => Expr::Sub),
@@ -380,6 +455,14 @@ impl<'a> ScriptInfo<'a> {
                         Some(v) if v.text == "true" => Expr::Value(Value::Bool(true)),
                         Some(v) if v.text == "false" => Expr::Value(Value::Bool(false)),
                         _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                    }
+                    "reportJoinWords" => {
+                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let mut values = vec![];
+                        for item in expr.children[0].children.iter() {
+                            values.push(self.parse_expr(item)?);
+                        }
+                        Expr::Concat { values, comment }
                     }
                     "reportMonadic" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
