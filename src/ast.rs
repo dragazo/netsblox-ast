@@ -1,7 +1,9 @@
 use std::io::Read;
+use std::mem;
 use std::iter;
 
 use linked_hash_map::LinkedHashMap;
+use derive_builder::Builder;
 
 use xml::reader::{EventReader, XmlEvent};
 use xml::name::OwnedName;
@@ -23,12 +25,12 @@ fn clean_newlines(s: &str) -> String {
     NEW_LINE.replace_all(s, "\n").into_owned()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct XmlAttr {
     name: String,
     value: String,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Xml {
     name: String,
     text: String,
@@ -95,7 +97,7 @@ pub enum ProjectError {
     UnknownBlockMetaType { role: String, sprite: String, meta_type: String },
     BlockWithoutType { role: String, sprite: String },
     BlockChildCount { role: String, sprite: String, block_type: String, needed: usize, got: usize },
-    
+
     BlockMissingOption { role: String, sprite: String, block_type: String },
     BlockOptionUnknown { role: String, sprite: String, block_type: String, got: String },
 
@@ -140,13 +142,13 @@ pub struct VariableDef {
     pub name: String,
     pub value: Expr,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariableRef {
     pub name: String,
     pub location: VarLocation,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VarLocation {
     Global, Field, Local,
@@ -165,17 +167,18 @@ pub enum Hat {
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Stmt {
+    /// Assign the given value to each of the listed variables (afterwards, they should all be ref-eq).
     Assign { vars: Vec<VariableRef>, value: Expr, comment: Option<String> },
     AddAssign { var: VariableRef, value: Expr, comment: Option<String> },
 
     Warp { stmts: Vec<Stmt>, comment: Option<String> },
 
-    Loop { stmts: Vec<Stmt>, comment: Option<String> },
+    InfLoop { stmts: Vec<Stmt>, comment: Option<String> },
     ForeachLoop { var: VariableRef, items: Expr, stmts: Vec<Stmt>, comment: Option<String> },
     ForLoop { var: VariableRef, first: Expr, last: Expr, stmts: Vec<Stmt>, comment: Option<String> },
     UntilLoop { condition: Expr, stmts: Vec<Stmt>, comment: Option<String> },
     Repeat { times: Expr, stmts: Vec<Stmt>, comment: Option<String> },
-    
+
     If { condition: Expr, then: Vec<Stmt>, comment: Option<String> },
     IfElse { condition: Expr, then: Vec<Stmt>, otherwise: Vec<Stmt>, comment: Option<String> },
 
@@ -192,16 +195,21 @@ pub enum Stmt {
     LastIndexAssign { list: Expr, value: Expr, comment: Option<String> },
 
     Sleep { seconds: Expr, comment: Option<String> },
-    
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
     Literal(String),
     Bool(bool),
     List(Vec<Expr>),
+    Constant(Constant)
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Constant {
+    E, Pi,
+}
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Expr {
     Value(Value),
@@ -211,55 +219,64 @@ pub enum Expr {
     Sub { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Mul { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Div { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    /// Mathematical modulus (not remainder!). For instance, `-1 mod 7 == 6`.
     Mod { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
-    Pow { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
 
+    Pow { base: Box<Expr>, power: Box<Expr>, comment: Option<String> },
+    Log { value: Box<Expr>, base: Box<Expr>, comment: Option<String> },
+
+    /// Short-circuiting logical `or`.
     And { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    /// Short-circuiting logical `and`.
     Or { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    /// Lazily-evaluated conditional expression. Returns `then` if `condition` is true, otherwise `otherwise`.
+    Conditional { condition: Box<Expr>, then: Box<Expr>, otherwise: Box<Expr>, comment: Option<String> },
 
     RefEq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Eq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Less { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Greater { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
 
-    RandInt { lower: Box<Expr>, upper: Box<Expr>, comment: Option<String> },
-    RangeInclusive { lower: Box<Expr>, upper: Box<Expr>, comment: Option<String> },
+    /// Get a random number between `a` and `b` (inclusive).
+    /// There are no ordering guarantees (swapping `a` and `b` is equivalent).
+    /// If both values are integers, the result is an integer, otherwise continuous floats are returned.
+    RandInclusive { a: Box<Expr>, b: Box<Expr>, comment: Option<String> },
+    /// Get all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
+    RangeInclusive { start: Box<Expr>, stop: Box<Expr>, comment: Option<String> },
 
-    Not { value: Box<Expr>, comment: Option<String> },
-    Round { value: Box<Expr>, comment: Option<String> },
-
+    MakeList { values: Vec<Expr>, comment: Option<String> },
+    Listcat { values: Vec<Expr>, comment: Option<String> },
     Listlen { value: Box<Expr>, comment: Option<String> },
+    /// Return the sublist on the inclusive range `[from, to]`.
+    /// If one of the bounds is not given, go all the way to that end.
+    /// Lists are 1-indexed by default.
+    ListSlice { value: Box<Expr>, from: Option<Box<Expr>>, to: Option<Box<Expr>>, comment: Option<String> },
+
+    Strcat { values: Vec<Expr>, comment: Option<String> },
+    /// String length in terms of unicode code points (not bytes or grapheme clusters!).
     Strlen { value: Box<Expr>, comment: Option<String> },
+
+    /// Convert a unicode code point into a 1-character string.
     UnicodeToChar { value: Box<Expr>, comment: Option<String> },
+    /// Convert a 1-character string into its unicode code point.
     CharToUnicode { value: Box<Expr>, comment: Option<String> },
 
+    Not { value: Box<Expr>, comment: Option<String> },
     Neg { value: Box<Expr>, comment: Option<String> },
     Abs { value: Box<Expr>, comment: Option<String> },
     Sqrt { value: Box<Expr>, comment: Option<String> },
+
     Floor { value: Box<Expr>, comment: Option<String> },
     Ceil { value: Box<Expr>, comment: Option<String> },
-    
+    Round { value: Box<Expr>, comment: Option<String> },
+
     Sin { value: Box<Expr>, comment: Option<String> },
     Cos { value: Box<Expr>, comment: Option<String> },
     Tan { value: Box<Expr>, comment: Option<String> },
-    
+
     Asin { value: Box<Expr>, comment: Option<String> },
     Acos { value: Box<Expr>, comment: Option<String> },
     Atan { value: Box<Expr>, comment: Option<String> },
-
-    LogE { value: Box<Expr>, comment: Option<String> },
-    Log2 { value: Box<Expr>, comment: Option<String> },
-    Log10 { value: Box<Expr>, comment: Option<String> },
-    
-    ExpE { value: Box<Expr>, comment: Option<String> },
-    Exp2 { value: Box<Expr>, comment: Option<String> },
-    Exp10 { value: Box<Expr>, comment: Option<String> },
-    
-    Strcat { values: Vec<Expr>, comment: Option<String> },
-    Listcat { values: Vec<Expr>, comment: Option<String> },
-    MakeList { values: Vec<Expr>, comment: Option<String> },
-
-    Conditional { condition: Box<Expr>, then: Box<Expr>, otherwise: Box<Expr>, comment: Option<String> },
 }
 impl Expr {
     fn is_evaluated(&self) -> bool {
@@ -267,6 +284,7 @@ impl Expr {
             Expr::Value(value) => match value {
                 Value::Literal(_) => true,
                 Value::Bool(_) => true,
+                Value::Constant(_) => true,
                 Value::List(values) => values.iter().all(Expr::is_evaluated),
             }
             _ => false,
@@ -288,37 +306,43 @@ macro_rules! check_children_get_comment {
     }}
 }
 macro_rules! binary_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path : $left:ident, $right:ident) => {{
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $left:ident, $right:ident) => {{
         let comment = check_children_get_comment!($self, $expr, $s => 2);
         let $left = $self.parse_expr(&$expr.children[0])?.into();
         let $right = $self.parse_expr(&$expr.children[1])?.into();
-        $res { $left, $right, comment }
+        $res { $left, $right, comment, $( $($field : $value),* )? }
     }};
-    ($self:ident, $expr:ident, $s:expr => $res:path) => { binary_op! { $self, $expr, $s => $res : left, right } }
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
+        binary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : left, right }
+    }
 }
 macro_rules! unary_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path : $val:ident) => {{
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
         let comment = check_children_get_comment!($self, $expr, $s => 1);
         let $val = $self.parse_expr(&$expr.children[0])?.into();
-        $res { $val, comment }
+        $res { $val, comment, $( $($field : $value),* )? }
     }};
-    ($self:ident, $expr:ident, $s:expr => $res:path) => { unary_op! { $self, $expr, $s => $res : value } }
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? ) => {
+        unary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : value }
+    }
 }
 macro_rules! variadic_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path : $val:ident) => {{
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
         let comment = check_children_get_comment!($self, $expr, $s => 1);
         let mut $val = vec![];
         for item in $expr.children[0].children.iter() {
             $val.push($self.parse_expr(item)?);
         }
-        $res { $val, comment }
+        $res { $val, comment, $( $($field : $value),* )? }
     }};
-    ($self:ident, $expr:ident, $s:expr => $res:path) => { variadic_op! { $self, $expr, $s => $res : values } }
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
+        variadic_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
+    }
 }
 
 struct ScriptInfo<'a> {
     sprite: &'a SpriteInfo<'a>,
-    locals: LinkedHashMap<String, VariableDef>,
+    locals: LinkedHashMap<String, ()>,
 }
 impl<'a> ScriptInfo<'a> {
     fn new(sprite: &'a SpriteInfo) -> Self {
@@ -362,9 +386,8 @@ impl<'a> ScriptInfo<'a> {
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
                     let name = var.text.clone();
-                    let var = VariableDef { name: name.clone(), value: Expr::Value(Value::Literal("0".into())) };
                     vars.push(VariableRef { name: name.clone(), location: VarLocation::Local });
-                    self.locals.insert(name, var);
+                    self.locals.insert(name, ());
                 }
                 Stmt::Assign { vars, value: Expr::Value(Value::Literal("0".into())), comment }
             }
@@ -391,9 +414,9 @@ impl<'a> ScriptInfo<'a> {
                 let last = self.parse_expr(&stmt.children[2])?;
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                self.locals.insert(var.to_owned(), VariableDef { name: var.to_owned(), value: first.clone() });
+                self.locals.insert(var.to_owned(), ());
                 let var = self.reference_var(var.to_owned())?;
-                debug_assert_eq!(var.location, VarLocation::Local);
+                debug_assert!(matches!(var.location, VarLocation::Local));
                 Stmt::ForLoop { var, first, last, stmts, comment }
             }
             "doForEach" => {
@@ -405,9 +428,9 @@ impl<'a> ScriptInfo<'a> {
                 let items = self.parse_expr(&stmt.children[1])?;
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                self.locals.insert(var.to_owned(), VariableDef { name: var.to_owned(), value: Expr::Value(Value::Literal("0".into())) });
+                self.locals.insert(var.to_owned(), ());
                 let var = self.reference_var(var.to_owned())?;
-                debug_assert_eq!(var.location, VarLocation::Local);
+                debug_assert!(matches!(var.location, VarLocation::Local));
                 Stmt::ForeachLoop { var, items, stmts, comment }
             }
             "doRepeat" | "doUntil" | "doIf" => {
@@ -424,7 +447,7 @@ impl<'a> ScriptInfo<'a> {
             "doForever" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Stmt::Loop { stmts, comment }
+                Stmt::InfLoop { stmts, comment }
             }
             "doIfElse" => {
                 let comment = check_children_get_comment!(self, stmt, s => 3);
@@ -494,12 +517,12 @@ impl<'a> ScriptInfo<'a> {
         })
     }
     fn reference_var(&self, name: String) -> Result<VariableRef, Error> {
-        let locations = [(&self.locals, VarLocation::Local), (&self.sprite.fields, VarLocation::Field), (&self.sprite.role.globals, VarLocation::Global)];
-        for (sym_table, location) in locations {
-            if sym_table.contains_key(&name) {
-                return Ok(VariableRef { name, location })
-            }
+        macro_rules! check_locations {
+            ($($sym:expr => $loc:expr),*$(,)?) => {$({
+                if $sym.contains_key(&name) { return Ok(VariableRef { name, location: $loc }) }
+            })*}
         }
+        check_locations!(&self.locals => VarLocation::Local, &self.sprite.fields => VarLocation::Field, &self.sprite.role.globals => VarLocation::Global);
         Err(Error::UndefinedVariable { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), name })
     }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
@@ -537,19 +560,19 @@ impl<'a> ScriptInfo<'a> {
                     "reportProduct" => binary_op!(self, expr, s => Expr::Mul),
                     "reportQuotient" => binary_op!(self, expr, s => Expr::Div),
                     "reportModulus" => binary_op!(self, expr, s => Expr::Mod),
-                    "reportPower" => binary_op!(self, expr, s => Expr::Pow),
+                    "reportPower" => binary_op!(self, expr, s => Expr::Pow : base, power),
 
                     "reportAnd" => binary_op!(self, expr, s => Expr::And),
                     "reportOr" => binary_op!(self, expr, s => Expr::Or),
-                    
+
                     "reportIsIdentical" => binary_op!(self, expr, s => Expr::RefEq),
                     "reportEquals" => binary_op!(self, expr, s => Expr::Eq),
                     "reportLessThan" => binary_op!(self, expr, s => Expr::Less),
                     "reportGreaterThan" => binary_op!(self, expr, s => Expr::Greater),
-                    
-                    "reportRandom" => binary_op!(self, expr, s => Expr::RandInt : lower, upper),
-                    "reportNumbers" => binary_op!(self, expr, s => Expr::RangeInclusive : lower, upper),
-                    
+
+                    "reportRandom" => binary_op!(self, expr, s => Expr::RandInclusive : a, b),
+                    "reportNumbers" => binary_op!(self, expr, s => Expr::RangeInclusive : start, stop),
+
                     "reportNot" => unary_op!(self, expr, s => Expr::Not),
                     "reportRound" => unary_op!(self, expr, s => Expr::Round),
 
@@ -557,6 +580,8 @@ impl<'a> ScriptInfo<'a> {
                     "reportStringSize" => unary_op!(self, expr, s => Expr::Strlen),
                     "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
+
+                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(Box::new(Expr::Value(Value::Literal("2".into())))), to: None }),
 
                     "reportJoinWords" => variadic_op!(self, expr, s => Expr::Strcat),
                     "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::Listcat),
@@ -594,13 +619,13 @@ impl<'a> ScriptInfo<'a> {
                             "acos" => Expr::Acos { value, comment },
                             "atan" => Expr::Atan { value, comment },
 
-                            "ln" => Expr::LogE { value, comment },
-                            "lg" => Expr::Log2 { value, comment },
-                            "log" => Expr::Log10 { value, comment },
+                            "ln" => Expr::Log { value, base: Box::new(Expr::Value(Value::Constant(Constant::E))), comment },
+                            "lg" => Expr::Log { value, base: Box::new(Expr::Value(Value::Literal("2".into()))), comment },
+                            "log" => Expr::Log { value, base: Box::new(Expr::Value(Value::Literal("10".into()))), comment },
 
-                            "e^" => Expr::ExpE { value, comment },
-                            "2^" => Expr::Exp2 { value, comment },
-                            "10^" => Expr::Exp10 { value, comment },
+                            "e^" => Expr::Pow { base: Box::new(Expr::Value(Value::Constant(Constant::E))), power: value, comment },
+                            "2^" => Expr::Pow { base: Box::new(Expr::Value(Value::Literal("2".into()))), power: value, comment },
+                            "10^" => Expr::Pow { base: Box::new(Expr::Value(Value::Literal("10".into()))), power: value, comment },
 
                             "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
                             _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
@@ -746,26 +771,39 @@ impl RoleInfo {
     }
 }
 
-pub fn parse<R: Read>(xml: R) -> Result<Project, Error> {
-    let mut xml = EventReader::new(xml);
-    while let Ok(e) = xml.next() {
-        if let XmlEvent::StartElement { name, attributes, .. } = e {
-            if name.local_name != "room" { continue }
-            let project = parse_xml_root(&mut xml, name, attributes)?;
-            let proj_name = project.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
-
-            let mut roles = Vec::with_capacity(project.children.len());
-            for child in project.children.iter() {
-                if child.name == "role" {
-                    let role_name = match child.attr("name") {
-                        None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
-                        Some(x) => x.value.clone(),
-                    };
-                    roles.push(RoleInfo::new(role_name).parse(child)?);
-                }
-            }
-            return Ok(Project { name: proj_name, roles });
-        }
+#[derive(Builder)]
+pub struct Parser {
+    #[builder(default = "false")]
+    optimize: bool,
+}
+impl Parser {
+    fn opt(&self, project: Project) -> Result<Project, Error> {
+        Ok(project)
     }
-    Err(Error::InvalidProject { error: ProjectError::NoRoot })
+    pub fn parse<R: Read>(&self, xml: R) -> Result<Project, Error> {
+        let mut xml = EventReader::new(xml);
+        while let Ok(e) = xml.next() {
+            if let XmlEvent::StartElement { name, attributes, .. } = e {
+                if name.local_name != "room" { continue }
+                let project = parse_xml_root(&mut xml, name, attributes)?;
+                let proj_name = project.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+
+                let mut roles = Vec::with_capacity(project.children.len());
+                for child in project.children.iter() {
+                    if child.name == "role" {
+                        let role_name = match child.attr("name") {
+                            None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
+                            Some(x) => x.value.clone(),
+                        };
+                        roles.push(RoleInfo::new(role_name).parse(child)?);
+                    }
+                }
+
+                let mut project = Some(Project { name: proj_name, roles });
+                if self.optimize { project = Some(self.opt(mem::take(&mut project).unwrap())?) }
+                return Ok(project.unwrap())
+            }
+        }
+        Err(Error::InvalidProject { error: ProjectError::NoRoot })
+    }
 }

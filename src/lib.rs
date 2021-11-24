@@ -5,4 +5,7 @@
 mod ast;
 pub mod util;
 
+#[cfg(test)]
+mod test;
+
 pub use ast::*;
