@@ -194,6 +194,8 @@ pub enum Stmt {
     RandIndexAssign { list: Expr, value: Expr, comment: Option<String> },
     LastIndexAssign { list: Expr, value: Expr, comment: Option<String> },
 
+    Return { value: Expr, comment: Option<String> },
+
     Sleep { seconds: Expr, comment: Option<String> },
 }
 #[derive(Debug)]
@@ -241,16 +243,22 @@ pub enum Expr {
     /// There are no ordering guarantees (swapping `a` and `b` is equivalent).
     /// If both values are integers, the result is an integer, otherwise continuous floats are returned.
     RandInclusive { a: Box<Expr>, b: Box<Expr>, comment: Option<String> },
-    /// Get all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
+    /// Get a list of all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
     RangeInclusive { start: Box<Expr>, stop: Box<Expr>, comment: Option<String> },
 
     MakeList { values: Vec<Expr>, comment: Option<String> },
-    Listcat { values: Vec<Expr>, comment: Option<String> },
+    Listcat { lists: Vec<Expr>, comment: Option<String> },
     Listlen { value: Box<Expr>, comment: Option<String> },
-    /// Return the sublist on the inclusive range `[from, to]`.
+    /// Return a shallow copy of the sublist on the inclusive range `[from, to]`.
     /// If one of the bounds is not given, go all the way to that end.
     /// Lists are 1-indexed by default.
     ListSlice { value: Box<Expr>, from: Option<Box<Expr>>, to: Option<Box<Expr>>, comment: Option<String> },
+    /// Returns the (1-based) index of value in the list, or 0 if not present.
+    ListFind { list: Box<Expr>, value: Box<Expr>, comment: Option<String> },
+
+    ListIndex { list: Box<Expr>, index: Box<Expr>, comment: Option<String> },
+    ListRandIndex { list: Box<Expr>, comment: Option<String> },
+    ListLastIndex { list: Box<Expr>, comment: Option<String> },
 
     Strcat { values: Vec<Expr>, comment: Option<String> },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
@@ -512,6 +520,7 @@ impl<'a> ScriptInfo<'a> {
                 }
             }
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
+            "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
             _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
@@ -577,14 +586,50 @@ impl<'a> ScriptInfo<'a> {
                     "reportRound" => unary_op!(self, expr, s => Expr::Round),
 
                     "reportListLength" => unary_op!(self, expr, s => Expr::Listlen),
+                    "reportListIsEmpty" => {
+                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let value = self.parse_expr(&expr.children[0])?.into();
+                        Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(Expr::Value(Value::Literal("0".into()))), comment }
+                    }
+
+                    "reportListIndex" => binary_op!(self, expr, s => Expr::ListFind : value, list),
+                    "reportListContainsItem" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let value = self.parse_expr(&expr.children[0])?.into();
+                        let list = self.parse_expr(&expr.children[1])?.into();
+                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(Expr::Value(Value::Literal("0".into()))), comment }
+                    }
+                    "reportListItem" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let list = self.parse_expr(&expr.children[1])?.into();
+                        match expr.children[0].get(&["option"]) {
+                            Some(opt) => match opt.text.as_str() {
+                                "last" => Expr::ListLastIndex { list, comment },
+                                "any" => Expr::ListRandIndex { list, comment },
+                                "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                            }
+                            None => {
+                                let index = self.parse_expr(&expr.children[0])?.into();
+                                Expr::ListIndex { list, index, comment }
+                            }
+                        }
+                    }
+
                     "reportStringSize" => unary_op!(self, expr, s => Expr::Strlen),
                     "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
 
                     "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(Box::new(Expr::Value(Value::Literal("2".into())))), to: None }),
+                    "reportCONS" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let val = self.parse_expr(&expr.children[0])?;
+                        let list = self.parse_expr(&expr.children[0])?;
+                        Expr::Listcat { lists: vec![val, list], comment}
+                    }
 
                     "reportJoinWords" => variadic_op!(self, expr, s => Expr::Strcat),
-                    "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::Listcat),
+                    "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::Listcat : lists),
                     "reportNewList" => variadic_op!(self, expr, s => Expr::MakeList),
 
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
