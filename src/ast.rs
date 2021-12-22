@@ -1,4 +1,6 @@
 use std::io::Read;
+use std::convert::TryFrom;
+use std::rc::Rc;
 use std::mem;
 use std::iter;
 
@@ -9,6 +11,8 @@ use xml::reader::{EventReader, XmlEvent};
 use xml::name::OwnedName;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
+
+use serde_json::Value as JsonValue;
 
 use regex::Regex;
 
@@ -76,17 +80,17 @@ fn parse_xml_root<R: Read>(xml: &mut EventReader<R>, root_name: OwnedName, root_
 pub enum ProjectError {
     NoRoot,
     UnnamedRole,
+    ValueNotEvaluated { role: String, sprite: Option<String> },
+    InvalidJson { reason: String },
     NoRoleContent { role: String },
     NoStageDef { role: String },
 
     UnnamedGlobal { role: String },
     GlobalNoValue { role: String, name: String },
-    GlobalNotEvaluated { role: String, name: String },
     GlobalsWithSameName { role: String, name: String },
 
     UnnamedField { role: String, sprite: String },
     FieldNoValue { role: String, sprite: String, name: String },
-    FieldNotEvaluated { role: String, sprite: String, name: String },
     FieldsWithSameName { role: String, sprite: String, name: String },
 
     ListItemNoValue { role: String, sprite: String },
@@ -108,11 +112,61 @@ pub enum ProjectError {
 pub enum Error {
     InvalidXml { error: xml::reader::Error },
     InvalidProject { error: ProjectError },
+    NameTransformError { name: String, role: Option<String>, sprite: Option<String> },
     UnknownBlockType { role: String, sprite: String, block_type: String },
     DerefAssignment { role: String, sprite: String },
     UndefinedVariable { role: String, sprite: String, name: String },
     BlockOptionNotConst { role: String, sprite: String, block_type: String },
     BlockOptionNotSelected { role: String, sprite: String, block_type: String },
+
+    GlobalsWithSameTransName { role: String, trans_name: String, names: (String, String) },
+    FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
+    LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
+}
+
+#[derive(Debug)]
+pub enum SymbolError {
+    NameTransformError { name: String },
+    ConflictingTrans { trans_name: String, names: (String, String) }
+}
+
+struct SymbolTable<'a> {
+    parser: &'a Parser,
+    orig_to_def: LinkedHashMap<String, VariableDef>,
+    trans_to_orig: LinkedHashMap<String, String>,
+}
+impl<'a> SymbolTable<'a> {
+    fn new(parser: &'a Parser) -> Self {
+        Self { parser, orig_to_def: Default::default(), trans_to_orig: Default::default() }
+    }
+    fn transform_name(&self, name: &str) -> Result<String, SymbolError> {
+        match self.parser.name_transformer.as_ref()(name) {
+            Ok(v) => Ok(v),
+            Err(()) => Err(SymbolError::NameTransformError { name: name.into() }),
+        }
+    }
+    /// Defines a new symbol or replaces an existing definition.
+    /// Fails if the name cannot be properly transformed or the transformed name already exists.
+    /// On success, returns the previous definition (if one existed).
+    /// On failure, the symbol table is not modified, and an error context object is returned.
+    fn define(&mut self, name: String, value: Value) -> Result<Option<VariableDef>, SymbolError> {
+        let trans_name = self.transform_name(&name)?;
+        let entry = VariableDef { name: name.clone(), trans_name: trans_name.clone(), value };
+        if let Some(orig) = self.trans_to_orig.get(&trans_name) {
+            let def = self.orig_to_def.get(orig).unwrap();
+            return Err(SymbolError::ConflictingTrans { trans_name, names: (def.name.clone(), name) });
+        }
+
+        self.trans_to_orig.insert(name.clone(), trans_name);
+        Ok(self.orig_to_def.insert(name, entry))
+    }
+    /// Returns the definition of the given variable if it exists.
+    fn get(&self, name: &str) -> Option<&VariableDef> {
+        self.orig_to_def.get(name)
+    }
+    fn into_defs(self) -> Vec<VariableDef> {
+        self.orig_to_def.into_iter().map(|x| x.1).collect()
+    }
 }
 
 #[derive(Debug)]
@@ -140,12 +194,19 @@ pub struct Sprite {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariableDef {
     pub name: String,
-    pub value: Expr,
+    pub trans_name: String,
+    pub value: Value,
+}
+impl VariableDef {
+    fn ref_at(&self, location: VarLocation) -> VariableRef {
+        VariableRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
+    }
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct VariableRef {
     pub name: String,
+    pub trans_name: String,
     pub location: VarLocation,
 }
 #[derive(Debug)]
@@ -162,7 +223,8 @@ pub struct Script {
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Hat {
-    OnFlag,
+    OnFlag { comment: Option<String> },
+    OnKey { key: String, comment: Option<String> },
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -201,10 +263,39 @@ pub enum Stmt {
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
-    Literal(String),
     Bool(bool),
-    List(Vec<Expr>),
-    Constant(Constant)
+    Number(f64),
+    String(String),
+    List(Vec<Value>),
+    Constant(Constant),
+}
+
+impl From<f64> for Value { fn from(v: f64) -> Value { Value::Number(v) } }
+impl From<&str> for Value { fn from(v: &str) -> Value { Value::String(v.into()) } }
+impl From<bool> for Value { fn from(v: bool) -> Value { Value::Bool(v) } }
+impl From<String> for Value { fn from(v: String) -> Value { Value::String(v) } }
+impl From<Constant> for Value { fn from(v: Constant) -> Value { Value::Constant(v) } }
+impl From<Vec<Value>> for Value { fn from(v: Vec<Value>) -> Value { Value::List(v) } }
+
+impl TryFrom<JsonValue> for Value {
+    type Error = Error;
+    fn try_from(val: JsonValue) -> Result<Value, Self::Error> {
+        Ok(match val {
+            JsonValue::String(v) => Value::String(v),
+            JsonValue::Bool(v) => Value::Bool(v),
+            JsonValue::Array(vals) => {
+                let mut res = Vec::with_capacity(vals.len());
+                for val in vals { res.push(Value::try_from(val)?) }
+                Value::List(res)
+            }
+            JsonValue::Number(v) => match v.as_f64() {
+                Some(v) => Value::Number(v),
+                None => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("failed to convert {} to f64", v) } }),
+            }
+            JsonValue::Object(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("got object: {}", val) } }),
+            JsonValue::Null => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("got null") } }),
+        })
+    }
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -286,26 +377,14 @@ pub enum Expr {
     Acos { value: Box<Expr>, comment: Option<String> },
     Atan { value: Box<Expr>, comment: Option<String> },
 }
-impl Expr {
-    fn is_evaluated(&self) -> bool {
-        match self {
-            Expr::Value(value) => match value {
-                Value::Literal(_) => true,
-                Value::Bool(_) => true,
-                Value::Constant(_) => true,
-                Value::List(values) => values.iter().all(Expr::is_evaluated),
-            }
-            _ => false,
-        }
-    }
-}
+impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
 macro_rules! check_children_get_comment {
     ($self:ident, $expr:ident, $s:expr => $req:literal) => {{
         let s = $s;
         #[allow(unused_comparisons)]
         if $expr.children.len() < $req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.sprite.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $expr.children.len() } });
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $expr.children.len() } });
         }
         match $expr.children.get($req) {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
@@ -349,12 +428,13 @@ macro_rules! variadic_op {
 }
 
 struct ScriptInfo<'a> {
+    role: &'a RoleInfo<'a>,
     sprite: &'a SpriteInfo<'a>,
-    locals: LinkedHashMap<String, ()>,
+    locals: SymbolTable<'a>,
 }
 impl<'a> ScriptInfo<'a> {
     fn new(sprite: &'a SpriteInfo) -> Self {
-        Self { sprite, locals: Default::default() }
+        Self { role: sprite.role, sprite, locals: SymbolTable::new(sprite.parser) }
     }
     fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
         if script.children.is_empty() { return Ok(Script { hat: None, stmts: vec![] }) }
@@ -368,24 +448,50 @@ impl<'a> ScriptInfo<'a> {
         for stmt in stmts_xml {
             match stmt.name.as_str() {
                 "block" => stmts.push(self.parse_block(stmt)?),
-                x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
+                x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
             }
         }
         Ok(Script { hat, stmts })
     }
     fn parse_hat(&self, stmt: &Xml) -> Result<Option<Hat>, Error> {
         let s = match stmt.attr("s") {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
             Some(v) => v.value.as_str(),
         };
         Ok(Some(match s {
-            "receiveGo" => Hat::OnFlag,
+            "receiveGo" => {
+                let comment = check_children_get_comment!(self, stmt, s => 0);
+                Hat::OnFlag { comment }
+            }
+            "receiveKey" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let key = match stmt.children[0].get(&["option"]) {
+                    None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    Some(k) => {
+                        if k.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                        k.text.clone()
+                    }
+                };
+                if key == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                Hat::OnKey { key, comment }
+            }
             _ => return Ok(None),
         }))
     }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
+        macro_rules! define_local_and_ref {
+            ($name:expr, $value:expr) => {{
+                let name = $name;
+                match self.locals.define(name.clone(), $value) {
+                    Ok(_) => (), // redefining locals is fine
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.sprite.name.clone()) }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), sprite: self.sprite.name.clone(), trans_name, names }),
+                }
+                self.locals.get(&name).unwrap().ref_at(VarLocation::Local)
+            }}
+        }
         let s = match stmt.attr("s") {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
             Some(v) => v.value.as_str(),
         };
         Ok(match s {
@@ -393,17 +499,15 @@ impl<'a> ScriptInfo<'a> {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
-                    let name = var.text.clone();
-                    vars.push(VariableRef { name: name.clone(), location: VarLocation::Local });
-                    self.locals.insert(name, ());
+                    vars.push(define_local_and_ref!(var.text.clone(), 0f64.into()));
                 }
-                Stmt::Assign { vars, value: Expr::Value(Value::Literal("0".into())), comment }
+                Stmt::Assign { vars, value: 0f64.into(), comment }
             }
             "doSetVar" | "doChangeVar" => {
                 let comment = check_children_get_comment!(self, stmt, s => 2);
                 let var = match stmt.children[0].name.as_str() {
                     "l" => self.reference_var(stmt.children[0].text.clone())?,
-                    _ => return Err(Error::DerefAssignment { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() }),
+                    _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), sprite: self.sprite.name.clone() }),
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
                 match s {
@@ -416,29 +520,25 @@ impl<'a> ScriptInfo<'a> {
                 let comment = check_children_get_comment!(self, stmt, s => 4);
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
                 };
                 let first = self.parse_expr(&stmt.children[1])?;
                 let last = self.parse_expr(&stmt.children[2])?;
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                self.locals.insert(var.to_owned(), ());
-                let var = self.reference_var(var.to_owned())?;
-                debug_assert!(matches!(var.location, VarLocation::Local));
+                let var = define_local_and_ref!(var.to_owned(), 0f64.into());
                 Stmt::ForLoop { var, first, last, stmts, comment }
             }
             "doForEach" => {
                 let comment = check_children_get_comment!(self, stmt, s => 3);
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                self.locals.insert(var.to_owned(), ());
-                let var = self.reference_var(var.to_owned())?;
-                debug_assert!(matches!(var.location, VarLocation::Local));
+                let var = define_local_and_ref!(var.to_owned(), 0f64.into());
                 Stmt::ForeachLoop { var, items, stmts, comment }
             }
             "doRepeat" | "doUntil" | "doIf" => {
@@ -476,8 +576,8 @@ impl<'a> ScriptInfo<'a> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::Pop { list, comment },
                         "all" => Stmt::RemoveAll { list, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -493,8 +593,8 @@ impl<'a> ScriptInfo<'a> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::Push { list, value, comment },
                         "random" | "any" => Stmt::InsertAtRand { list, value, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -510,8 +610,8 @@ impl<'a> ScriptInfo<'a> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::LastIndexAssign { list, value, comment },
                         "random" | "any" => Stmt::RandIndexAssign { list, value, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -522,36 +622,47 @@ impl<'a> ScriptInfo<'a> {
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
-            _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+            _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
     }
     fn reference_var(&self, name: String) -> Result<VariableRef, Error> {
         macro_rules! check_locations {
             ($($sym:expr => $loc:expr),*$(,)?) => {$({
-                if $sym.contains_key(&name) { return Ok(VariableRef { name, location: $loc }) }
+                if let Some(def) = $sym.get(&name) { return Ok(def.ref_at($loc)) }
             })*}
         }
-        check_locations!(&self.locals => VarLocation::Local, &self.sprite.fields => VarLocation::Field, &self.sprite.role.globals => VarLocation::Global);
-        Err(Error::UndefinedVariable { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), name })
+        check_locations!(&self.locals => VarLocation::Local, &self.sprite.fields => VarLocation::Field, &self.role.globals => VarLocation::Global);
+        Err(Error::UndefinedVariable { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name })
     }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
         match expr.name.as_str() {
-            "l" => Ok(Expr::Value(Value::Literal(expr.text.clone()))),
-            "bool" => match expr.text.as_str() {
-                "true" => Ok(Expr::Value(Value::Bool(true))),
-                "false" => Ok(Expr::Value(Value::Bool(false))),
-                x => return Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), value: x.into() } })
+            "l" => match expr.text.parse::<f64>() {
+                Ok(v) => Ok(v.into()),
+                Err(_) => Ok(expr.text.clone().into()),
             }
-            "list" => {
-                let mut values = Vec::with_capacity(expr.children.len());
-                for item in expr.children.iter() {
-                    let value = match item.children.get(0) {
-                        None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
-                        Some(x) => x,
-                    };
-                    values.push(self.parse_expr(value)?);
+            "bool" => match expr.text.as_str() {
+                "true" => Ok(true.into()),
+                "false" => Ok(false.into()),
+                x => return Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: x.into() } })
+            }
+            "list" => match expr.attr("struct") {
+                Some(v) if v.value == "atomic" => match serde_json::from_str::<JsonValue>(&format!("[{}]", expr.text)) {
+                    Err(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("content was not json: [{}]", expr.text) } }),
+                    Ok(json) => Ok(Value::try_from(json)?.into()),
                 }
-                Ok(Expr::Value(Value::List(values)))
+                _ => {
+                    let mut values = Vec::with_capacity(expr.children.len());
+                    for item in expr.children.iter() {
+                        match item.children.get(0) {
+                            None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                            Some(x) => match self.parse_expr(x)? {
+                                Expr::Value(v) => values.push(v),
+                                _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), sprite: Some(self.sprite.name.clone()) } }),
+                            }
+                        }
+                    }
+                    Ok(values.into())
+                }
             }
             "block" => {
                 if let Some(var) = expr.attr("var") {
@@ -560,7 +671,7 @@ impl<'a> ScriptInfo<'a> {
                     return Ok(Expr::Variable { var, comment });
                 }
                 let s = match expr.attr("s") {
-                    None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                    None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
                     Some(v) => v.value.as_str(),
                 };
                 Ok(match s {
@@ -589,7 +700,7 @@ impl<'a> ScriptInfo<'a> {
                     "reportListIsEmpty" => {
                         let comment = check_children_get_comment!(self, expr, s => 1);
                         let value = self.parse_expr(&expr.children[0])?.into();
-                        Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(Expr::Value(Value::Literal("0".into()))), comment }
+                        Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(0.0f64.into()), comment }
                     }
 
                     "reportListIndex" => binary_op!(self, expr, s => Expr::ListFind : value, list),
@@ -597,7 +708,7 @@ impl<'a> ScriptInfo<'a> {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let value = self.parse_expr(&expr.children[0])?.into();
                         let list = self.parse_expr(&expr.children[1])?.into();
-                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(Expr::Value(Value::Literal("0".into()))), comment }
+                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(0.0f64.into()), comment }
                     }
                     "reportListItem" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
@@ -606,8 +717,8 @@ impl<'a> ScriptInfo<'a> {
                             Some(opt) => match opt.text.as_str() {
                                 "last" => Expr::ListLastIndex { list, comment },
                                 "any" => Expr::ListRandIndex { list, comment },
-                                "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                             None => {
                                 let index = self.parse_expr(&expr.children[0])?.into();
@@ -620,7 +731,7 @@ impl<'a> ScriptInfo<'a> {
                     "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
 
-                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(Box::new(Expr::Value(Value::Literal("2".into())))), to: None }),
+                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(Box::new(2.0f64.into())), to: None }),
                     "reportCONS" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let val = self.parse_expr(&expr.children[0])?;
@@ -633,16 +744,16 @@ impl<'a> ScriptInfo<'a> {
                     "reportNewList" => variadic_op!(self, expr, s => Expr::MakeList),
 
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
-                        Some(v) if v.text == "true" => Expr::Value(Value::Bool(true)),
-                        Some(v) if v.text == "false" => Expr::Value(Value::Bool(false)),
-                        _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                        Some(v) if v.text == "true" => true.into(),
+                        Some(v) if v.text == "false" => false.into(),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
                     }
                     "reportMonadic" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let func = match expr.children[0].get(&["option"]) {
-                            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
                             Some(f) => {
-                                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
                                 f.text.as_str()
                             }
                         };
@@ -664,16 +775,16 @@ impl<'a> ScriptInfo<'a> {
                             "acos" => Expr::Acos { value, comment },
                             "atan" => Expr::Atan { value, comment },
 
-                            "ln" => Expr::Log { value, base: Box::new(Expr::Value(Value::Constant(Constant::E))), comment },
-                            "lg" => Expr::Log { value, base: Box::new(Expr::Value(Value::Literal("2".into()))), comment },
-                            "log" => Expr::Log { value, base: Box::new(Expr::Value(Value::Literal("10".into()))), comment },
+                            "ln" => Expr::Log { value, base: Box::new(Constant::E.into()), comment },
+                            "lg" => Expr::Log { value, base: Box::new(2f64.into()), comment },
+                            "log" => Expr::Log { value, base: Box::new(10f64.into()), comment },
 
-                            "e^" => Expr::Pow { base: Box::new(Expr::Value(Value::Constant(Constant::E))), power: value, comment },
-                            "2^" => Expr::Pow { base: Box::new(Expr::Value(Value::Literal("2".into()))), power: value, comment },
-                            "10^" => Expr::Pow { base: Box::new(Expr::Value(Value::Literal("10".into()))), power: value, comment },
+                            "e^" => Expr::Pow { base: Box::new(Constant::E.into()), power: value, comment },
+                            "2^" => Expr::Pow { base: Box::new(2f64.into()), power: value, comment },
+                            "10^" => Expr::Pow { base: Box::new(10f64.into()), power: value, comment },
 
-                            "" => return Err(Error::BlockOptionNotSelected { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
+                            "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
                     }
                     "reportIfElse" => {
@@ -683,22 +794,23 @@ impl<'a> ScriptInfo<'a> {
                         let otherwise = Box::new(self.parse_expr(&expr.children[2])?);
                         Expr::Conditional { condition, then, otherwise, comment }
                     }
-                    _ => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+                    _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
                 })
             }
-            x => return Err(Error::UnknownBlockType { role: self.sprite.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
+            x => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
         }
     }
 }
 
 struct SpriteInfo<'a> {
-    role: &'a RoleInfo,
+    parser: &'a Parser,
+    role: &'a RoleInfo<'a>,
     name: String,
-    fields: LinkedHashMap<String, VariableDef>,
+    fields: SymbolTable<'a>,
 }
 impl<'a> SpriteInfo<'a> {
     fn new(role: &'a RoleInfo, name: String) -> Self {
-        Self { role, name, fields: Default::default() }
+        Self { parser: role.parser, role, name, fields: SymbolTable::new(role.parser) }
     }
     fn parse(mut self, sprite: &Xml) -> Result<Sprite, Error> {
         if let Some(fields) = sprite.get(&["variables"]) {
@@ -708,21 +820,24 @@ impl<'a> SpriteInfo<'a> {
             for def in fields.children.iter().filter(|v| v.name == "variable") {
                 let name = match def.attr("name") {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedField { role: self.role.name.clone(), sprite: self.name } }),
-                    Some(x) => x.value.to_owned(),
+                    Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::FieldNoValue { role: self.role.name.clone(), sprite: self.name, name } }),
-                    Some(x) => dummy_script.parse_expr(x)?,
+                    Some(x) => match dummy_script.parse_expr(x)? {
+                        Expr::Value(v) => v,
+                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), sprite: Some(self.name) } }),
+                    }
                 };
-                if !value.is_evaluated() {
-                    return Err(Error::InvalidProject { error: ProjectError::FieldNotEvaluated { role: self.role.name.clone(), sprite: self.name, name } });
-                }
                 defs.push((name, value));
             }
 
             for (name, value) in defs {
-                if let Some(prev) = self.fields.insert(name.clone(), VariableDef { name, value }) {
-                    return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), sprite: self.name, name: prev.name } });
+                match self.fields.define(name.clone(), value) {
+                    Ok(None) => (),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), sprite: self.name.clone(), name: prev.name } }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.name.clone()) }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::FieldsWithSameTransName { role: self.role.name.clone(), sprite: self.name.clone(), trans_name, names }),
                 }
             }
         }
@@ -744,18 +859,18 @@ impl<'a> SpriteInfo<'a> {
             }
         }
 
-        let fields = self.fields.into_iter().map(|(_, v)| v).collect();
-        Ok(Sprite { name: self.name, fields, scripts })
+        Ok(Sprite { name: self.name, fields: self.fields.into_defs(), scripts })
     }
 }
 
-struct RoleInfo {
+struct RoleInfo<'a> {
+    parser: &'a Parser,
     name: String,
-    globals: LinkedHashMap<String, VariableDef>,
+    globals: SymbolTable<'a>,
 }
-impl RoleInfo {
-    fn new(name: String) -> Self {
-        Self { name, globals: Default::default() }
+impl<'a> RoleInfo<'a> {
+    fn new(parser: &'a Parser, name: String) -> Self {
+        Self { parser, name, globals: SymbolTable::new(parser) }
     }
     fn parse(mut self, role_root: &Xml) -> Result<Role, Error> {
         assert_eq!(role_root.name, "role");
@@ -781,21 +896,24 @@ impl RoleInfo {
             for def in globals.children.iter().filter(|v| v.name == "variable") {
                 let name = match def.attr("name") {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedGlobal { role } }),
-                    Some(x) => x.value.to_owned(),
+                    Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::GlobalNoValue { role, name } }),
-                    Some(x) => dummy_script.parse_expr(x)?,
+                    Some(x) => match dummy_script.parse_expr(x)? {
+                        Expr::Value(v) => v,
+                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role, sprite: None } }),
+                    }
                 };
-                if !value.is_evaluated() {
-                    return Err(Error::InvalidProject { error: ProjectError::GlobalNotEvaluated { role, name } });
-                }
                 defs.push((name, value));
             }
 
             for (name, value) in defs {
-                if let Some(prev) = self.globals.insert(name.clone(), VariableDef { name, value }) {
-                    return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role, name: prev.name } });
+                match self.globals.define(name.clone(), value) {
+                    Ok(None) => (),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role: self.name.clone(), name: prev.name } }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.name.clone()), sprite: None }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::GlobalsWithSameTransName { role: self.name.clone(), trans_name, names }),
                 }
             }
         }
@@ -811,8 +929,7 @@ impl RoleInfo {
             }
         }
 
-        let globals = self.globals.into_iter().map(|(_, v)| v).collect();
-        Ok(Role { name: role, notes, globals, sprites })
+        Ok(Role { name: role, notes, globals: self.globals.into_defs(), sprites })
     }
 }
 
@@ -820,6 +937,8 @@ impl RoleInfo {
 pub struct Parser {
     #[builder(default = "false")]
     optimize: bool,
+    #[builder(default = "Rc::new(|v| Ok(v.into()))")]
+    name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
 }
 impl Parser {
     fn opt(&self, project: Project) -> Result<Project, Error> {
@@ -840,7 +959,7 @@ impl Parser {
                             None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
                             Some(x) => x.value.clone(),
                         };
-                        roles.push(RoleInfo::new(role_name).parse(child)?);
+                        roles.push(RoleInfo::new(self, role_name).parse(child)?);
                     }
                 }
 
