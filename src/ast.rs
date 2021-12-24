@@ -151,12 +151,12 @@ impl<'a> SymbolTable<'a> {
     /// On failure, the symbol table is not modified, and an error context object is returned.
     fn define(&mut self, name: String, value: Value) -> Result<Option<VariableDef>, SymbolError> {
         let trans_name = self.transform_name(&name)?;
-        let entry = VariableDef { name: name.clone(), trans_name: trans_name.clone(), value };
         if let Some(orig) = self.trans_to_orig.get(&trans_name) {
             let def = self.orig_to_def.get(orig).unwrap();
             return Err(SymbolError::ConflictingTrans { trans_name, names: (def.name.clone(), name) });
         }
 
+        let entry = VariableDef { name: name.clone(), trans_name: trans_name.clone(), value };
         self.trans_to_orig.insert(name.clone(), trans_name);
         Ok(self.orig_to_def.insert(name, entry))
     }
@@ -225,6 +225,14 @@ pub struct Script {
 pub enum Hat {
     OnFlag { comment: Option<String> },
     OnKey { key: String, comment: Option<String> },
+    MouseDown { comment: Option<String> },
+    MouseUp { comment: Option<String> },
+    MouseEnter { comment: Option<String> },
+    MouseLeave { comment: Option<String> },
+    ScrollUp { comment: Option<String> },
+    ScrollDown { comment: Option<String> },
+    Dropped { comment: Option<String> },
+    Stopped { comment: Option<String> },
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -426,6 +434,17 @@ macro_rules! variadic_op {
         variadic_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
     }
 }
+macro_rules! grab_option {
+    ($self:ident, $s:ident, $child:expr) => {
+        match $child.get(&["option"]) {
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() } }),
+            Some(f) => {
+                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }) }
+                f.text.as_str()
+            }
+        }
+    }
+}
 
 struct ScriptInfo<'a> {
     role: &'a RoleInfo<'a>,
@@ -465,15 +484,23 @@ impl<'a> ScriptInfo<'a> {
             }
             "receiveKey" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
-                let key = match stmt.children[0].get(&["option"]) {
-                    None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
-                    Some(k) => {
-                        if k.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
-                        k.text.clone()
-                    }
-                };
+                let key = grab_option!(self, s, stmt.children[0]);
                 if key == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
-                Hat::OnKey { key, comment }
+                Hat::OnKey { key: key.into(), comment }
+            }
+            "receiveInteraction" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                match grab_option!(self, s, stmt.children[0]) {
+                    "pressed" => Hat::MouseDown { comment },
+                    "clicked" => Hat::MouseUp { comment },
+                    "mouse-entered" => Hat::MouseEnter { comment },
+                    "mouse-departed" => Hat::MouseLeave { comment },
+                    "scrolled-up" => Hat::ScrollUp { comment },
+                    "scrolled-down" => Hat::ScrollDown { comment },
+                    "dropped" => Hat::Dropped { comment },
+                    "stopped" => Hat::Stopped { comment },
+                    x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                }
             }
             _ => return Ok(None),
         }))
@@ -750,13 +777,7 @@ impl<'a> ScriptInfo<'a> {
                     }
                     "reportMonadic" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
-                        let func = match expr.children[0].get(&["option"]) {
-                            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
-                            Some(f) => {
-                                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
-                                f.text.as_str()
-                            }
-                        };
+                        let func = grab_option!(self, s, expr.children[0]);
                         let value = Box::new(self.parse_expr(&expr.children[1])?);
                         match func {
                             "id" => *value,
