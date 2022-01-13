@@ -170,6 +170,14 @@ impl<'a> SymbolTable<'a> {
 }
 
 #[derive(Debug)]
+struct Rpc {
+    service: String,
+    rpc: String,
+    args: Vec<Expr>,
+    comment: Option<String>,
+}
+
+#[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Project {
     pub name: String,
@@ -267,6 +275,8 @@ pub enum Stmt {
     Return { value: Expr, comment: Option<String> },
 
     Sleep { seconds: Expr, comment: Option<String> },
+
+    RunRpc { service: String, rpc: String, args: Vec<Expr>, comment: Option<String> },
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -505,6 +515,9 @@ impl<'a> ScriptInfo<'a> {
             _ => return Ok(None),
         }))
     }
+    fn parse_rpc(&mut self, stmt: &Xml) -> Result<Rpc, Error> {
+        panic!("{:#?}", stmt);
+    }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
         macro_rules! define_local_and_ref {
             ($name:expr, $value:expr) => {{
@@ -649,6 +662,12 @@ impl<'a> ScriptInfo<'a> {
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
+
+            "doRunRPC" => {
+                let rpc = self.parse_rpc(stmt)?;
+                panic!();
+            }
+
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
     }
