@@ -16,6 +16,8 @@ use serde_json::Value as JsonValue;
 
 use regex::Regex;
 
+use crate::rpcs::*;
+
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
@@ -119,9 +121,15 @@ pub enum Error {
     BlockOptionNotConst { role: String, sprite: String, block_type: String },
     BlockOptionNotSelected { role: String, sprite: String, block_type: String },
 
+    UnknownService { role: String, sprite: String, block_type: String, service: String },
+    UnknownRPC { role: String, sprite: String, block_type: String, service: String, rpc: String },
+
     GlobalsWithSameTransName { role: String, trans_name: String, names: (String, String) },
     FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
     LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
+
+    // TODO: get rid of these cases when new features are added
+    BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
 }
 
 #[derive(Debug)]
@@ -173,7 +181,7 @@ impl<'a> SymbolTable<'a> {
 struct Rpc {
     service: String,
     rpc: String,
-    args: Vec<Expr>,
+    args: Vec<(String, Expr)>,
     comment: Option<String>,
 }
 
@@ -241,6 +249,7 @@ pub enum Hat {
     ScrollDown { comment: Option<String> },
     Dropped { comment: Option<String> },
     Stopped { comment: Option<String> },
+    Message { msg: String, fields: Vec<String>, comment: Option<String> },
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -273,11 +282,20 @@ pub enum Stmt {
     LastIndexAssign { list: Expr, value: Expr, comment: Option<String> },
 
     Return { value: Expr, comment: Option<String> },
-
     Sleep { seconds: Expr, comment: Option<String> },
 
-    RunRpc { service: String, rpc: String, args: Vec<Expr>, comment: Option<String> },
+    SwitchCostume { costume: Option<Expr>, comment: Option<String> },
+
+    RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
 }
+
+impl From<Rpc> for Stmt {
+    fn from(rpc: Rpc) -> Stmt {
+        let Rpc { service, rpc, args, comment } = rpc;
+        Stmt::RunRpc { service, rpc, args, comment }
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
@@ -394,17 +412,46 @@ pub enum Expr {
     Asin { value: Box<Expr>, comment: Option<String> },
     Acos { value: Box<Expr>, comment: Option<String> },
     Atan { value: Box<Expr>, comment: Option<String> },
+
+    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
+
+    StageWidth { comment: Option<String> },
+    StageHeight { comment: Option<String> },
+
+    This { comment: Option<String> },
+    Entity { name: String, comment: Option<String> },
+
+    ImageOf { entity: Box<Expr>, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
-macro_rules! check_children_get_comment {
-    ($self:ident, $expr:ident, $s:expr => $req:literal) => {{
-        let s = $s;
-        #[allow(unused_comparisons)]
-        if $expr.children.len() < $req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: $req, got: $expr.children.len() } });
+impl From<Rpc> for Expr {
+    fn from(rpc: Rpc) -> Expr {
+        let Rpc { service, rpc, args, comment } = rpc;
+        Expr::CallRpc { service, rpc, args, comment }
+    }
+}
+
+macro_rules! define_local_and_ref {
+    ($self:ident, $name:expr, $value:expr) => {{
+        let name = $name;
+        match $self.locals.define(name.clone(), $value) {
+            Ok(_) => (), // redefining locals is fine
+            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), sprite: Some($self.sprite.name.clone()) }),
+            Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), trans_name, names }),
         }
-        match $expr.children.get($req) {
+        $self.locals.get(&name).unwrap().ref_at(VarLocation::Local)
+    }}
+}
+macro_rules! check_children_get_comment {
+    ($self:ident, $expr:ident, $s:expr => $req:expr) => {{
+        let s = $s;
+        let req = $req;
+        #[allow(unused_comparisons)]
+        if $expr.children.len() < req {
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: req, got: $expr.children.len() } });
+        }
+        match $expr.children.get(req) {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         }
@@ -431,6 +478,12 @@ macro_rules! unary_op {
         unary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : value }
     }
 }
+macro_rules! noarg_op {
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {{
+        let comment = check_children_get_comment!($self, $expr, $s => 0);
+        $res { comment, $( $($field : $value),* )? }
+    }}
+}
 macro_rules! variadic_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
         let comment = check_children_get_comment!($self, $expr, $s => 1);
@@ -445,13 +498,27 @@ macro_rules! variadic_op {
     }
 }
 macro_rules! grab_option {
-    ($self:ident, $s:ident, $child:expr) => {
-        match $child.get(&["option"]) {
+    ($self:ident, $s:ident, $child:expr) => {{
+        let res = match $child.get(&["option"]) {
             None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() } }),
             Some(f) => {
                 if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }) }
                 f.text.as_str()
             }
+        };
+        if res == "" { return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }) }
+        res
+    }}
+}
+macro_rules! grab_entity {
+    ($self:ident, $s:ident, $child:expr, $comment:ident) => {
+        match $child.text.as_str() {
+            "" => match $child.children.is_empty() {
+                true => return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }),
+                false => $self.parse_expr($child)?,
+            },
+            "myself" => Expr::This { comment: $comment },
+            name => Expr::Entity { name: name.to_owned(), comment: $comment },
         }
     }
 }
@@ -482,7 +549,7 @@ impl<'a> ScriptInfo<'a> {
         }
         Ok(Script { hat, stmts })
     }
-    fn parse_hat(&self, stmt: &Xml) -> Result<Option<Hat>, Error> {
+    fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Hat>, Error> {
         let s = match stmt.attr("s") {
             None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
             Some(v) => v.value.as_str(),
@@ -495,7 +562,6 @@ impl<'a> ScriptInfo<'a> {
             "receiveKey" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let key = grab_option!(self, s, stmt.children[0]);
-                if key == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
                 Hat::OnKey { key: key.into(), comment }
             }
             "receiveInteraction" => {
@@ -512,24 +578,51 @@ impl<'a> ScriptInfo<'a> {
                     x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                 }
             }
+            "receiveSocketMessage" => {
+                if stmt.children.len() < 1 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
+                if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+
+                let msg = stmt.children[0].name.clone();
+                let mut fields = vec![];
+                let mut comment = None;
+                for child in stmt.children[1..].iter() {
+                    if child.name == "comment" {
+                        comment = Some(child.text.clone());
+                    }
+                    if child.name != "l" { break }
+                    let var = define_local_and_ref!(self, child.text.clone(), 0f64.into());
+                    fields.push(var.name);
+                }
+                Hat::Message { msg, fields, comment }
+            }
             _ => return Ok(None),
         }))
     }
-    fn parse_rpc(&mut self, stmt: &Xml) -> Result<Rpc, Error> {
-        panic!("{:#?}", stmt);
+    fn parse_rpc(&self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
+        if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
+        for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
+        for i in 0..=1 { if stmt.children[i].name == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
+
+        let service = stmt.children[0].text.clone();
+        let rpc = stmt.children[1].text.clone();
+
+        let arg_names = match SERVICE_INFO.get(service.as_str()) {
+            None => return Err(Error::UnknownService { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), service }),
+            Some(x) => match x.get(rpc.as_str()) {
+                None => return Err(Error::UnknownRPC { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), service, rpc }),
+                Some(&x) => x,
+            }
+        };
+
+        let comment = check_children_get_comment!(self, stmt, block_type => 2 + arg_names.len());
+        let mut args = Vec::with_capacity(arg_names.len());
+        for (&arg_name, child) in arg_names.iter().zip(&stmt.children[2 .. 2 + arg_names.len()]) {
+            let val = self.parse_expr(child)?;
+            args.push((arg_name.to_owned(), val));
+        }
+        Ok(Rpc { service, rpc, args, comment })
     }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
-        macro_rules! define_local_and_ref {
-            ($name:expr, $value:expr) => {{
-                let name = $name;
-                match self.locals.define(name.clone(), $value) {
-                    Ok(_) => (), // redefining locals is fine
-                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.sprite.name.clone()) }),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), sprite: self.sprite.name.clone(), trans_name, names }),
-                }
-                self.locals.get(&name).unwrap().ref_at(VarLocation::Local)
-            }}
-        }
         let s = match stmt.attr("s") {
             None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
             Some(v) => v.value.as_str(),
@@ -539,7 +632,7 @@ impl<'a> ScriptInfo<'a> {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
-                    vars.push(define_local_and_ref!(var.text.clone(), 0f64.into()));
+                    vars.push(define_local_and_ref!(self, var.text.clone(), 0f64.into()));
                 }
                 Stmt::Assign { vars, value: 0f64.into(), comment }
             }
@@ -566,7 +659,7 @@ impl<'a> ScriptInfo<'a> {
                 let last = self.parse_expr(&stmt.children[2])?;
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                let var = define_local_and_ref!(var.to_owned(), 0f64.into());
+                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into());
                 Stmt::ForLoop { var, first, last, stmts, comment }
             }
             "doForEach" => {
@@ -578,7 +671,7 @@ impl<'a> ScriptInfo<'a> {
                 let items = self.parse_expr(&stmt.children[1])?;
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                let var = define_local_and_ref!(var.to_owned(), 0f64.into());
+                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into());
                 Stmt::ForeachLoop { var, items, stmts, comment }
             }
             "doRepeat" | "doUntil" | "doIf" => {
@@ -659,15 +752,32 @@ impl<'a> ScriptInfo<'a> {
                     }
                 }
             }
+            "doSwitchToCostume" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+
+                let costume = {
+                    let val = &stmt.children[0];
+                    if val.name == "l" && val.children.is_empty() && val.text.is_empty() {
+                        None
+                    }
+                    else if val.name == "l" && val.get(&["option"]).is_some() {
+                        let opt = grab_option!(self, s, val);
+                        match opt {
+                            "Turtle" => None,
+                            x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), what: format!("{} with project costume ({}) currently not supported", s, x) }),
+                        }
+                    }
+                    else {
+                        Some(self.parse_expr(val)?)
+                    }
+                };
+
+                Stmt::SwitchCostume { costume, comment }
+            }
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
-
-            "doRunRPC" => {
-                let rpc = self.parse_rpc(stmt)?;
-                panic!();
-            }
-
+            "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -823,7 +933,6 @@ impl<'a> ScriptInfo<'a> {
                             "2^" => Expr::Pow { base: Box::new(2f64.into()), power: value, comment },
                             "10^" => Expr::Pow { base: Box::new(10f64.into()), power: value, comment },
 
-                            "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
                             _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
                     }
@@ -834,6 +943,17 @@ impl<'a> ScriptInfo<'a> {
                         let otherwise = Box::new(self.parse_expr(&expr.children[2])?);
                         Expr::Conditional { condition, then, otherwise, comment }
                     }
+                    "getJSFromRPCStruct" => self.parse_rpc(expr, s)?.into(),
+
+                    "reportStageWidth" => noarg_op!(self, expr, s => Expr::StageWidth),
+                    "reportStageHeight" => noarg_op!(self, expr, s => Expr::StageHeight),
+
+                    "reportImageOfObject" => {
+                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let entity = grab_entity!(self, s, &expr.children[0], None);
+                        Expr::ImageOf { entity: Box::new(entity), comment }
+                    }
+
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
                 })
             }
