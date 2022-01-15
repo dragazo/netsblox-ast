@@ -92,6 +92,8 @@ pub enum ProjectError {
     ImageWithoutContent { role: String, id: String },
     ImageUnknownFormat { role: String, id: String, content: String },
 
+    SpritesWithSameName { role: String, name: String },
+
     CostumeIdFmt { role: String, sprite: String, id: String },
     CostumeUndefinedRef { role: String, sprite: String, id: String },
     CostumesWithSameName { role: String, sprite: String, name: String },
@@ -134,9 +136,10 @@ pub enum Error {
     UnknownRPC { role: String, sprite: String, block_type: String, service: String, rpc: String },
 
     GlobalsWithSameTransName { role: String, trans_name: String, names: (String, String) },
+    SpritesWithSameTransName { role: String, trans_name: String, names: (String, String) },
     FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
     LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
-    CostumesWithSameName { role: String, sprite: String, trans_name: String, names: (String, String) },
+    CostumesWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
 
     // TODO: get rid of these cases when new features are added
     BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
@@ -224,6 +227,7 @@ pub struct Role {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Sprite {
     pub name: String,
+    pub trans_name: String,
     pub fields: Vec<VariableDef>,
     pub costumes: Vec<VariableDef>,
     pub scripts: Vec<Script>,
@@ -992,15 +996,17 @@ struct SpriteInfo<'a, 'b> {
     parser: &'a Parser,
     role: &'b RoleInfo<'a>,
     name: String,
+    trans_name: String,
     fields: SymbolTable<'a>,
     costumes: SymbolTable<'a>
 }
 impl<'a, 'b> SpriteInfo<'a, 'b> {
-    fn new(role: &'b RoleInfo<'a>, name: String) -> Self {
+    fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Self {
         Self {
             parser: role.parser,
             role,
-            name,
+            name: name.name,
+            trans_name: name.trans_name,
             fields: SymbolTable::new(role.parser),
             costumes: SymbolTable::new(role.parser),
         }
@@ -1023,7 +1029,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
                     Ok(None) => (),
                     Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), sprite: self.name, name: prev.name } }),
                     Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.name) }),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameName { role: self.role.name.clone(), sprite: self.name, trans_name, names }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameTransName { role: self.role.name.clone(), sprite: self.name, trans_name, names }),
                 }
             }
         }
@@ -1074,7 +1080,13 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             }
         }
 
-        Ok(Sprite { name: self.name, fields: self.fields.into_defs(), costumes: self.costumes.into_defs(), scripts })
+        Ok(Sprite {
+            name: self.name,
+            trans_name: self.trans_name,
+            fields: self.fields.into_defs(),
+            costumes: self.costumes.into_defs(),
+            scripts
+        })
     }
 }
 
@@ -1082,6 +1094,7 @@ struct RoleInfo<'a> {
     parser: &'a Parser,
     name: String,
     globals: SymbolTable<'a>,
+    sprites: SymbolTable<'a>,
     images: LinkedHashMap<&'a str, &'a str>,
 }
 impl<'a> RoleInfo<'a> {
@@ -1090,6 +1103,7 @@ impl<'a> RoleInfo<'a> {
             parser,
             name,
             globals: SymbolTable::new(parser),
+            sprites: SymbolTable::new(parser),
             images: Default::default(),
         }
     }
@@ -1126,11 +1140,12 @@ impl<'a> RoleInfo<'a> {
 
             if self.images.insert(id, content).is_some() {
                 return Err(Error::InvalidProject { error: ProjectError::ImagesWithSameId { role, id: id.into() } });
-            };
+            }
         }
 
         if let Some(globals) = content.get(&["variables"]) {
-            let dummy_sprite = SpriteInfo::new(&self, "global".into());
+            let dummy_name = VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global };
+            let dummy_sprite = SpriteInfo::new(&self, dummy_name);
             let dummy_script = ScriptInfo::new(&dummy_sprite);
 
             let mut defs = vec![];
@@ -1164,7 +1179,12 @@ impl<'a> RoleInfo<'a> {
             for sprite in iter::once(stage).chain(sprites_xml.children.iter().filter(|s| s.name == "sprite")) {
                 let name = match sprite.attr("name") {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedSprite { role } }),
-                    Some(x) => x.value.clone(),
+                    Some(x) => match self.sprites.define(x.value.clone(), 0f64.into()) {
+                        Ok(None) => self.sprites.get(&x.value).unwrap().ref_at(VarLocation::Global),
+                        Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::SpritesWithSameName { role, name: prev.name } }),
+                        Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { role: Some(role), sprite: Some(name.clone()), name }),
+                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::SpritesWithSameTransName { role: role, trans_name, names }),
+                    }
                 };
                 sprites.push(SpriteInfo::new(&self, name).parse(sprite)?);
             }
