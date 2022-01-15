@@ -19,7 +19,7 @@ use regex::Regex;
 use crate::rpcs::*;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 
 lazy_static! {
     static ref NUMBER_REGEX: Regex = Regex::new(r"^-?[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?$").unwrap();
@@ -87,6 +87,15 @@ pub enum ProjectError {
     NoRoleContent { role: String },
     NoStageDef { role: String },
 
+    ImageWithoutId { role: String },
+    ImagesWithSameId { role: String, id: String },
+    ImageWithoutContent { role: String, id: String },
+    ImageUnknownFormat { role: String, id: String, content: String },
+
+    CostumeIdFmt { role: String, sprite: String, id: String },
+    CostumeUndefinedRef { role: String, sprite: String, id: String },
+    CostumesWithSameName { role: String, sprite: String, name: String },
+
     UnnamedGlobal { role: String },
     GlobalNoValue { role: String, name: String },
     GlobalsWithSameName { role: String, name: String },
@@ -127,6 +136,7 @@ pub enum Error {
     GlobalsWithSameTransName { role: String, trans_name: String, names: (String, String) },
     FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
     LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
+    CostumesWithSameName { role: String, sprite: String, trans_name: String, names: (String, String) },
 
     // TODO: get rid of these cases when new features are added
     BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
@@ -165,7 +175,7 @@ impl<'a> SymbolTable<'a> {
         }
 
         let entry = VariableDef { name: name.clone(), trans_name: trans_name.clone(), value };
-        self.trans_to_orig.insert(name.clone(), trans_name);
+        self.trans_to_orig.insert(trans_name, name.clone());
         Ok(self.orig_to_def.insert(name, entry))
     }
     /// Returns the definition of the given variable if it exists.
@@ -175,6 +185,17 @@ impl<'a> SymbolTable<'a> {
     fn into_defs(self) -> Vec<VariableDef> {
         self.orig_to_def.into_iter().map(|x| x.1).collect()
     }
+}
+#[test]
+fn test_sym_tab() {
+    let parser = ParserBuilder::default().name_transformer(Rc::new(crate::util::c_ident)).build().unwrap();
+    let mut sym = SymbolTable::new(&parser);
+    assert!(sym.orig_to_def.is_empty());
+    assert!(sym.trans_to_orig.is_empty());
+    assert!(sym.define("hello world!".into(), 0f64.into()).unwrap().is_none());
+    assert_eq!(sym.orig_to_def["hello world!"].name, "hello world!");
+    assert_eq!(sym.orig_to_def["hello world!"].trans_name, "hello_world");
+    assert_eq!(sym.trans_to_orig["hello_world"], "hello world!");
 }
 
 #[derive(Debug)]
@@ -186,13 +207,13 @@ struct Rpc {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Project {
     pub name: String,
     pub roles: Vec<Role>,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Role {
     pub name: String,
     pub notes: String,
@@ -200,14 +221,15 @@ pub struct Role {
     pub sprites: Vec<Sprite>,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Sprite {
     pub name: String,
     pub fields: Vec<VariableDef>,
+    pub costumes: Vec<VariableDef>,
     pub scripts: Vec<Script>,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableDef {
     pub name: String,
     pub trans_name: String,
@@ -219,25 +241,25 @@ impl VariableDef {
     }
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableRef {
     pub name: String,
     pub trans_name: String,
     pub location: VarLocation,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VarLocation {
     Global, Field, Local,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Script {
     pub hat: Option<Hat>,
     pub stmts: Vec<Stmt>,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Hat {
     OnFlag { comment: Option<String> },
     OnKey { key: String, comment: Option<String> },
@@ -252,7 +274,7 @@ pub enum Hat {
     Message { msg: String, fields: Vec<String>, comment: Option<String> },
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Stmt {
     /// Assign the given value to each of the listed variables (afterwards, they should all be ref-eq).
     Assign { vars: Vec<VariableRef>, value: Expr, comment: Option<String> },
@@ -297,7 +319,7 @@ impl From<Rpc> for Stmt {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Value {
     Bool(bool),
     Number(f64),
@@ -329,17 +351,17 @@ impl TryFrom<JsonValue> for Value {
                 None => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("failed to convert {} to f64", v) } }),
             }
             JsonValue::Object(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("got object: {}", val) } }),
-            JsonValue::Null => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("got null") } }),
+            JsonValue::Null => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: "got null".into() } }),
         })
     }
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Constant {
     E, Pi,
 }
 #[derive(Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Expr {
     Value(Value),
     Variable { var: VariableRef, comment: Option<String> },
@@ -523,14 +545,18 @@ macro_rules! grab_entity {
     }
 }
 
-struct ScriptInfo<'a> {
-    role: &'a RoleInfo<'a>,
-    sprite: &'a SpriteInfo<'a>,
+struct ScriptInfo<'a, 'b, 'c> {
+    role: &'c RoleInfo<'a>,
+    sprite: &'c SpriteInfo<'a, 'b>,
     locals: SymbolTable<'a>,
 }
-impl<'a> ScriptInfo<'a> {
-    fn new(sprite: &'a SpriteInfo) -> Self {
-        Self { role: sprite.role, sprite, locals: SymbolTable::new(sprite.parser) }
+impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
+    fn new(sprite: &'c SpriteInfo<'a, 'b>) -> Self {
+        Self {
+            role: sprite.role,
+            sprite,
+            locals: SymbolTable::new(sprite.parser)
+        }
     }
     fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
         if script.children.is_empty() { return Ok(Script { hat: None, stmts: vec![] }) }
@@ -579,7 +605,7 @@ impl<'a> ScriptInfo<'a> {
                 }
             }
             "receiveSocketMessage" => {
-                if stmt.children.len() < 1 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
+                if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
                 if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
 
                 let msg = stmt.children[0].name.clone();
@@ -601,7 +627,7 @@ impl<'a> ScriptInfo<'a> {
     fn parse_rpc(&self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
         if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
         for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
-        for i in 0..=1 { if stmt.children[i].name == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
+        for i in 0..=1 { if stmt.children[i].name.is_empty() { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
 
         let service = stmt.children[0].text.clone();
         let rpc = stmt.children[1].text.clone();
@@ -962,17 +988,46 @@ impl<'a> ScriptInfo<'a> {
     }
 }
 
-struct SpriteInfo<'a> {
+struct SpriteInfo<'a, 'b> {
     parser: &'a Parser,
-    role: &'a RoleInfo<'a>,
+    role: &'b RoleInfo<'a>,
     name: String,
     fields: SymbolTable<'a>,
+    costumes: SymbolTable<'a>
 }
-impl<'a> SpriteInfo<'a> {
-    fn new(role: &'a RoleInfo, name: String) -> Self {
-        Self { parser: role.parser, role, name, fields: SymbolTable::new(role.parser) }
+impl<'a, 'b> SpriteInfo<'a, 'b> {
+    fn new(role: &'b RoleInfo<'a>, name: String) -> Self {
+        Self {
+            parser: role.parser,
+            role,
+            name,
+            fields: SymbolTable::new(role.parser),
+            costumes: SymbolTable::new(role.parser),
+        }
     }
-    fn parse(mut self, sprite: &Xml) -> Result<Sprite, Error> {
+    fn parse(mut self, sprite: &'a Xml) -> Result<Sprite, Error> {
+        for costume in sprite.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
+            if let Some(ident) = costume.get(&["ref"]).map(|r| r.attr("mediaID")).flatten() {
+                let ident = ident.value.as_str();
+                if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_cst_") {
+                    return Err(Error::InvalidProject { error: ProjectError::CostumeIdFmt { role: self.role.name.clone(), sprite: self.name, id: ident.into() } });
+                }
+                let name = &ident[self.name.len() + 5..];
+
+                let content = match self.role.images.get(ident) {
+                    Some(&x) => x,
+                    None => return Err(Error::InvalidProject { error: ProjectError::CostumeUndefinedRef { role: self.role.name.clone(), sprite: self.name, id: ident.into() } }),
+                };
+
+                match self.costumes.define(name.into(), content.into()) {
+                    Ok(None) => (),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), sprite: self.name, name: prev.name } }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.name) }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameName { role: self.role.name.clone(), sprite: self.name, trans_name, names }),
+                }
+            }
+        }
+
         if let Some(fields) = sprite.get(&["variables"]) {
             let dummy_script = ScriptInfo::new(&self);
 
@@ -1019,7 +1074,7 @@ impl<'a> SpriteInfo<'a> {
             }
         }
 
-        Ok(Sprite { name: self.name, fields: self.fields.into_defs(), scripts })
+        Ok(Sprite { name: self.name, fields: self.fields.into_defs(), costumes: self.costumes.into_defs(), scripts })
     }
 }
 
@@ -1027,12 +1082,18 @@ struct RoleInfo<'a> {
     parser: &'a Parser,
     name: String,
     globals: SymbolTable<'a>,
+    images: LinkedHashMap<&'a str, &'a str>,
 }
 impl<'a> RoleInfo<'a> {
     fn new(parser: &'a Parser, name: String) -> Self {
-        Self { parser, name, globals: SymbolTable::new(parser) }
+        Self {
+            parser,
+            name,
+            globals: SymbolTable::new(parser),
+            images: Default::default(),
+        }
     }
-    fn parse(mut self, role_root: &Xml) -> Result<Role, Error> {
+    fn parse(mut self, role_root: &'a Xml) -> Result<Role, Error> {
         assert_eq!(role_root.name, "role");
         let role = match role_root.attr("name") {
             None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
@@ -1047,6 +1108,26 @@ impl<'a> RoleInfo<'a> {
             None => return Err(Error::InvalidProject { error: ProjectError::NoStageDef { role } }),
             Some(x) => x,
         };
+
+        for entry in role_root.get(&["media"]).map(|v| v.children.as_slice()).unwrap_or(&[]) {
+            if entry.name != "costume" { continue }
+            let id = match entry.attr("mediaID") {
+                Some(x) => x.value.as_str(),
+                None => return Err(Error::InvalidProject { error: ProjectError::ImageWithoutId { role } }),
+            };
+
+            let content = match entry.attr("image") {
+                Some(x) => match x.value.as_str() {
+                    x if x.starts_with("data:image/png;base64,") => &x[22..],
+                    x => return Err(Error::InvalidProject { error: ProjectError::ImageUnknownFormat { role, id: id.into(), content: x.into() } }),
+                }
+                None => return Err(Error::InvalidProject { error: ProjectError::ImageWithoutContent { role, id: id.into() } }),
+            };
+
+            if self.images.insert(id, content).is_some() {
+                return Err(Error::InvalidProject { error: ProjectError::ImagesWithSameId { role, id: id.into() } });
+            };
+        }
 
         if let Some(globals) = content.get(&["variables"]) {
             let dummy_sprite = SpriteInfo::new(&self, "global".into());

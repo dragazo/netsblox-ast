@@ -60,7 +60,7 @@ pub fn normalize_space(raw: &str) -> String {
     while let Some(c) = chars.next() {
         if c.is_whitespace() {
             res.push(' ');
-            while let Some(cc) = chars.next() {
+            for cc in chars.by_ref() {
                 if !cc.is_whitespace() {
                     res.push(cc);
                     break
@@ -84,12 +84,13 @@ pub fn c_ident(raw: &str) -> Result<String, ()> {
     let res = INVALID_CHAR.replace_all(raw.trim(), " ").trim().replace(' ', "_");
     match res.chars().next() {
         None => Err(()),
-        Some(v) => Ok(if ('0'..='9').contains(&v) { format!("var_{}", res) } else { res.into() })
+        Some(v) => Ok(if ('0'..='9').contains(&v) { format!("var_{}", res) } else { res })
     }
 }
 #[test]
 fn test_c_ident() {
     assert_eq!(c_ident("foo").unwrap(), "foo");
+    assert_eq!(c_ident("foo!").unwrap(), "foo");
     assert_eq!(c_ident("foo[]").unwrap(), "foo");
     assert_eq!(c_ident("(foo)").unwrap(), "foo");
     assert_eq!(c_ident(" (foo) ").unwrap(), "foo");
