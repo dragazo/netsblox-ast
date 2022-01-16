@@ -185,8 +185,13 @@ impl<'a> SymbolTable<'a> {
     fn get(&self, name: &str) -> Option<&VariableDef> {
         self.orig_to_def.get(name)
     }
+    /// Gets the list of all defined variables.
+    /// This is guaranteed to be in order of definition.
     fn into_defs(self) -> Vec<VariableDef> {
         self.orig_to_def.into_iter().map(|x| x.1).collect()
+    }
+    fn len(&self) -> usize {
+        self.orig_to_def.len()
     }
 }
 #[test]
@@ -231,6 +236,12 @@ pub struct Sprite {
     pub fields: Vec<VariableDef>,
     pub costumes: Vec<VariableDef>,
     pub scripts: Vec<Script>,
+
+    pub active_costume: Option<usize>,
+    pub color: (u8, u8, u8),
+    pub pos: (f64, f64),
+    pub heading: f64,
+    pub scale: f64,
 }
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -998,7 +1009,7 @@ struct SpriteInfo<'a, 'b> {
     name: String,
     trans_name: String,
     fields: SymbolTable<'a>,
-    costumes: SymbolTable<'a>
+    costumes: SymbolTable<'a>,
 }
 impl<'a, 'b> SpriteInfo<'a, 'b> {
     fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Self {
@@ -1033,6 +1044,20 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
                 }
             }
         }
+
+        let active_costume = match sprite.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
+            Some(idx) if idx >= 1 && idx <= self.costumes.len() => Some(idx - 1),
+            _ => None,
+        };
+        let color = match sprite.attr("color").map(|v| v.value.split(',').take(3).map(|v| v.parse::<f64>().ok()).flatten().collect::<Vec<_>>()) {
+            Some(rgb) if rgb.len() == 3 && rgb.iter().all(|&v| v >= 0.0 && v < 256.0) => (rgb[0] as u8, rgb[1] as u8, rgb[2] as u8),
+            _ => (0, 0, 0),
+        };
+
+        let float_attr = |attr: &str| sprite.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
+        let pos = (float_attr("x").unwrap_or(0.0), float_attr("y").unwrap_or(0.0));
+        let heading = float_attr("heading").unwrap_or(0.0);
+        let scale = float_attr("scale").unwrap_or(0.0);
 
         if let Some(fields) = sprite.get(&["variables"]) {
             let dummy_script = ScriptInfo::new(&self);
@@ -1085,7 +1110,13 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             trans_name: self.trans_name,
             fields: self.fields.into_defs(),
             costumes: self.costumes.into_defs(),
-            scripts
+            scripts,
+
+            active_costume,
+            color,
+            pos,
+            heading,
+            scale,
         })
     }
 }
