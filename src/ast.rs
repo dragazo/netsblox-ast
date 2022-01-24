@@ -24,6 +24,7 @@ use serde::Serialize;
 lazy_static! {
     static ref NUMBER_REGEX: Regex = Regex::new(r"^-?[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?$").unwrap();
     static ref PARAM_FINDER: Regex = Regex::new(r"%'([^']+)'").unwrap();
+    static ref ARG_FINDER: Regex = Regex::new(r"%(\S+)").unwrap();
     static ref NEW_LINE: Regex = Regex::new("\r\n|\r|\n").unwrap();
 }
 
@@ -87,6 +88,11 @@ pub enum ProjectError {
     NoRoleContent { role: String },
     NoStageDef { role: String },
 
+    CustomBlockWithoutName { role: String, sprite: Option<String> },
+    CustomeBlockWithoutType { role: String, sprite: Option<String>, sig: String },
+    CustomeBlockUnknownType { role: String, sprite: Option<String>, sig: String, ty: String },
+    CustomBlockWithoutCode { role: String, sprite: Option<String>, sig: String },
+
     ImageWithoutId { role: String },
     ImagesWithSameId { role: String, id: String },
     ImageWithoutContent { role: String, id: String },
@@ -140,6 +146,9 @@ pub enum Error {
     FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
     LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
     CostumesWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
+    BlocksWithSameTransName { role: String, sprite: Option<String>, trans_name: String, names: (String, String) },
+
+    BlocksWithSameName { role: String, sprite: Option<String>, name: String, sigs: (String, String) },
 
     // TODO: get rid of these cases when new features are added
     BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
@@ -151,6 +160,7 @@ pub enum SymbolError {
     ConflictingTrans { trans_name: String, names: (String, String) }
 }
 
+#[derive(Clone)]
 struct SymbolTable<'a> {
     parser: &'a Parser,
     orig_to_def: LinkedHashMap<String, VariableDef>,
@@ -214,27 +224,38 @@ struct Rpc {
     comment: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Project {
     pub name: String,
     pub roles: Vec<Role>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Role {
     pub name: String,
     pub notes: String,
     pub globals: Vec<VariableDef>,
+    pub funcs: Vec<Function>,
     pub sprites: Vec<Sprite>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct Function {
+    pub name: String,
+    pub trans_name: String,
+    pub params: Vec<VariableDef>,
+    pub returns: bool,
+    pub stmts: Vec<Stmt>,
+}
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Sprite {
     pub name: String,
     pub trans_name: String,
     pub fields: Vec<VariableDef>,
     pub costumes: Vec<VariableDef>,
+    pub funcs: Vec<Function>,
     pub scripts: Vec<Script>,
 
     pub active_costume: Option<usize>,
@@ -243,7 +264,7 @@ pub struct Sprite {
     pub heading: f64,
     pub scale: f64,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableDef {
     pub name: String,
@@ -255,25 +276,25 @@ impl VariableDef {
         VariableRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableRef {
     pub name: String,
     pub trans_name: String,
     pub location: VarLocation,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VarLocation {
     Global, Field, Local,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Script {
     pub hat: Option<Hat>,
     pub stmts: Vec<Stmt>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Hat {
     OnFlag { comment: Option<String> },
@@ -288,7 +309,7 @@ pub enum Hat {
     Stopped { comment: Option<String> },
     Message { msg: String, fields: Vec<String>, comment: Option<String> },
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Stmt {
     /// Assign the given value to each of the listed variables (afterwards, they should all be ref-eq).
@@ -323,6 +344,10 @@ pub enum Stmt {
 
     SwitchCostume { costume: Option<Expr>, comment: Option<String> },
 
+    Forward { distance: Box<Expr>, comment: Option<String> },
+    TurnRight { angle: Box<Expr>, comment: Option<String> },
+    TurnLeft { angle: Box<Expr>, comment: Option<String> },
+
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
 }
 
@@ -333,7 +358,7 @@ impl From<Rpc> for Stmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Value {
     Bool(bool),
@@ -370,12 +395,12 @@ impl TryFrom<JsonValue> for Value {
         })
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Constant {
     E, Pi,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Expr {
     Value(Value),
@@ -818,6 +843,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
+            "forward" => unary_op!(self, stmt, s => Stmt::Forward : distance),
+            "turn" => unary_op!(self, stmt, s => Stmt::TurnRight : angle),
+            "turnLeft" => unary_op!(self, stmt, s => Stmt::TurnLeft : angle),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
@@ -1009,6 +1037,7 @@ struct SpriteInfo<'a, 'b> {
     name: String,
     trans_name: String,
     fields: SymbolTable<'a>,
+    funcs: SymbolTable<'a>,
     costumes: SymbolTable<'a>,
 }
 impl<'a, 'b> SpriteInfo<'a, 'b> {
@@ -1019,6 +1048,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             name: name.name,
             trans_name: name.trans_name,
             fields: SymbolTable::new(role.parser),
+            funcs: SymbolTable::new(role.parser),
             costumes: SymbolTable::new(role.parser),
         }
     }
@@ -1043,6 +1073,15 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameTransName { role: self.role.name.clone(), sprite: self.name, trans_name, names }),
                 }
             }
+        }
+
+        let blocks = sprite.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
+        for block in blocks {
+            parse_block_header(block, &mut self.funcs, &self.role.name, Some(&self.name))?;
+        }
+        let mut funcs = vec![];
+        for block in blocks {
+            funcs.push(parse_block(block, &self.funcs, &self.role, Some(&self))?);
         }
 
         let active_costume = match sprite.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
@@ -1110,6 +1149,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             trans_name: self.trans_name,
             fields: self.fields.into_defs(),
             costumes: self.costumes.into_defs(),
+            funcs,
             scripts,
 
             active_costume,
@@ -1121,11 +1161,86 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
     }
 }
 
+// returns the signature and returns flag of the block header value
+fn get_block_info(value: &Value) -> (&str, bool) {
+    match value {
+        Value::List(vals) => {
+            assert_eq!(vals.len(), 2);
+            let s = match &vals[0] { Value::String(v) => v, _ => panic!() };
+            let returns = match vals[1] { Value::Bool(v) => v, _ => panic!() };
+            (s, returns)
+        }
+        _ => panic!(), // header parser would never do this
+    }
+}
+fn block_name_from_def(s: &str) -> String {
+    PARAM_FINDER.replace_all(s, "\t").into_owned() // tabs leave a marker for args which disappears after ident renaming
+}
+fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, sprite: Option<&str>) -> Result<(), Error> {
+    let sprite = || sprite.map(|v| v.to_owned());
+
+    let s = match block.attr("s") {
+        Some(v) => v.value.as_str(),
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: role.into(), sprite: sprite() } }),
+    };
+    let returns = match block.attr("type") {
+        Some(v) => match v.value.as_str() {
+            "command" => false,
+            "reporter" | "predicate" => true,
+            x => return Err(Error::InvalidProject { error: ProjectError::CustomeBlockUnknownType { role: role.into(), sprite: sprite(), sig: s.into(), ty: x.into() } }),
+        }
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomeBlockWithoutType { role: role.into(), sprite: sprite(), sig: s.into() } }),
+    };
+
+    let name = block_name_from_def(s);
+    match funcs.define(name, vec![Value::from(s), Value::from(returns)].into()) {
+        Ok(None) => Ok(()),
+        Ok(Some(prev)) => return Err(Error::BlocksWithSameName { role: role.into(), sprite: sprite(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
+        Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(role.into()), sprite: sprite() }),
+        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::BlocksWithSameTransName { role: role.into(), sprite: sprite(), trans_name, names }),
+    }
+}
+fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, sprite: Option<&SpriteInfo>) -> Result<Function, Error> {
+    let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
+    let entry = funcs.get(&block_name_from_def(s)).unwrap();
+    let (s2, returns) = get_block_info(&entry.value); // unwrap ok because header parser
+    assert_eq!(s, s2);
+
+    let code = match block.get(&["script"]) {
+        Some(v) => v,
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutCode { role: role.name.clone(), sprite: sprite.map(|v| v.name.clone()), sig: s.into() } }),
+    };
+    let finalize = |sprite_info: &SpriteInfo| {
+        let mut script_info = ScriptInfo::new(sprite_info);
+        for param in PARAM_FINDER.captures_iter(s).map(|v| v.get(1).unwrap().as_str().to_owned()) {
+            define_local_and_ref!(script_info, param, 0f64.into());
+        }
+        let params = script_info.locals.clone().into_defs();
+        let stmts = script_info.parse(&code)?.stmts;
+
+        Ok(Function {
+            name: entry.name.clone(),
+            trans_name: entry.trans_name.clone(),
+            params,
+            returns,
+            stmts,
+        })
+    };
+    match sprite {
+        Some(v) => finalize(v),
+        None => {
+            let sprite = SpriteInfo::new(role, VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global });
+            finalize(&sprite)
+        }
+    }
+}
+
 struct RoleInfo<'a> {
     parser: &'a Parser,
     name: String,
     globals: SymbolTable<'a>,
     sprites: SymbolTable<'a>,
+    funcs: SymbolTable<'a>,
     images: LinkedHashMap<&'a str, &'a str>,
 }
 impl<'a> RoleInfo<'a> {
@@ -1135,6 +1250,7 @@ impl<'a> RoleInfo<'a> {
             name,
             globals: SymbolTable::new(parser),
             sprites: SymbolTable::new(parser),
+            funcs: SymbolTable::new(parser),
             images: Default::default(),
         }
     }
@@ -1153,6 +1269,15 @@ impl<'a> RoleInfo<'a> {
             None => return Err(Error::InvalidProject { error: ProjectError::NoStageDef { role } }),
             Some(x) => x,
         };
+
+        let blocks = content.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
+        for block in blocks {
+            parse_block_header(block, &mut self.funcs, &self.name, None)?;
+        }
+        let mut funcs = vec![];
+        for block in blocks {
+            funcs.push(parse_block(block, &self.funcs, &self, None)?);
+        }
 
         for entry in role_root.get(&["media"]).map(|v| v.children.as_slice()).unwrap_or(&[]) {
             if entry.name != "costume" { continue }
@@ -1221,7 +1346,7 @@ impl<'a> RoleInfo<'a> {
             }
         }
 
-        Ok(Role { name: role, notes, globals: self.globals.into_defs(), sprites })
+        Ok(Role { name: role, notes, globals: self.globals.into_defs(), funcs, sprites })
     }
 }
 
