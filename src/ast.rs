@@ -89,8 +89,8 @@ pub enum ProjectError {
     NoStageDef { role: String },
 
     CustomBlockWithoutName { role: String, sprite: Option<String> },
-    CustomeBlockWithoutType { role: String, sprite: Option<String>, sig: String },
-    CustomeBlockUnknownType { role: String, sprite: Option<String>, sig: String, ty: String },
+    CustomBlockWithoutType { role: String, sprite: Option<String>, sig: String },
+    CustomBlockUnknownType { role: String, sprite: Option<String>, sig: String, ty: String },
     CustomBlockWithoutCode { role: String, sprite: Option<String>, sig: String },
 
     ImageWithoutId { role: String },
@@ -135,6 +135,7 @@ pub enum Error {
     UnknownBlockType { role: String, sprite: String, block_type: String },
     DerefAssignment { role: String, sprite: String },
     UndefinedVariable { role: String, sprite: String, name: String },
+    UndefinedFn { role: String, sprite: String, name: String },
     BlockOptionNotConst { role: String, sprite: String, block_type: String },
     BlockOptionNotSelected { role: String, sprite: String, block_type: String },
 
@@ -223,6 +224,12 @@ struct Rpc {
     args: Vec<(String, Expr)>,
     comment: Option<String>,
 }
+#[derive(Debug)]
+struct FnCall {
+    function: FnRef,
+    args: Vec<Expr>,
+    comment: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -275,6 +282,9 @@ impl VariableDef {
     fn ref_at(&self, location: VarLocation) -> VariableRef {
         VariableRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
     }
+    fn fn_ref_at(&self, location: FnLocation) -> FnRef {
+        FnRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
+    }
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -283,10 +293,22 @@ pub struct VariableRef {
     pub trans_name: String,
     pub location: VarLocation,
 }
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct FnRef {
+    pub name: String,
+    pub trans_name: String,
+    pub location: FnLocation,
+}
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VarLocation {
     Global, Field, Local,
+}
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum FnLocation {
+    Global, Method,
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -349,6 +371,7 @@ pub enum Stmt {
     TurnLeft { angle: Box<Expr>, comment: Option<String> },
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
+    RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
 }
 
 impl From<Rpc> for Stmt {
@@ -476,6 +499,7 @@ pub enum Expr {
     Atan { value: Box<Expr>, comment: Option<String> },
 
     CallRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
+    CallFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
 
     StageWidth { comment: Option<String> },
     StageHeight { comment: Option<String> },
@@ -610,6 +634,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         for stmt in stmts_xml {
             match stmt.name.as_str() {
                 "block" => stmts.push(self.parse_block(stmt)?),
+                "custom-block" => {
+                    let FnCall { function, args, comment } = self.parse_fn_call(stmt)?;
+                    stmts.push(Stmt::RunFn { function, args, comment });
+                }
                 x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
             }
         }
@@ -688,6 +716,24 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
         Ok(Rpc { service, rpc, args, comment })
     }
+    fn parse_fn_call(&self, stmt: &Xml) -> Result<FnCall, Error> {
+        let s = match stmt.attr("s") {
+            Some(v) => v.value.as_str(),
+            None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), sprite: Some(self.sprite.name.clone()) } }),
+        };
+
+        let name = block_name_from_ref(s);
+        let argc = ARG_FINDER.find_iter(s).count();
+        let function = self.reference_fn(&name)?;
+        let comment = check_children_get_comment!(self, stmt, s => argc);
+
+        let mut args = Vec::with_capacity(argc);
+        for expr in stmt.children[..argc].iter() {
+            args.push(self.parse_expr(expr)?);
+        }
+
+        Ok(FnCall { function, args, comment })
+    }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
         let s = match stmt.attr("s") {
             None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
@@ -705,7 +751,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doSetVar" | "doChangeVar" => {
                 let comment = check_children_get_comment!(self, stmt, s => 2);
                 let var = match stmt.children[0].name.as_str() {
-                    "l" => self.reference_var(stmt.children[0].text.clone())?,
+                    "l" => self.reference_var(&stmt.children[0].text)?,
                     _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), sprite: self.sprite.name.clone() }),
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
@@ -850,14 +896,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
     }
-    fn reference_var(&self, name: String) -> Result<VariableRef, Error> {
-        macro_rules! check_locations {
-            ($($sym:expr => $loc:expr),*$(,)?) => {$({
-                if let Some(def) = $sym.get(&name) { return Ok(def.ref_at($loc)) }
-            })*}
+    fn reference_var(&self, name: &str) -> Result<VariableRef, Error> {
+        let locs = [(&self.locals, VarLocation::Local), (&self.sprite.fields, VarLocation::Field), (&self.role.globals, VarLocation::Global)];
+        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.ref_at(v.1))) {
+            Some(v) => Ok(v),
+            None => Err(Error::UndefinedVariable { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name: name.into() })
         }
-        check_locations!(&self.locals => VarLocation::Local, &self.sprite.fields => VarLocation::Field, &self.role.globals => VarLocation::Global);
-        Err(Error::UndefinedVariable { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name })
+    }
+    fn reference_fn(&self, name: &str) -> Result<FnRef, Error> {
+        let locs = [(&self.sprite.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
+        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.fn_ref_at(v.1))) {
+            Some(v) => Ok(v),
+            None => Err(Error::UndefinedFn { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name: name.into() })
+        }
     }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
         match expr.name.as_str() {
@@ -889,10 +940,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Ok(values.into())
                 }
             }
+            "custom-block" => {
+                let FnCall { function, args, comment } = self.parse_fn_call(expr)?;
+                Ok(Expr::CallFn { function, args, comment })
+            }
             "block" => {
                 if let Some(var) = expr.attr("var") {
                     let comment = check_children_get_comment!(self, expr, "var" => 0);
-                    let var = self.reference_var(var.value.clone())?;
+                    let var = self.reference_var(&var.value)?;
                     return Ok(Expr::Variable { var, comment });
                 }
                 let s = match expr.attr("s") {
@@ -1176,6 +1231,9 @@ fn get_block_info(value: &Value) -> (&str, bool) {
 fn block_name_from_def(s: &str) -> String {
     PARAM_FINDER.replace_all(s, "\t").into_owned() // tabs leave a marker for args which disappears after ident renaming
 }
+fn block_name_from_ref(s: &str) -> String {
+    ARG_FINDER.replace_all(s, "\t").into_owned()
+}
 fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, sprite: Option<&str>) -> Result<(), Error> {
     let sprite = || sprite.map(|v| v.to_owned());
 
@@ -1187,9 +1245,9 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
         Some(v) => match v.value.as_str() {
             "command" => false,
             "reporter" | "predicate" => true,
-            x => return Err(Error::InvalidProject { error: ProjectError::CustomeBlockUnknownType { role: role.into(), sprite: sprite(), sig: s.into(), ty: x.into() } }),
+            x => return Err(Error::InvalidProject { error: ProjectError::CustomBlockUnknownType { role: role.into(), sprite: sprite(), sig: s.into(), ty: x.into() } }),
         }
-        None => return Err(Error::InvalidProject { error: ProjectError::CustomeBlockWithoutType { role: role.into(), sprite: sprite(), sig: s.into() } }),
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutType { role: role.into(), sprite: sprite(), sig: s.into() } }),
     };
 
     let name = block_name_from_def(s);
