@@ -366,9 +366,15 @@ pub enum Stmt {
 
     SwitchCostume { costume: Option<Expr>, comment: Option<String> },
 
-    Forward { distance: Box<Expr>, comment: Option<String> },
-    TurnRight { angle: Box<Expr>, comment: Option<String> },
-    TurnLeft { angle: Box<Expr>, comment: Option<String> },
+    Forward { distance: Expr, comment: Option<String> },
+    ChangePos { dx: Option<Expr>, dy: Option<Expr>, comment: Option<String> },
+    SetPos { x: Option<Expr>, y: Option<Expr>, comment: Option<String> },
+    /// Similar to `SetPos` except that the target can be either a list of `[x, y]` coordinates or a sprite.
+    Goto { target: Expr, comment: Option<String> },
+
+    TurnRight { angle: Expr, comment: Option<String> },
+    TurnLeft { angle: Expr, comment: Option<String> },
+    SetHeading { value: Expr, comment: Option<String> },
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
@@ -503,6 +509,10 @@ pub enum Expr {
 
     StageWidth { comment: Option<String> },
     StageHeight { comment: Option<String> },
+
+    YPos { comment: Option<String> },
+    XPos { comment: Option<String> },
+    Heading { comment: Option<String> },
 
     This { comment: Option<String> },
     Entity { name: String, comment: Option<String> },
@@ -886,12 +896,31 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 Stmt::SwitchCostume { costume, comment }
             }
+            "setHeading" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+
+                let child = &stmt.children[0];
+                let value = if child.name == "l" && child.get(&["option"]).is_some() {
+                    let opt = grab_option!(self, s, child);
+                    match opt {
+                        "random" => Expr::RandInclusive { a: Box::new(0f64.into()), b: Box::new(360f64.into()), comment: None },
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: opt.into() } }),
+                    }
+                } else { self.parse_expr(child)? };
+
+                Stmt::SetHeading { value, comment }
+            }
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
             "forward" => unary_op!(self, stmt, s => Stmt::Forward : distance),
             "turn" => unary_op!(self, stmt, s => Stmt::TurnRight : angle),
             "turnLeft" => unary_op!(self, stmt, s => Stmt::TurnLeft : angle),
+            "setXPosition" => unary_op!(self, stmt, s => Stmt::SetPos { y: None } : x),
+            "setYPosition" => unary_op!(self, stmt, s => Stmt::SetPos { x: None } : y),
+            "changeXPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dy: None } : dx),
+            "changeYPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dx: None } : dy),
+            "gotoXY" => binary_op!(self, stmt, s => Stmt::SetPos : x, y),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
@@ -1077,6 +1106,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let entity = grab_entity!(self, s, &expr.children[0], None);
                         Expr::ImageOf { entity: Box::new(entity), comment }
                     }
+
+                    "xPosition" => noarg_op!(self, expr, s => Expr::XPos),
+                    "yPosition" => noarg_op!(self, expr, s => Expr::YPos),
+                    "direction" => noarg_op!(self, expr, s => Expr::Heading),
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
                 })
