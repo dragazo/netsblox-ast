@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::rc::Rc;
 use std::mem;
 use std::iter;
+use std::fmt;
 
 use linked_hash_map::LinkedHashMap;
 use derive_builder::Builder;
@@ -126,6 +127,8 @@ pub enum ProjectError {
 
     InvalidBoolLiteral { role: String, sprite: String },
     NonConstantUpvar { role: String, sprite: String, block_type: String },
+
+    FailedToParseColor { role: String, sprite: String, color: String },
 }
 #[derive(Debug)]
 pub enum Error {
@@ -166,6 +169,11 @@ struct SymbolTable<'a> {
     parser: &'a Parser,
     orig_to_def: LinkedHashMap<String, VariableDef>,
     trans_to_orig: LinkedHashMap<String, String>,
+}
+impl fmt::Debug for SymbolTable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SymbolTable {{ orig_to_def: {:?}, trans_to_orig: {:?} }}", self.orig_to_def, self.trans_to_orig)
+    }
 }
 impl<'a> SymbolTable<'a> {
     fn new(parser: &'a Parser) -> Self {
@@ -329,7 +337,9 @@ pub enum Hat {
     ScrollDown { comment: Option<String> },
     Dropped { comment: Option<String> },
     Stopped { comment: Option<String> },
-    Message { msg: String, fields: Vec<String>, comment: Option<String> },
+    When { condition: Expr, comment: Option<String> },
+    LocalMessage { message_type: String, comment: Option<String> },
+    NetworkMessage { message_type: String, fields: Vec<String>, comment: Option<String> },
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -342,7 +352,7 @@ pub enum Stmt {
 
     InfLoop { stmts: Vec<Stmt>, comment: Option<String> },
     ForeachLoop { var: VariableRef, items: Expr, stmts: Vec<Stmt>, comment: Option<String> },
-    ForLoop { var: VariableRef, first: Expr, last: Expr, stmts: Vec<Stmt>, comment: Option<String> },
+    ForLoop { var: VariableRef, start: Expr, stop: Expr, stmts: Vec<Stmt>, comment: Option<String> },
     UntilLoop { condition: Expr, stmts: Vec<Stmt>, comment: Option<String> },
     Repeat { times: Expr, stmts: Vec<Stmt>, comment: Option<String> },
 
@@ -362,7 +372,9 @@ pub enum Stmt {
     LastIndexAssign { list: Expr, value: Expr, comment: Option<String> },
 
     Return { value: Expr, comment: Option<String> },
+
     Sleep { seconds: Expr, comment: Option<String> },
+    WaitUntil { condition: Expr, comment: Option<String> },
 
     SwitchCostume { costume: Option<Expr>, comment: Option<String> },
 
@@ -376,8 +388,26 @@ pub enum Stmt {
     TurnLeft { angle: Expr, comment: Option<String> },
     SetHeading { value: Expr, comment: Option<String> },
 
+    BounceOffEdge { comment: Option<String> },
+
+    PenDown { comment: Option<String> },
+    PenUp { comment: Option<String> },
+    PenClear { comment: Option<String> },
+    Stamp { comment: Option<String> },
+    Write { content: Expr, font_size: Expr, comment: Option<String> },
+    SetPenColor { color: (u8, u8, u8), comment: Option<String> },
+
+    ChangeScalePercent { amount: Expr, comment: Option<String> },
+    SetScalePercent { value: Expr, comment: Option<String> },
+
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
+
+    /// Sends a message to local entities (not over the network).
+    /// If `targets` is `None`, this should broadcast to all entites.
+    /// Otherwise `targets` is either a single target or a list of targets to send to.
+    /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
+    SendLocalMessage { targets: Option<Expr>, message_type: Expr, wait: bool, comment: Option<String> },
 }
 
 impl From<Rpc> for Stmt {
@@ -510,9 +540,17 @@ pub enum Expr {
     StageWidth { comment: Option<String> },
     StageHeight { comment: Option<String> },
 
+    MouseX { comment: Option<String> },
+    MouseY { comment: Option<String> },
+
+    Latitude { comment: Option<String> },
+    Longitude { comment: Option<String> },
+
     YPos { comment: Option<String> },
     XPos { comment: Option<String> },
     Heading { comment: Option<String> },
+
+    PenDown { comment: Option<String> },
 
     This { comment: Option<String> },
     Entity { name: String, comment: Option<String> },
@@ -619,6 +657,15 @@ macro_rules! grab_entity {
     }
 }
 
+fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
+    let rgb: Vec<_> = value.split(',').take(3).map(|v| v.parse::<f64>().ok()).flatten().collect();
+    if rgb.len() == 3 && rgb.iter().all(|&v| (0.0..256.0).contains(&v)) {
+        Some((rgb[0] as u8, rgb[1] as u8, rgb[2] as u8))
+    } else {
+        None
+    }
+}
+
 struct ScriptInfo<'a, 'b, 'c> {
     role: &'c RoleInfo<'a>,
     sprite: &'c SpriteInfo<'a, 'b>,
@@ -663,6 +710,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let comment = check_children_get_comment!(self, stmt, s => 0);
                 Hat::OnFlag { comment }
             }
+            "receiveCondition" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let condition = self.parse_expr(&stmt.children[0])?;
+                Hat::When { condition, comment }
+            }
             "receiveKey" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let key = grab_option!(self, s, stmt.children[0]);
@@ -682,11 +734,25 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                 }
             }
+            "receiveMessage" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let child = &stmt.children[0];
+                if child.name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                let message_type = match child.text.as_str() {
+                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                    x => x.to_owned(),
+                };
+                Hat::LocalMessage { message_type, comment }
+            }
             "receiveSocketMessage" => {
                 if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
                 if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
 
-                let msg = stmt.children[0].name.clone();
+                let message_type = match stmt.children[0].text.as_str() {
+                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                    x => x.to_owned(),
+                };
+
                 let mut fields = vec![];
                 let mut comment = None;
                 for child in stmt.children[1..].iter() {
@@ -697,8 +763,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let var = define_local_and_ref!(self, child.text.clone(), 0f64.into());
                     fields.push(var.name);
                 }
-                Hat::Message { msg, fields, comment }
+                Hat::NetworkMessage { message_type, fields, comment }
             }
+            x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
         }))
     }
@@ -773,27 +840,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doFor" => {
                 let comment = check_children_get_comment!(self, stmt, s => 4);
+
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
                 };
-                let first = self.parse_expr(&stmt.children[1])?;
-                let last = self.parse_expr(&stmt.children[2])?;
+                let start = self.parse_expr(&stmt.children[1])?;
+                let stop = self.parse_expr(&stmt.children[2])?;
+                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into()); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into());
-                Stmt::ForLoop { var, first, last, stmts, comment }
+                Stmt::ForLoop { var, start, stop, stmts, comment }
             }
             "doForEach" => {
                 let comment = check_children_get_comment!(self, stmt, s => 3);
+
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
+                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into()); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into());
                 Stmt::ForeachLoop { var, items, stmts, comment }
             }
             "doRepeat" | "doUntil" | "doIf" => {
@@ -910,8 +979,59 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 Stmt::SetHeading { value, comment }
             }
+            "doGotoObject" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+
+                let child = &stmt.children[0];
+                if child.name == "l" && child.get(&["option"]).is_some() {
+                    let opt = grab_option!(self, s, child);
+                    match opt {
+                        "random position" => {
+                            let half_width = Expr::Div { left: Box::new(Expr::StageWidth { comment: None }), right: Box::new(2f64.into()), comment: None };
+                            let half_height = Expr::Div { left: Box::new(Expr::StageWidth { comment: None }), right: Box::new(2f64.into()), comment: None };
+                            Stmt::SetPos {
+                                x: Some(Expr::RandInclusive { a: Box::new(Expr::Neg { value: Box::new(half_width.clone()), comment: None }), b: Box::new(half_width), comment: None }),
+                                y: Some(Expr::RandInclusive { a: Box::new(Expr::Neg { value: Box::new(half_height.clone()), comment: None }), b: Box::new(half_height), comment: None }),
+                                comment
+                            }
+                        }
+                        "mouse-pointer" => Stmt::SetPos { x: Some(Expr::MouseX { comment: None }), y: Some(Expr::MouseY { comment: None }), comment },
+                        "center" => Stmt::SetPos { x: Some(0f64.into()), y: Some(0f64.into()), comment },
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: opt.into() } }),
+                    }
+                }
+                else {
+                    Stmt::Goto { target: self.parse_expr(child)?, comment }
+                }
+            }
+            "doBroadcast" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let message_type = self.parse_expr(&stmt.children[0])?;
+                Stmt::SendLocalMessage { targets: None, message_type, wait: false, comment }
+            }
+            "setColor" => {
+                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let color = match stmt.get(&["color"]) {
+                    Some(color) => match parse_color(&color.text) {
+                        Some(color) => color,
+                        None => return Err(Error::InvalidProject { error: ProjectError::FailedToParseColor { role: self.role.name.clone(), sprite: self.sprite.name.clone(), color: color.text.clone() } }),
+                    }
+                    None => return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                };
+                Stmt::SetPenColor { color, comment }
+            }
+            "write" => {
+                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let content = self.parse_expr(&stmt.children[0])?;
+                let font_size = self.parse_expr(&stmt.children[1])?;
+                Stmt::Write { content, font_size, comment }
+            }
+            "doWaitUntil" => unary_op!(self, stmt, s => Stmt::WaitUntil : condition),
+            "changeSize" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
+            "setSize" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
-            "doReport" => unary_op!(self, stmt, s => Stmt::Return : value),
+            "doReport" => unary_op!(self, stmt, s => Stmt::Return),
+            "doStamp" => noarg_op!(self, stmt, s => Stmt::Stamp),
             "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
             "forward" => unary_op!(self, stmt, s => Stmt::Forward : distance),
             "turn" => unary_op!(self, stmt, s => Stmt::TurnRight : angle),
@@ -921,6 +1041,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "changeXPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dy: None } : dx),
             "changeYPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dx: None } : dy),
             "gotoXY" => binary_op!(self, stmt, s => Stmt::SetPos : x, y),
+            "bounceOffEdge" => noarg_op!(self, stmt, s => Stmt::BounceOffEdge),
+            "down" => noarg_op!(self, stmt, s => Stmt::PenDown),
+            "up" => noarg_op!(self, stmt, s => Stmt::PenUp),
+            "clear" => noarg_op!(self, stmt, s => Stmt::PenClear),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
         })
@@ -948,7 +1072,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "bool" => match expr.text.as_str() {
                 "true" => Ok(true.into()),
                 "false" => Ok(false.into()),
-                x => return Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: x.into() } })
+                x => Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: x.into() } })
             }
             "list" => match expr.attr("struct") {
                 Some(v) if v.value == "atomic" => match serde_json::from_str::<JsonValue>(&format!("[{}]", expr.text)) {
@@ -1101,6 +1225,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportStageWidth" => noarg_op!(self, expr, s => Expr::StageWidth),
                     "reportStageHeight" => noarg_op!(self, expr, s => Expr::StageHeight),
 
+                    "reportMouseX" => noarg_op!(self, expr, s => Expr::MouseX),
+                    "reportMouseY" => noarg_op!(self, expr, s => Expr::MouseY),
+
+                    "reportLatitude" => noarg_op!(self, expr, s => Expr::Latitude),
+                    "reportLongitude" => noarg_op!(self, expr, s => Expr::Longitude),
+
                     "reportImageOfObject" => {
                         let comment = check_children_get_comment!(self, expr, s => 1);
                         let entity = grab_entity!(self, s, &expr.children[0], None);
@@ -1111,10 +1241,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "yPosition" => noarg_op!(self, expr, s => Expr::YPos),
                     "direction" => noarg_op!(self, expr, s => Expr::Heading),
 
+                    "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
+
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
                 })
             }
-            x => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
+            x => Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
         }
     }
 }
@@ -1169,17 +1301,14 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
         }
         let mut funcs = vec![];
         for block in blocks {
-            funcs.push(parse_block(block, &self.funcs, &self.role, Some(&self))?);
+            funcs.push(parse_block(block, &self.funcs, self.role, Some(&self))?);
         }
 
         let active_costume = match sprite.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
             Some(idx) if idx >= 1 && idx <= self.costumes.len() => Some(idx - 1),
             _ => None,
         };
-        let color = match sprite.attr("color").map(|v| v.value.split(',').take(3).map(|v| v.parse::<f64>().ok()).flatten().collect::<Vec<_>>()) {
-            Some(rgb) if rgb.len() == 3 && rgb.iter().all(|&v| v >= 0.0 && v < 256.0) => (rgb[0] as u8, rgb[1] as u8, rgb[2] as u8),
-            _ => (0, 0, 0),
-        };
+        let color = sprite.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0));
 
         let float_attr = |attr: &str| sprite.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
         let pos = (float_attr("x").unwrap_or(0.0), float_attr("y").unwrap_or(0.0));
@@ -1220,14 +1349,16 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             for script_xml in scripts_xml.children.iter() {
                 match script_xml.children.as_slice() {
                     [] => continue,
-                    [stmt] => {
-                        if stmt.attr("var").is_some() { continue }
-                        if let Some(s) = stmt.attr("s") {
-                            if s.value.starts_with("report") { continue }
+                    [stmt, rest @ ..] => {
+                        if rest.is_empty() && (stmt.attr("var").is_some() || stmt.attr("s").map(|s| s.value.starts_with("report")).unwrap_or(false)) {
+                            continue
+                        }
+                        if self.parser.omit_nonhat_scripts && ScriptInfo::new(&self).parse_hat(stmt)?.is_none() {
+                            continue
                         }
                     }
-                    _ => (),
                 }
+
                 scripts.push(ScriptInfo::new(&self).parse(script_xml)?);
             }
         }
@@ -1286,9 +1417,9 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
     let name = block_name_from_def(s);
     match funcs.define(name, vec![Value::from(s), Value::from(returns)].into()) {
         Ok(None) => Ok(()),
-        Ok(Some(prev)) => return Err(Error::BlocksWithSameName { role: role.into(), sprite: sprite(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
-        Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(role.into()), sprite: sprite() }),
-        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::BlocksWithSameTransName { role: role.into(), sprite: sprite(), trans_name, names }),
+        Ok(Some(prev)) => Err(Error::BlocksWithSameName { role: role.into(), sprite: sprite(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
+        Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(role.into()), sprite: sprite() }),
+        Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::BlocksWithSameTransName { role: role.into(), sprite: sprite(), trans_name, names }),
     }
 }
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, sprite: Option<&SpriteInfo>) -> Result<Function, Error> {
@@ -1307,7 +1438,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, spr
             define_local_and_ref!(script_info, param, 0f64.into());
         }
         let params = script_info.locals.clone().into_defs();
-        let stmts = script_info.parse(&code)?.stmts;
+        let stmts = script_info.parse(code)?.stmts;
 
         Ok(Function {
             name: entry.name.clone(),
@@ -1430,7 +1561,7 @@ impl<'a> RoleInfo<'a> {
                         Ok(None) => self.sprites.get(&x.value).unwrap().ref_at(VarLocation::Global),
                         Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::SpritesWithSameName { role, name: prev.name } }),
                         Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { role: Some(role), sprite: Some(name.clone()), name }),
-                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::SpritesWithSameTransName { role: role, trans_name, names }),
+                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::SpritesWithSameTransName { role, trans_name, names }),
                     }
                 };
                 sprites.push(SpriteInfo::new(&self, name).parse(sprite)?);
@@ -1445,6 +1576,8 @@ impl<'a> RoleInfo<'a> {
 pub struct Parser {
     #[builder(default = "false")]
     optimize: bool,
+    #[builder(default = "true")]
+    omit_nonhat_scripts: bool,
     #[builder(default = "Rc::new(|v| Ok(v.into()))")]
     name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
 }
