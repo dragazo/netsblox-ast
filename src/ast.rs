@@ -141,6 +141,7 @@ pub enum Error {
     UndefinedFn { role: String, sprite: String, name: String },
     BlockOptionNotConst { role: String, sprite: String, block_type: String },
     BlockOptionNotSelected { role: String, sprite: String, block_type: String },
+    UnknownEntity { role: String, sprite: String, entity: String },
 
     UnknownService { role: String, sprite: String, block_type: String, service: String },
     UnknownRPC { role: String, sprite: String, block_type: String, service: String, rpc: String },
@@ -482,7 +483,10 @@ pub enum Expr {
     /// Lazily-evaluated conditional expression. Returns `then` if `condition` is true, otherwise `otherwise`.
     Conditional { condition: Box<Expr>, then: Box<Expr>, otherwise: Box<Expr>, comment: Option<String> },
 
-    RefEq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
+    /// If both values are lists, returns true of they are references to the same list.
+    /// If both values are non-lists, returns true if the values are equal.
+    /// Otherwise returns `false`.
+    Identical { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Eq { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Less { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
     Greater { left: Box<Expr>, right: Box<Expr>, comment: Option<String> },
@@ -553,7 +557,7 @@ pub enum Expr {
     PenDown { comment: Option<String> },
 
     This { comment: Option<String> },
-    Entity { name: String, comment: Option<String> },
+    Entity { name: String, trans_name: String, comment: Option<String> },
 
     ImageOf { entity: Box<Expr>, comment: Option<String> },
 }
@@ -652,7 +656,10 @@ macro_rules! grab_entity {
                 false => $self.parse_expr($child)?,
             },
             "myself" => Expr::This { comment: $comment },
-            name => Expr::Entity { name: name.to_owned(), comment: $comment },
+            name => match $self.role.sprites.get(name) {
+                None => return Err(Error::UnknownEntity { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), entity: name.into() }),
+                Some(entity) => Expr::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone(), comment: $comment },
+            }
         }
     }
 }
@@ -667,6 +674,7 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
 }
 
 struct ScriptInfo<'a, 'b, 'c> {
+    parser: &'a Parser,
     role: &'c RoleInfo<'a>,
     sprite: &'c SpriteInfo<'a, 'b>,
     locals: SymbolTable<'a>,
@@ -674,6 +682,7 @@ struct ScriptInfo<'a, 'b, 'c> {
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn new(sprite: &'c SpriteInfo<'a, 'b>) -> Self {
         Self {
+            parser: sprite.parser,
             role: sprite.role,
             sprite,
             locals: SymbolTable::new(sprite.parser)
@@ -1063,6 +1072,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => Err(Error::UndefinedFn { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name: name.into() })
         }
     }
+    fn cnd_adjust_index(&self, index: Expr, condition: bool, delta: f64) -> Expr {
+        match condition {
+            true => Expr::Add { left: index.into(), right: Box::new(delta.into()), comment: None },
+            false => index,
+        }
+    }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
         match expr.name.as_str() {
             "l" => match expr.text.parse::<f64>() {
@@ -1118,7 +1133,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportAnd" => binary_op!(self, expr, s => Expr::And),
                     "reportOr" => binary_op!(self, expr, s => Expr::Or),
 
-                    "reportIsIdentical" => binary_op!(self, expr, s => Expr::RefEq),
+                    "reportIsIdentical" => binary_op!(self, expr, s => Expr::Identical),
                     "reportEquals" => binary_op!(self, expr, s => Expr::Eq),
                     "reportLessThan" => binary_op!(self, expr, s => Expr::Less),
                     "reportGreaterThan" => binary_op!(self, expr, s => Expr::Greater),
@@ -1136,12 +1151,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(0.0f64.into()), comment }
                     }
 
-                    "reportListIndex" => binary_op!(self, expr, s => Expr::ListFind : value, list),
+                    "reportListIndex" => self.cnd_adjust_index(binary_op!(self, expr, s => Expr::ListFind : value, list), self.parser.adjust_to_zero_index, 1.0),
                     "reportListContainsItem" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let value = self.parse_expr(&expr.children[0])?.into();
                         let list = self.parse_expr(&expr.children[1])?.into();
-                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(0.0f64.into()), comment }
+                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(if self.parser.adjust_to_zero_index { -1.0 } else { 0.0 }.into()), comment }
                     }
                     "reportListItem" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
@@ -1154,7 +1169,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                             None => {
-                                let index = self.parse_expr(&expr.children[0])?.into();
+                                let index = self.cnd_adjust_index(self.parse_expr(&expr.children[0])?, self.parser.adjust_to_zero_index, -1.0).into();
                                 Expr::ListIndex { list, index, comment }
                             }
                         }
@@ -1164,7 +1179,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
 
-                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(Box::new(2.0f64.into())), to: None }),
+                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(self.cnd_adjust_index(2f64.into(), self.parser.adjust_to_zero_index, -1.0).into()), to: None }),
                     "reportCONS" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let val = self.parse_expr(&expr.children[0])?;
@@ -1552,7 +1567,7 @@ impl<'a> RoleInfo<'a> {
             }
         }
 
-        let mut sprites = vec![];
+        let mut sprites_raw = vec![];
         if let Some(sprites_xml) = stage.get(&["sprites"]) {
             for sprite in iter::once(stage).chain(sprites_xml.children.iter().filter(|s| s.name == "sprite")) {
                 let name = match sprite.attr("name") {
@@ -1564,9 +1579,11 @@ impl<'a> RoleInfo<'a> {
                         Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::SpritesWithSameTransName { role, trans_name, names }),
                     }
                 };
-                sprites.push(SpriteInfo::new(&self, name).parse(sprite)?);
+                sprites_raw.push((sprite, name));
             }
         }
+        // now that all sprites are in the symbol table, parse them
+        let sprites = sprites_raw.into_iter().map(|(sprite, name)| SpriteInfo::new(&self, name).parse(sprite)).collect::<Result<Vec<_>,_>>()?;
 
         Ok(Role { name: role, notes, globals: self.globals.into_defs(), funcs, sprites })
     }
@@ -1574,10 +1591,36 @@ impl<'a> RoleInfo<'a> {
 
 #[derive(Builder)]
 pub struct Parser {
+    /// If `true`, the emitted syntax tree should be processed by static optimizations.
+    /// Defaults to `false`.
     #[builder(default = "false")]
     optimize: bool,
+
+    /// If `true`, the parser will skip script blocks that lack a hat block.
+    /// This is typically desirable since free floating blocks are never automatically executed,
+    /// and thus are typically not needed for translation efforts.
+    /// Defaults to `true`.
     #[builder(default = "true")]
     omit_nonhat_scripts: bool,
+
+    /// If `true`, the emitted syntax tree will be automatically adjusted to support
+    /// convenient translation into languages with zero-based indexing.
+    /// For instance, with this enabled, an `item X of _` block will emit `X-1` as the index rather than `X`,
+    /// and similar for other list-based blocks.
+    /// Defaults to `false`.
+    #[builder(default = "false")]
+    adjust_to_zero_index: bool,
+
+    /// Snap! list slicing uses closed intervals like `[x, y]`.
+    /// If `true`, the emitted syntax tree will be automatically adjusted to support
+    /// list slicing operations on open-ended intervals like `[x, y)`.
+    /// Defaults to `false`.
+    #[builder(default = "false")]
+    adjust_to_open_slice_end: bool,
+
+    /// All symbol names in the program will be passed through this function,
+    /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
+    /// The default operation performs no conversion.
     #[builder(default = "Rc::new(|v| Ok(v.into()))")]
     name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
 }
