@@ -129,6 +129,12 @@ pub enum ProjectError {
     NonConstantUpvar { role: String, sprite: String, block_type: String },
 
     FailedToParseColor { role: String, sprite: String, color: String },
+
+    MessageTypeMissingName { role: String },
+    MessageTypeNameEmpty { role: String },
+    MessageTypeMissingFields { role: String, msg_type: String },
+    MessageTypeFieldEmpty { role: String, msg_type: String },
+    MessageTypeMultiplyDefined { role: String, msg_type: String },
 }
 #[derive(Debug)]
 pub enum Error {
@@ -142,6 +148,9 @@ pub enum Error {
     BlockOptionNotConst { role: String, sprite: String, block_type: String },
     BlockOptionNotSelected { role: String, sprite: String, block_type: String },
     UnknownEntity { role: String, sprite: String, entity: String },
+
+    UnknownMessageType { role: String, sprite: String, msg_type: String },
+    MessageTypeWrongNumberArgs { role: String, sprite: String, msg_type: String, block_type: String, got: usize, expected: usize },
 
     UnknownService { role: String, sprite: String, block_type: String, service: String },
     UnknownRPC { role: String, sprite: String, block_type: String, service: String, rpc: String },
@@ -339,8 +348,8 @@ pub enum Hat {
     Dropped { comment: Option<String> },
     Stopped { comment: Option<String> },
     When { condition: Expr, comment: Option<String> },
-    LocalMessage { message_type: String, comment: Option<String> },
-    NetworkMessage { message_type: String, fields: Vec<String>, comment: Option<String> },
+    LocalMessage { msg_type: String, comment: Option<String> },
+    NetworkMessage { msg_type: String, fields: Vec<VariableRef>, comment: Option<String> },
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -405,10 +414,11 @@ pub enum Stmt {
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
 
     /// Sends a message to local entities (not over the network).
-    /// If `targets` is `None`, this should broadcast to all entites.
-    /// Otherwise `targets` is either a single target or a list of targets to send to.
+    /// If `target` is `None`, this should broadcast to all entites.
+    /// Otherwise `target` is either a single target or a list of targets to send to.
     /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
-    SendLocalMessage { targets: Option<Expr>, message_type: Expr, wait: bool, comment: Option<String> },
+    SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool, comment: Option<String> },
+    SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)>, comment: Option<String> },
 }
 
 impl From<Rpc> for Stmt {
@@ -501,10 +511,9 @@ pub enum Expr {
     MakeList { values: Vec<Expr>, comment: Option<String> },
     Listcat { lists: Vec<Expr>, comment: Option<String> },
     Listlen { value: Box<Expr>, comment: Option<String> },
-    /// Return a shallow copy of the sublist on the inclusive range `[from, to]`.
-    /// If one of the bounds is not given, go all the way to that end.
-    /// Lists are 1-indexed by default.
-    ListSlice { value: Box<Expr>, from: Option<Box<Expr>>, to: Option<Box<Expr>>, comment: Option<String> },
+    /// Given a list, returns a new (shallow copy) of all the items except the first.
+    /// If the list is empty, an empty list is returned.
+    ListAllButFirst { value: Box<Expr>, comment: Option<String> },
     /// Returns the (1-based) index of value in the list, or 0 if not present.
     ListFind { list: Box<Expr>, value: Box<Expr>, comment: Option<String> },
 
@@ -747,17 +756,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let child = &stmt.children[0];
                 if child.name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
-                let message_type = match child.text.as_str() {
+                let msg_type = match child.text.as_str() {
                     "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
                     x => x.to_owned(),
                 };
-                Hat::LocalMessage { message_type, comment }
+                Hat::LocalMessage { msg_type, comment }
             }
             "receiveSocketMessage" => {
                 if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
                 if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
 
-                let message_type = match stmt.children[0].text.as_str() {
+                let msg_type = match stmt.children[0].text.as_str() {
                     "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
                     x => x.to_owned(),
                 };
@@ -770,9 +779,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                     if child.name != "l" { break }
                     let var = define_local_and_ref!(self, child.text.clone(), 0f64.into());
-                    fields.push(var.name);
+                    fields.push(var);
                 }
-                Hat::NetworkMessage { message_type, fields, comment }
+                Hat::NetworkMessage { msg_type, fields, comment }
             }
             x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
@@ -1015,8 +1024,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doBroadcast" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
-                let message_type = self.parse_expr(&stmt.children[0])?;
-                Stmt::SendLocalMessage { targets: None, message_type, wait: false, comment }
+                let msg_type = self.parse_expr(&stmt.children[0])?;
+                Stmt::SendLocalMessage { target: None, msg_type, wait: false, comment }
             }
             "setColor" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
@@ -1034,6 +1043,35 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let content = self.parse_expr(&stmt.children[0])?;
                 let font_size = self.parse_expr(&stmt.children[1])?;
                 Stmt::Write { content, font_size, comment }
+            }
+            "doSocketMessage" => {
+                let msg_type = match stmt.children.get(0) {
+                    Some(value) if value.name != "comment" => value.text.as_str(),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                };
+                let fields = match self.role.msg_types.get(msg_type) {
+                    None => return Err(Error::UnknownMessageType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), msg_type: msg_type.into() }),
+                    Some(x) => x,
+                };
+
+                let (argc, comment) = stmt.children.iter().enumerate().find(|(_, x)| x.name == "comment").map(|(i, x)| (i, Some(x.text.as_str()))).unwrap_or((stmt.children.len(), None));
+                assert!(argc >= 1); // due to msg_type from above
+
+                let values = stmt.children[1..argc - 1].iter().map(|x| self.parse_expr(x)).collect::<Result<Vec<_>,_>>()?;
+                if fields.len() != values.len() {
+                    return Err(Error::MessageTypeWrongNumberArgs { role: self.role.name.clone(), sprite: self.sprite.name.clone(), msg_type: msg_type.into(), block_type: s.into(), got: values.len(), expected: fields.len() });
+                }
+
+                let target_xml = &stmt.children[argc - 1];
+                let target = match target_xml.get(&["option"]) {
+                    Some(x) => match x.text.as_str() {
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                        x => x.into(),
+                    }
+                    None => self.parse_expr(target_xml)?,
+                };
+
+                Stmt::SendNetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) }
             }
             "doWaitUntil" => unary_op!(self, stmt, s => Stmt::WaitUntil : condition),
             "changeSize" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
@@ -1179,7 +1217,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
 
-                    "reportCDR" => unary_op!(self, expr, s => Expr::ListSlice { from: Some(self.cnd_adjust_index(2f64.into(), self.parser.adjust_to_zero_index, -1.0).into()), to: None }),
+                    "reportCDR" => unary_op!(self, expr, s => Expr::ListAllButFirst),
                     "reportCONS" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let val = self.parse_expr(&expr.children[0])?;
@@ -1479,6 +1517,7 @@ struct RoleInfo<'a> {
     sprites: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
     images: LinkedHashMap<&'a str, &'a str>,
+    msg_types: LinkedHashMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
     fn new(parser: &'a Parser, name: String) -> Self {
@@ -1489,6 +1528,7 @@ impl<'a> RoleInfo<'a> {
             sprites: SymbolTable::new(parser),
             funcs: SymbolTable::new(parser),
             images: Default::default(),
+            msg_types: Default::default(),
         }
     }
     fn parse(mut self, role_root: &'a Xml) -> Result<Role, Error> {
@@ -1507,13 +1547,33 @@ impl<'a> RoleInfo<'a> {
             Some(x) => x,
         };
 
-        let blocks = content.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
-        for block in blocks {
-            parse_block_header(block, &mut self.funcs, &self.name, None)?;
-        }
-        let mut funcs = vec![];
-        for block in blocks {
-            funcs.push(parse_block(block, &self.funcs, &self, None)?);
+        let msg_types = stage.get(&["messageTypes"]).map(|x| x.children.as_slice()).unwrap_or(&[]);
+        for msg_type in msg_types {
+            let name = match msg_type.get(&["name"]) {
+                None => return Err(Error::InvalidProject { error: ProjectError::MessageTypeMissingName { role } }),
+                Some(x) => match x.text.as_str() {
+                    "" => return Err(Error::InvalidProject { error: ProjectError::MessageTypeNameEmpty { role } }),
+                    x => x,
+                }
+            };
+            let fields = match msg_type.get(&["fields"]) {
+                None => return Err(Error::InvalidProject { error: ProjectError::MessageTypeMissingFields { role, msg_type: name.into() } }),
+                Some(x) => {
+                    let mut res = vec![];
+                    for field in x.children.iter() {
+                        if field.name != "field" { continue }
+                        res.push(match field.text.as_str() {
+                            "" => return Err(Error::InvalidProject { error: ProjectError::MessageTypeFieldEmpty { role, msg_type: name.into() } }),
+                            x => x,
+                        });
+                    }
+                    res
+                }
+            };
+
+            if self.msg_types.insert(name, fields).is_some() {
+                return Err(Error::InvalidProject { error: ProjectError::MessageTypeMultiplyDefined { role, msg_type: name.into() } });
+            }
         }
 
         for entry in role_root.get(&["media"]).map(|v| v.children.as_slice()).unwrap_or(&[]) {
@@ -1538,7 +1598,7 @@ impl<'a> RoleInfo<'a> {
 
         if let Some(globals) = content.get(&["variables"]) {
             let dummy_name = VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global };
-            let dummy_sprite = SpriteInfo::new(&self, dummy_name);
+            let dummy_sprite = SpriteInfo::new(&self, dummy_name); // fine to do before sprites/blocks/etc. since globals are just values (not stmts or exprs)
             let dummy_script = ScriptInfo::new(&dummy_sprite);
 
             let mut defs = vec![];
@@ -1582,7 +1642,17 @@ impl<'a> RoleInfo<'a> {
                 sprites_raw.push((sprite, name));
             }
         }
-        // now that all sprites are in the symbol table, parse them
+
+        let blocks = content.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
+        for block in blocks {
+            parse_block_header(block, &mut self.funcs, &self.name, None)?;
+        }
+
+        // ------------------------------------------------------------------------------------ //
+        // -- we now have all the necessary items defined to parse exprs, stmts, and sprites -- //
+        // ------------------------------------------------------------------------------------ //
+
+        let funcs = blocks.into_iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
         let sprites = sprites_raw.into_iter().map(|(sprite, name)| SpriteInfo::new(&self, name).parse(sprite)).collect::<Result<Vec<_>,_>>()?;
 
         Ok(Role { name: role, notes, globals: self.globals.into_defs(), funcs, sprites })
@@ -1605,18 +1675,10 @@ pub struct Parser {
 
     /// If `true`, the emitted syntax tree will be automatically adjusted to support
     /// convenient translation into languages with zero-based indexing.
-    /// For instance, with this enabled, an `item X of _` block will emit `X-1` as the index rather than `X`,
-    /// and similar for other list-based blocks.
+    /// For instance, with this enabled, an `item X of _` block will emit `X-1` as the index rather than `X`, and similar for other list-based blocks.
     /// Defaults to `false`.
     #[builder(default = "false")]
     adjust_to_zero_index: bool,
-
-    /// Snap! list slicing uses closed intervals like `[x, y]`.
-    /// If `true`, the emitted syntax tree will be automatically adjusted to support
-    /// list slicing operations on open-ended intervals like `[x, y)`.
-    /// Defaults to `false`.
-    #[builder(default = "false")]
-    adjust_to_open_slice_end: bool,
 
     /// All symbol names in the program will be passed through this function,
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
