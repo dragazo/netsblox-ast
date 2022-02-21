@@ -260,6 +260,7 @@ pub struct Project {
 pub struct Role {
     pub name: String,
     pub notes: String,
+    pub stage_size: (usize, usize),
     pub globals: Vec<VariableDef>,
     pub funcs: Vec<Function>,
     pub sprites: Vec<Sprite>,
@@ -1023,7 +1024,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     match opt {
                         "random position" => {
                             let half_width = Expr::Div { left: Box::new(Expr::StageWidth { comment: None }), right: Box::new(2f64.into()), comment: None };
-                            let half_height = Expr::Div { left: Box::new(Expr::StageWidth { comment: None }), right: Box::new(2f64.into()), comment: None };
+                            let half_height = Expr::Div { left: Box::new(Expr::StageHeight { comment: None }), right: Box::new(2f64.into()), comment: None };
                             Stmt::SetPos {
                                 x: Some(Expr::RandInclusive { a: Box::new(Expr::Neg { value: Box::new(half_width.clone()), comment: None }), b: Box::new(half_width), comment: None }),
                                 y: Some(Expr::RandInclusive { a: Box::new(Expr::Neg { value: Box::new(half_height.clone()), comment: None }), b: Box::new(half_height), comment: None }),
@@ -1593,6 +1594,8 @@ impl<'a> RoleInfo<'a> {
             None => return Err(Error::InvalidProject { error: ProjectError::NoStageDef { role } }),
             Some(x) => x,
         };
+        let stage_width = stage.attr("width").and_then(|x| x.value.parse::<usize>().ok()).unwrap_or(480);
+        let stage_height = stage.attr("height").and_then(|x| x.value.parse::<usize>().ok()).unwrap_or(360);
 
         let msg_types = stage.get(&["messageTypes"]).map(|x| x.children.as_slice()).unwrap_or(&[]);
         for msg_type in msg_types {
@@ -1702,7 +1705,14 @@ impl<'a> RoleInfo<'a> {
         let funcs = blocks.iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
         let sprites = sprites_raw.into_iter().map(|(sprite, name)| SpriteInfo::new(&self, name).parse(sprite)).collect::<Result<Vec<_>,_>>()?;
 
-        Ok(Role { name: role, notes, globals: self.globals.into_defs(), funcs, sprites })
+        Ok(Role {
+            name: role,
+            notes,
+            stage_size: (stage_width, stage_height),
+            globals: self.globals.into_defs(),
+            funcs,
+            sprites,
+        })
     }
 }
 
