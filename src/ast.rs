@@ -284,6 +284,7 @@ pub struct Sprite {
     pub scripts: Vec<Script>,
 
     pub active_costume: Option<usize>,
+    pub visible: bool,
     pub color: (u8, u8, u8),
     pub pos: (f64, f64),
     pub heading: f64,
@@ -407,8 +408,15 @@ pub enum Stmt {
     Write { content: Expr, font_size: Expr, comment: Option<String> },
     SetPenColor { color: (u8, u8, u8), comment: Option<String> },
 
+    Say { content: Expr, duration: Option<Expr>, comment: Option<String> },
+    Think { content: Expr, duration: Option<Expr>, comment: Option<String> },
+
+    SetVisible { value: bool, comment: Option<String> },
     ChangeScalePercent { amount: Expr, comment: Option<String> },
     SetScalePercent { value: Expr, comment: Option<String> },
+
+    ChangePenSize { amount: Expr, comment: Option<String> },
+    SetPenSize { value: Expr, comment: Option<String> },
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
@@ -565,10 +573,19 @@ pub enum Expr {
 
     PenDown { comment: Option<String> },
 
+    Scale { comment: Option<String> },
+    IsVisible { comment: Option<String> },
+
     This { comment: Option<String> },
     Entity { name: String, trans_name: String, comment: Option<String> },
 
-    ImageOf { entity: Box<Expr>, comment: Option<String> },
+    ImageOfEntity { entity: Box<Expr>, comment: Option<String> },
+    ImageOfDrawings { comment: Option<String> },
+
+    IsTouchingEntity { entity: Box<Expr>, comment: Option<String> },
+    IsTouchingMouse { comment: Option<String> },
+    IsTouchingEdge { comment: Option<String> },
+    IsTouchingDrawings { comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -775,7 +792,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let mut comment = None;
                 for child in stmt.children[1..].iter() {
                     if child.name == "comment" {
-                        comment = Some(child.text.clone());
+                        comment = Some(clean_newlines(&child.text));
                     }
                     if child.name != "l" { break }
                     let var = define_local_and_ref!(self, child.text.clone(), 0f64.into());
@@ -1073,9 +1090,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 Stmt::SendNetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) }
             }
+            "changeScale" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
+            "setScale" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
+            "doSayFor" => binary_op!(self, stmt, s => Stmt::Say : content, duration),
+            "doThinkFor" => binary_op!(self, stmt, s => Stmt::Think : content, duration),
+            "bubble" => unary_op!(self, stmt, s => Stmt::Say { duration: None } : content),
+            "doThink" => unary_op!(self, stmt, s => Stmt::Think { duration: None } : content),
+            "hide" => noarg_op!(self, stmt, s => Stmt::SetVisible { value: false }),
+            "show" => noarg_op!(self, stmt, s => Stmt::SetVisible { value: true }),
             "doWaitUntil" => unary_op!(self, stmt, s => Stmt::WaitUntil : condition),
-            "changeSize" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
-            "setSize" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
+            "changeSize" => unary_op!(self, stmt, s => Stmt::ChangePenSize : amount),
+            "setSize" => unary_op!(self, stmt, s => Stmt::SetPenSize),
             "doAddToList" => binary_op!(self, stmt, s => Stmt::Push : value, list),
             "doReport" => unary_op!(self, stmt, s => Stmt::Return),
             "doStamp" => noarg_op!(self, stmt, s => Stmt::Stamp),
@@ -1284,11 +1309,31 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportLatitude" => noarg_op!(self, expr, s => Expr::Latitude),
                     "reportLongitude" => noarg_op!(self, expr, s => Expr::Longitude),
 
+                    "reportPenTrailsAsCostume" => noarg_op!(self, expr, s => Expr::ImageOfDrawings),
                     "reportImageOfObject" => {
                         let comment = check_children_get_comment!(self, expr, s => 1);
-                        let entity = grab_entity!(self, s, &expr.children[0], None);
-                        Expr::ImageOf { entity: Box::new(entity), comment }
+                        let entity = grab_entity!(self, s, &expr.children[0], None).into();
+                        Expr::ImageOfEntity { entity, comment }
                     }
+                    "reportTouchingObject" => {
+                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let child = &expr.children[0];
+                        if child.name == "l" && child.get(&["option"]).is_some() {
+                            match grab_option!(self, s, child) {
+                                "mouse-pointer" => Expr::IsTouchingMouse { comment },
+                                "pen trails" => Expr::IsTouchingDrawings { comment },
+                                "edge" => Expr::IsTouchingEdge { comment },
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                            }
+                        }
+                        else {
+                            let entity = grab_entity!(self, s, child, None).into();
+                            Expr::IsTouchingEntity { entity, comment }
+                        }
+                    }
+
+                    "getScale" => noarg_op!(self, expr, s => Expr::Scale),
+                    "reportShown" => noarg_op!(self, expr, s => Expr::IsVisible),
 
                     "xPosition" => noarg_op!(self, expr, s => Expr::XPos),
                     "yPosition" => noarg_op!(self, expr, s => Expr::YPos),
@@ -1362,6 +1407,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             _ => None,
         };
         let color = sprite.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0));
+        let visible = !sprite.attr("hidden").and_then(|s| s.value.parse::<bool>().ok()).unwrap_or(false);
 
         let float_attr = |attr: &str| sprite.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
         let pos = (float_attr("x").unwrap_or(0.0), float_attr("y").unwrap_or(0.0));
@@ -1425,6 +1471,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             scripts,
 
             active_costume,
+            visible,
             color,
             pos,
             heading,
@@ -1652,7 +1699,7 @@ impl<'a> RoleInfo<'a> {
         // -- we now have all the necessary items defined to parse exprs, stmts, and sprites -- //
         // ------------------------------------------------------------------------------------ //
 
-        let funcs = blocks.into_iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
+        let funcs = blocks.iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
         let sprites = sprites_raw.into_iter().map(|(sprite, name)| SpriteInfo::new(&self, name).parse(sprite)).collect::<Result<Vec<_>,_>>()?;
 
         Ok(Role { name: role, notes, globals: self.globals.into_defs(), funcs, sprites })
@@ -1661,7 +1708,7 @@ impl<'a> RoleInfo<'a> {
 
 #[derive(Builder)]
 pub struct Parser {
-    /// If `true`, the emitted syntax tree should be processed by static optimizations.
+    /// If `true`, the emitted syntax tree will be processed by static optimizations.
     /// Defaults to `false`.
     #[builder(default = "false")]
     optimize: bool,
