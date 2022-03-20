@@ -587,6 +587,8 @@ pub enum Expr {
     IsTouchingMouse { comment: Option<String> },
     IsTouchingEdge { comment: Option<String> },
     IsTouchingDrawings { comment: Option<String> },
+
+    RpcError { comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1143,16 +1145,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
-        match expr.name.as_str() {
-            "l" => match expr.text.parse::<f64>() {
-                Ok(v) => Ok(v.into()),
-                Err(_) => Ok(expr.text.clone().into()),
-            }
-            "bool" => match expr.text.as_str() {
+        let parse_bool = |val: &str| -> Result<Expr, Error> {
+            match val {
                 "true" => Ok(true.into()),
                 "false" => Ok(false.into()),
-                x => Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: x.into() } })
+                _ => Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: val.into() } })
             }
+        };
+        match expr.name.as_str() {
+            "l" => match expr.children.first() {
+                Some(child) if child.name == "bool" => parse_bool(&child.text),
+                _ => match expr.text.parse::<f64>() {
+                    Ok(v) => Ok(v.into()),
+                    Err(_) => Ok(expr.text.clone().into()),
+                }
+            }
+            "bool" => parse_bool(&expr.text),
             "list" => match expr.attr("struct") {
                 Some(v) if v.value == "atomic" => match serde_json::from_str::<JsonValue>(&format!("[{}]", expr.text)) {
                     Err(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("content was not json: [{}]", expr.text) } }),
@@ -1332,6 +1340,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             Expr::IsTouchingEntity { entity, comment }
                         }
                     }
+
+                    "reportRPCError" => noarg_op!(self, expr, s => Expr::RpcError),
 
                     "getScale" => noarg_op!(self, expr, s => Expr::Scale),
                     "reportShown" => noarg_op!(self, expr, s => Expr::IsVisible),
