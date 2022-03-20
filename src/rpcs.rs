@@ -112,6 +112,21 @@ lazy_static! {
             rpcs.insert("getTotalStaffedAdultICUBeds", ["state"].as_slice());
             rpcs
         });
+        services.insert("CS PhDs By Ethnicity", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getAsianByYear", [].as_slice());
+            rpcs.insert("getAsianColumn", [].as_slice());
+            rpcs.insert("getBlackByYear", [].as_slice());
+            rpcs.insert("getBlackColumn", [].as_slice());
+            rpcs.insert("getHispanicByYear", [].as_slice());
+            rpcs.insert("getHispanicColumn", [].as_slice());
+            rpcs.insert("getTable", [].as_slice());
+            rpcs.insert("getValue", ["Year", "column name"].as_slice());
+            rpcs.insert("getWhiteByYear", [].as_slice());
+            rpcs.insert("getWhiteColumn", [].as_slice());
+            rpcs.insert("getYearColumn", [].as_slice());
+            rpcs
+        });
         services.insert("Cape Grim CO2", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getAllCO2PpmValues", [].as_slice());
@@ -257,6 +272,21 @@ lazy_static! {
             rpcs.insert("getTMAX", ["DATE"].as_slice());
             rpcs.insert("getTMIN", ["DATE"].as_slice());
             rpcs.insert("getTOBS", ["DATE"].as_slice());
+            rpcs
+        });
+        services.insert("GDPTrend", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getChinaByYear", [].as_slice());
+            rpcs.insert("getChinaColumn", [].as_slice());
+            rpcs.insert("getGermanyByYear", [].as_slice());
+            rpcs.insert("getGermanyColumn", [].as_slice());
+            rpcs.insert("getJapanByYear", [].as_slice());
+            rpcs.insert("getJapanColumn", [].as_slice());
+            rpcs.insert("getTable", [].as_slice());
+            rpcs.insert("getUnitedStatesByYear", [].as_slice());
+            rpcs.insert("getUnitedStatesColumn", [].as_slice());
+            rpcs.insert("getValue", ["Year", "column name"].as_slice());
+            rpcs.insert("getYearColumn", [].as_slice());
             rpcs
         });
         services.insert("Genius", {
@@ -572,6 +602,12 @@ lazy_static! {
             rpcs.insert("searchMovieReviews", ["query", "offset"].as_slice());
             rpcs
         });
+        services.insert("NexradRadar", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("listRadars", ["latitude", "longitude", "width", "height", "zoom"].as_slice());
+            rpcs.insert("plotRadarImages", ["latitude", "longitude", "width", "height", "zoom", "mapType", "radars"].as_slice());
+            rpcs
+        });
         services.insert("OceanData", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getDeepOceanTemp", ["startYear", "endYear"].as_slice());
@@ -671,6 +707,17 @@ lazy_static! {
             rpcs.insert("searchAll", ["keywords", "maxHeight", "minHeight"].as_slice());
             rpcs.insert("searchIllustration", ["keywords", "maxHeight", "minHeight"].as_slice());
             rpcs.insert("searchPhoto", ["keywords", "maxHeight", "minHeight"].as_slice());
+            rpcs
+        });
+        services.insert("PositionSensor", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getDevices", [].as_slice());
+            rpcs.insert("getHeading", ["id"].as_slice());
+            rpcs.insert("getPosition", ["id"].as_slice());
+            rpcs.insert("getX", ["id"].as_slice());
+            rpcs.insert("getY", ["id"].as_slice());
+            rpcs.insert("getZ", ["id"].as_slice());
+            rpcs.insert("listen", ["id"].as_slice());
             rpcs
         });
         services.insert("ProjectGutenberg", {

@@ -423,7 +423,7 @@ pub enum Stmt {
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
 
     /// Sends a message to local entities (not over the network).
-    /// If `target` is `None`, this should broadcast to all entites.
+    /// If `target` is `None`, this should broadcast to all entities.
     /// Otherwise `target` is either a single target or a list of targets to send to.
     /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
     SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool, comment: Option<String> },

@@ -2,7 +2,7 @@ use std::fmt::{self, Debug, Display};
 use regex::Regex;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
-macro_rules! impl_puntuated {
+macro_rules! impl_punctuated {
     ($($req:ident => $fmt:literal),*$(,)?) => {$(
         impl<'a, T: Iterator + Clone> $req for Punctuated<'a, T> where <T as Iterator>::Item: $req {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -18,7 +18,7 @@ macro_rules! impl_puntuated {
         }
     )*}
 }
-impl_puntuated! { Debug => "{:?}", Display => "{}" }
+impl_punctuated! { Debug => "{:?}", Display => "{}" }
 
 /// Returns a new string which is indented by 4 spaces.
 pub fn indent(code: &str) -> String {
