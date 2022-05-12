@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-ast"
-version = "0.1.5"
+version = "0.2.0"
 authors = ["Devin Jean <emailcruzjean@yahoo.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -27,4 +27,5 @@ serde_json = "1.0.73"
 lazy_static = "1.4.0"
 derive_builder = "0.10.2"
 linked-hash-map = "0.5.4"
+no-std-compat = { version = "0.4.1", features = ["alloc"] }
 serde = { version = "1.0.127", features = ["derive"], optional = true }

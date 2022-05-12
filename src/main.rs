@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::Read;
 use netsblox_ast::*;
 
 fn main() {
@@ -11,9 +11,10 @@ fn main() {
 
     let input = &args[1];
     if input.ends_with(".xml") {
-        let xml = BufReader::new(File::open(input).expect("failed to open file"));
+        let mut xml = String::new();
+        File::open(input).expect("failed to open file").read_to_string(&mut xml).unwrap();
         let parser = ParserBuilder::default().optimize(true).build().unwrap();
-        let res = parser.parse(xml).expect("failed to translate");
+        let res = parser.parse(&xml).expect("failed to translate");
         println!("{:?}", res);
     }
     else {

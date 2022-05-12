@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::prelude::v1::*;
+
 use std::convert::TryFrom;
 use std::rc::Rc;
 use std::mem;
@@ -56,7 +57,7 @@ impl Xml {
         self.attrs.iter().find(|a| a.name == name)
     }
 }
-fn parse_xml_root<R: Read>(xml: &mut EventReader<R>, root_name: OwnedName, root_attrs: Vec<OwnedAttribute>) -> Result<Xml, Error> {
+fn parse_xml_root<'a, 'b>(xml: &mut EventReader<&'a mut &'b [u8]>, root_name: OwnedName, root_attrs: Vec<OwnedAttribute>) -> Result<Xml, Error> {
     let mut text = String::new();
     let mut children = vec![];
     loop {
@@ -1727,6 +1728,7 @@ impl<'a> RoleInfo<'a> {
 }
 
 #[derive(Builder)]
+#[cfg_attr(not(std), builder(no_std))]
 pub struct Parser {
     /// If `true`, the emitted syntax tree will be processed by static optimizations.
     /// Defaults to `false`.
@@ -1757,8 +1759,9 @@ impl Parser {
     fn opt(&self, project: Project) -> Result<Project, Error> {
         Ok(project)
     }
-    pub fn parse<R: Read>(&self, xml: R) -> Result<Project, Error> {
-        let mut xml = EventReader::new(xml);
+    pub fn parse(&self, xml: &str) -> Result<Project, Error> {
+        let mut xml = xml.as_bytes();
+        let mut xml = EventReader::new(&mut xml);
         while let Ok(e) = xml.next() {
             if let XmlEvent::StartElement { name, attributes, .. } = e {
                 if name.local_name != "room" { continue }

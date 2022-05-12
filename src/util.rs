@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug, Display};
+use std::prelude::v1::*;
 use regex::Regex;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);

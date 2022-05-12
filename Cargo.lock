@@ -115,16 +115,23 @@ checksum = "b16bd47d9e329435e309c58469fe0791c2d0d1ba96ec0954152a5ae2b04387dc"
 
 [[package]]
 name = "netsblox-ast"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "derive_builder",
  "lazy_static",
  "linked-hash-map",
+ "no-std-compat",
  "regex",
  "serde",
  "serde_json",
  "xml-rs",
 ]
+
+[[package]]
+name = "no-std-compat"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 
 [[package]]
 name = "proc-macro2"
