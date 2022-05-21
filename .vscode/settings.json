@@ -4,14 +4,19 @@
         "Listlen",
         "Upvar",
         "aiohttp",
+        "apos",
         "cafile",
         "certifi",
+        "dealloc",
         "funcs",
         "netsblox",
         "noarg",
         "nonhat",
+        "proptest",
+        "ritelinked",
         "rpcs",
         "sigs",
-        "vals"
+        "vals",
+        "xmlparser"
     ]
 }

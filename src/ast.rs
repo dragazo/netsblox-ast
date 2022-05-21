@@ -6,32 +6,159 @@ use std::mem;
 use std::iter;
 use std::fmt;
 
-use linked_hash_map::LinkedHashMap;
+use ritelinked::LinkedHashMap;
 use derive_builder::Builder;
-
-use xml::reader::{EventReader, XmlEvent};
-use xml::name::OwnedName;
-use xml::attribute::OwnedAttribute;
-use xml::common::Position;
-
 use serde_json::Value as JsonValue;
 
-use regex::Regex;
-
+use crate::util::Punctuated;
 use crate::rpcs::*;
 
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
-lazy_static! {
-    static ref NUMBER_REGEX: Regex = Regex::new(r"^-?[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?$").unwrap();
-    static ref PARAM_FINDER: Regex = Regex::new(r"%'([^']+)'").unwrap();
-    static ref ARG_FINDER: Regex = Regex::new(r"%(\S+)").unwrap();
-    static ref NEW_LINE: Regex = Regex::new("\r\n|\r|\n").unwrap();
+#[cfg(test)]
+use proptest::prelude::*;
+
+// regex equivalent: r"%'([^']*)'"
+struct ParamIter<'a>(std::iter::Fuse<std::str::CharIndices<'a>>);
+impl<'a> ParamIter<'a> {
+    fn new(src: &'a str) -> Self {
+        Self(src.char_indices().fuse())
+    }
+}
+impl Iterator for ParamIter<'_> {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((i, ch)) = self.0.next() {
+            if ch != '%' || self.0.next().map(|x| x.1) != Some('\'') { continue }
+            while let Some((j, ch)) = self.0.next() {
+                if ch == '\'' { return Some((i, j + 1)) }
+            }
+        }
+        None
+    }
+}
+#[test]
+fn test_param_iter() {
+    assert_eq!(ParamIter::new("hello world").collect::<Vec<_>>(), vec![]);
+    assert_eq!(ParamIter::new("hello %'helo' world").collect::<Vec<_>>(), vec![(6, 13)]);
+    assert_eq!(ParamIter::new("hello %'helo'world").collect::<Vec<_>>(), vec![(6, 13)]);
+    assert_eq!(ParamIter::new("hello %'heloworld").collect::<Vec<_>>(), vec![]);
+    assert_eq!(ParamIter::new("hello %'helo' %'world''''").collect::<Vec<_>>(), vec![(6, 13), (14, 22)]);
+}
+
+// regex equivalent: r"%\S*"
+struct ArgIter<'a>(std::iter::Fuse<std::str::CharIndices<'a>>, usize);
+impl<'a> ArgIter<'a> {
+    fn new(src: &'a str) -> Self {
+        Self(src.char_indices().fuse(), src.len())
+    }
+}
+impl Iterator for ArgIter<'_> {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((i, ch)) = self.0.next() {
+            if ch != '%' { continue }
+            while let Some((j, ch)) = self.0.next() {
+                if ch.is_whitespace() { return Some((i, j)) }
+            }
+            return Some((i, self.1));
+        }
+        None
+    }
+}
+#[test]
+fn test_arg_iter() {
+    assert_eq!(ArgIter::new("hello world").collect::<Vec<_>>(), vec![]);
+    assert_eq!(ArgIter::new("hello %world").collect::<Vec<_>>(), vec![(6, 12)]);
+    assert_eq!(ArgIter::new("hello %world ").collect::<Vec<_>>(), vec![(6, 12)]);
+    assert_eq!(ArgIter::new("hello %world      %gjherg3495830_ ").collect::<Vec<_>>(), vec![(6, 12), (18, 33)]);
+}
+
+fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Iterator<Item = (usize, usize)>{
+    let mut res = String::with_capacity(s.len());
+    let mut last_stop = 0;
+    for (a, b) in ranges {
+        res += &s[last_stop..a];
+        last_stop = b;
+        res += with;
+    }
+    res += &s[last_stop..];
+    res
 }
 
 fn clean_newlines(s: &str) -> String {
-    NEW_LINE.replace_all(s, "\n").into_owned()
+    Punctuated(s.lines(), "\n").to_string()
+}
+
+// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
+/// Escapes ', ", &, <, and > with the appropriate XML entities.
+pub fn xml_escape(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '&' => result.push_str("&amp;"),
+            '<' => result.push_str("&lt;"),
+            '>' => result.push_str("&gt;"),
+            '\'' => result.push_str("&apos;"),
+            '"' => result.push_str("&quot;"),
+            o => result.push(o),
+        }
+    }
+    result
+}
+
+// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
+// note: modified to suite our needs
+pub fn xml_unescape(input: &str) -> Result<String, Error> {
+    let mut result = String::with_capacity(input.len());
+
+    let mut it = input.split('&');
+    if let Some(sub) = it.next() {
+        result.push_str(sub); // Push everything before the first '&'
+    }
+
+    for sub in it {
+        match sub.find(';') {
+            Some(idx) => {
+                let ent = &sub[..idx];
+                match ent {
+                    "quot" => result.push('"'),
+                    "apos" => result.push('\''),
+                    "gt" => result.push('>'),
+                    "lt" => result.push('<'),
+                    "amp" => result.push('&'),
+                    ent => {
+                        let val = if ent.starts_with("#x") {
+                            u32::from_str_radix(&ent[2..], 16).ok()
+                        } else if ent.starts_with('#') {
+                            u32::from_str_radix(&ent[1..], 10).ok()
+                        } else {
+                            None
+                        };
+                        match val.and_then(char::from_u32) {
+                            Some(c) => result.push(c),
+                            None => return Err(Error::XmlUnescapeError { illegal_sequence: format!("&{};", ent) }),
+                        }
+                    }
+                }
+                result.push_str(&sub[idx + 1..]);
+            }
+            None => return Err(Error::XmlUnescapeError { illegal_sequence: format!("&{}", sub) }),
+        }
+    }
+
+    Ok(result)
+}
+
+#[cfg(test)]
+proptest! {
+    #[test]
+    fn test_xml_enc_dec(raw in r".*") {
+        let encoded = xml_escape(&raw);
+        let back = xml_unescape(&encoded).unwrap();
+        prop_assert_eq!(raw, back);
+    }
 }
 
 #[derive(Debug)]
@@ -57,28 +184,24 @@ impl Xml {
         self.attrs.iter().find(|a| a.name == name)
     }
 }
-fn parse_xml_root<'a, 'b>(xml: &mut EventReader<&'a mut &'b [u8]>, root_name: OwnedName, root_attrs: Vec<OwnedAttribute>) -> Result<Xml, Error> {
+fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Xml, Error> {
+    let mut attrs = vec![];
     let mut text = String::new();
     let mut children = vec![];
-    loop {
-        match xml.next() {
-            Ok(XmlEvent::StartElement { name, attributes, .. }) => {
-                children.push(parse_xml_root(xml, name, attributes)?);
+    while let Some(e) = xml.next() {
+        match e? {
+            xmlparser::Token::Attribute { local, value, .. } => attrs.push(XmlAttr { name: xml_unescape(local.as_str())?, value: xml_unescape(value.as_str())? }),
+            xmlparser::Token::Text { text: t } => text += &xml_unescape(t.as_str())?,
+            xmlparser::Token::ElementStart { local, .. } => children.push(parse_xml_root(xml, local.as_str())?),
+            xmlparser::Token::ElementEnd { end, .. } => match end {
+                xmlparser::ElementEnd::Close(_, _) => break,
+                xmlparser::ElementEnd::Empty => break,
+                xmlparser::ElementEnd::Open => (),
             }
-            Ok(XmlEvent::EndElement { name }) => {
-                assert_eq!(name, root_name);
-                let attrs = root_attrs.into_iter().map(|a| XmlAttr {
-                    name: a.name.local_name,
-                    value: a.value,
-                }).collect();
-                return Ok(Xml { name: root_name.local_name, attrs, children, text: clean_newlines(&text) });
-            }
-            Ok(XmlEvent::Characters(s)) | Ok(XmlEvent::CData(s)) => text += &s,
-            Ok(XmlEvent::Comment(_)) | Ok(XmlEvent::Whitespace(_)) | Ok(XmlEvent::ProcessingInstruction { .. }) => (),
-            Ok(x @ XmlEvent::StartDocument { .. }) | Ok(x @ XmlEvent::EndDocument) => panic!("{:?} at pos {:?}", x, xml.position()),
-            Err(error) => return Err(Error::InvalidXml { error }),
+            _ => (),
         }
     }
+    Ok(Xml { name: root_name.to_owned(), attrs, children, text: clean_newlines(&text) })
 }
 
 #[derive(Debug)]
@@ -139,7 +262,9 @@ pub enum ProjectError {
 }
 #[derive(Debug)]
 pub enum Error {
-    InvalidXml { error: xml::reader::Error },
+    XmlReadError { error: xmlparser::Error },
+    XmlUnescapeError { illegal_sequence: String },
+
     InvalidProject { error: ProjectError },
     NameTransformError { name: String, role: Option<String>, sprite: Option<String> },
     UnknownBlockType { role: String, sprite: String, block_type: String },
@@ -167,6 +292,11 @@ pub enum Error {
 
     // TODO: get rid of these cases when new features are added
     BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
+}
+impl From<xmlparser::Error> for Error {
+    fn from(error: xmlparser::Error) -> Error {
+        Error::XmlReadError { error }
+    }
 }
 
 #[derive(Debug)]
@@ -839,7 +969,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let name = block_name_from_ref(s);
-        let argc = ARG_FINDER.find_iter(s).count();
+        let argc = ArgIter::new(s).count();
         let function = self.reference_fn(&name)?;
         let comment = check_children_get_comment!(self, stmt, s => argc);
 
@@ -1504,12 +1634,30 @@ fn get_block_info(value: &Value) -> (&str, bool) {
         _ => panic!(), // header parser would never do this
     }
 }
+
 fn block_name_from_def(s: &str) -> String {
-    PARAM_FINDER.replace_all(s, "\t").into_owned() // tabs leave a marker for args which disappears after ident renaming
+    replace_ranges(s, ParamIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
 fn block_name_from_ref(s: &str) -> String {
-    ARG_FINDER.replace_all(s, "\t").into_owned()
+    replace_ranges(s, ArgIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
+
+#[test]
+fn test_block_name_from_def() {
+    assert_eq!(block_name_from_def("hello world"), "hello world");
+    assert_eq!(block_name_from_def("hello %'wor'ld"), "hello \tld");
+    assert_eq!(block_name_from_def("hello %'wor' ld "), "hello \t ld ");
+    assert_eq!(block_name_from_def("hello %'wor'l%'d'"), "hello \tl\t");
+    assert_eq!(block_name_from_def("hello %'wor'l%'d' "), "hello \tl\t ");
+    assert_eq!(block_name_from_def("hello %'wor'l%'d'%' "), "hello \tl\t%' ");
+}
+#[test]
+fn test_block_name_from_ref() {
+    assert_eq!(block_name_from_ref("hello world"), "hello world");
+    assert_eq!(block_name_from_ref("hello %world"), "hello \t");
+    assert_eq!(block_name_from_ref("hello %world "), "hello \t ");
+}
+
 fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, sprite: Option<&str>) -> Result<(), Error> {
     let sprite = || sprite.map(|v| v.to_owned());
 
@@ -1546,7 +1694,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, spr
     };
     let finalize = |sprite_info: &SpriteInfo| {
         let mut script_info = ScriptInfo::new(sprite_info);
-        for param in PARAM_FINDER.captures_iter(s).map(|v| v.get(1).unwrap().as_str().to_owned()) {
+        for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
             define_local_and_ref!(script_info, param, 0f64.into());
         }
         let params = script_info.locals.clone().into_defs();
@@ -1760,12 +1908,11 @@ impl Parser {
         Ok(project)
     }
     pub fn parse(&self, xml: &str) -> Result<Project, Error> {
-        let mut xml = xml.as_bytes();
-        let mut xml = EventReader::new(&mut xml);
-        while let Ok(e) = xml.next() {
-            if let XmlEvent::StartElement { name, attributes, .. } = e {
-                if name.local_name != "room" { continue }
-                let project = parse_xml_root(&mut xml, name, attributes)?;
+        let mut xml = xmlparser::Tokenizer::from(xml);
+        while let Some(Ok(e)) = xml.next() {
+            if let xmlparser::Token::ElementStart { local, .. } = e {
+                if local.as_str() != "room" { continue }
+                let project = parse_xml_root(&mut xml, local.as_str())?;
                 let proj_name = project.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
 
                 let mut roles = Vec::with_capacity(project.children.len());

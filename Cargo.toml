@@ -20,12 +20,14 @@ path = "src/lib.rs"
 name = "netsblox_ast"
 path = "src/main.rs"
 
+[dev-dependencies]
+proptest = "1.0.0"
+
 [dependencies]
-regex = "1.5.4"
-xml-rs = "0.8.4"
-serde_json = "1.0.73"
-lazy_static = "1.4.0"
-derive_builder = "0.10.2"
-linked-hash-map = "0.5.4"
+ritelinked = "0.3.2"
+xmlparser = { version = "0.13.3", default-features = false }
+serde_json = { version = "1.0.73", default-features = false, features = ["alloc"] }
+lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
+derive_builder = { version = "0.10.2", default-features = false }
 no-std-compat = { version = "0.4.1", features = ["alloc"] }
 serde = { version = "1.0.127", features = ["derive"], optional = true }

@@ -1,6 +1,5 @@
 use std::fmt::{self, Debug, Display};
 use std::prelude::v1::*;
-use regex::Regex;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
 macro_rules! impl_punctuated {
@@ -79,10 +78,11 @@ fn test_normalize_space() {
 
 /// Converts a Snap! identifier into a valid C-like identifier.
 pub fn c_ident(raw: &str) -> Result<String, ()> {
-    lazy_static! {
-        static ref INVALID_CHAR: Regex = Regex::new(r"[^_a-zA-Z0-9]+").unwrap();
-    }
-    let res = INVALID_CHAR.replace_all(raw.trim(), " ").trim().replace(' ', "_");
+    let cleaned: String = raw.chars().map(|ch| match ch {
+        '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' => ch,
+        _ => ' ',
+    }).collect();
+    let res = Punctuated(cleaned.split_ascii_whitespace(), "_").to_string();
     match res.chars().next() {
         None => Err(()),
         Some(v) => Ok(if ('0'..='9').contains(&v) { format!("var_{}", res) } else { res })
