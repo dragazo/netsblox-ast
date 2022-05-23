@@ -92,8 +92,7 @@ fn clean_newlines(s: &str) -> String {
 }
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
-/// Escapes ', ", &, <, and > with the appropriate XML entities.
-pub fn xml_escape(input: &str) -> String {
+fn xml_escape(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     for c in input.chars() {
         match c {
@@ -110,7 +109,7 @@ pub fn xml_escape(input: &str) -> String {
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
 // note: modified to suite our needs
-pub fn xml_unescape(input: &str) -> Result<String, Error> {
+fn xml_unescape(input: &str) -> Result<String, Error> {
     let mut result = String::with_capacity(input.len());
 
     let mut it = input.split('&');
@@ -208,51 +207,51 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
 pub enum ProjectError {
     NoRoot,
     UnnamedRole,
-    ValueNotEvaluated { role: String, sprite: Option<String> },
+    ValueNotEvaluated { role: String, entity: Option<String> },
     InvalidJson { reason: String },
     NoRoleContent { role: String },
     NoStageDef { role: String },
 
-    CustomBlockWithoutName { role: String, sprite: Option<String> },
-    CustomBlockWithoutType { role: String, sprite: Option<String>, sig: String },
-    CustomBlockUnknownType { role: String, sprite: Option<String>, sig: String, ty: String },
-    CustomBlockWithoutCode { role: String, sprite: Option<String>, sig: String },
+    CustomBlockWithoutName { role: String, entity: Option<String> },
+    CustomBlockWithoutType { role: String, entity: Option<String>, sig: String },
+    CustomBlockUnknownType { role: String, entity: Option<String>, sig: String, ty: String },
+    CustomBlockWithoutCode { role: String, entity: Option<String>, sig: String },
 
     ImageWithoutId { role: String },
     ImagesWithSameId { role: String, id: String },
     ImageWithoutContent { role: String, id: String },
     ImageUnknownFormat { role: String, id: String, content: String },
 
-    SpritesWithSameName { role: String, name: String },
+    EntitiesWithSameName { role: String, name: String },
 
-    CostumeIdFmt { role: String, sprite: String, id: String },
-    CostumeUndefinedRef { role: String, sprite: String, id: String },
-    CostumesWithSameName { role: String, sprite: String, name: String },
+    CostumeIdFmt { role: String, entity: String, id: String },
+    CostumeUndefinedRef { role: String, entity: String, id: String },
+    CostumesWithSameName { role: String, entity: String, name: String },
 
     UnnamedGlobal { role: String },
     GlobalNoValue { role: String, name: String },
     GlobalsWithSameName { role: String, name: String },
 
-    UnnamedField { role: String, sprite: String },
-    FieldNoValue { role: String, sprite: String, name: String },
-    FieldsWithSameName { role: String, sprite: String, name: String },
+    UnnamedField { role: String, entity: String },
+    FieldNoValue { role: String, entity: String, name: String },
+    FieldsWithSameName { role: String, entity: String, name: String },
 
-    ListItemNoValue { role: String, sprite: String },
-    BoolNoValue { role: String, sprite: String },
-    BoolUnknownValue { role: String, sprite: String, value: String },
-    UnnamedSprite { role: String },
+    ListItemNoValue { role: String, entity: String },
+    BoolNoValue { role: String, entity: String },
+    BoolUnknownValue { role: String, entity: String, value: String },
+    UnnamedEntity { role: String },
 
-    UnknownBlockMetaType { role: String, sprite: String, meta_type: String },
-    BlockWithoutType { role: String, sprite: String },
-    BlockChildCount { role: String, sprite: String, block_type: String, needed: usize, got: usize },
+    UnknownBlockMetaType { role: String, entity: String, meta_type: String },
+    BlockWithoutType { role: String, entity: String },
+    BlockChildCount { role: String, entity: String, block_type: String, needed: usize, got: usize },
 
-    BlockMissingOption { role: String, sprite: String, block_type: String },
-    BlockOptionUnknown { role: String, sprite: String, block_type: String, got: String },
+    BlockMissingOption { role: String, entity: String, block_type: String },
+    BlockOptionUnknown { role: String, entity: String, block_type: String, got: String },
 
-    InvalidBoolLiteral { role: String, sprite: String },
-    NonConstantUpvar { role: String, sprite: String, block_type: String },
+    InvalidBoolLiteral { role: String, entity: String },
+    NonConstantUpvar { role: String, entity: String, block_type: String },
 
-    FailedToParseColor { role: String, sprite: String, color: String },
+    FailedToParseColor { role: String, entity: String, color: String },
 
     MessageTypeMissingName { role: String },
     MessageTypeNameEmpty { role: String },
@@ -266,32 +265,32 @@ pub enum Error {
     XmlUnescapeError { illegal_sequence: String },
 
     InvalidProject { error: ProjectError },
-    NameTransformError { name: String, role: Option<String>, sprite: Option<String> },
-    UnknownBlockType { role: String, sprite: String, block_type: String },
-    DerefAssignment { role: String, sprite: String },
-    UndefinedVariable { role: String, sprite: String, name: String },
-    UndefinedFn { role: String, sprite: String, name: String },
-    BlockOptionNotConst { role: String, sprite: String, block_type: String },
-    BlockOptionNotSelected { role: String, sprite: String, block_type: String },
-    UnknownEntity { role: String, sprite: String, entity: String },
+    NameTransformError { name: String, role: Option<String>, entity: Option<String> },
+    UnknownBlockType { role: String, entity: String, block_type: String },
+    DerefAssignment { role: String, entity: String },
+    UndefinedVariable { role: String, entity: String, name: String },
+    UndefinedFn { role: String, entity: String, name: String },
+    BlockOptionNotConst { role: String, entity: String, block_type: String },
+    BlockOptionNotSelected { role: String, entity: String, block_type: String },
+    UnknownEntity { role: String, entity: String, unknown: String },
 
-    UnknownMessageType { role: String, sprite: String, msg_type: String },
-    MessageTypeWrongNumberArgs { role: String, sprite: String, msg_type: String, block_type: String, got: usize, expected: usize },
+    UnknownMessageType { role: String, entity: String, msg_type: String },
+    MessageTypeWrongNumberArgs { role: String, entity: String, msg_type: String, block_type: String, got: usize, expected: usize },
 
-    UnknownService { role: String, sprite: String, block_type: String, service: String },
-    UnknownRPC { role: String, sprite: String, block_type: String, service: String, rpc: String },
+    UnknownService { role: String, entity: String, block_type: String, service: String },
+    UnknownRPC { role: String, entity: String, block_type: String, service: String, rpc: String },
 
     GlobalsWithSameTransName { role: String, trans_name: String, names: (String, String) },
-    SpritesWithSameTransName { role: String, trans_name: String, names: (String, String) },
-    FieldsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
-    LocalsWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
-    CostumesWithSameTransName { role: String, sprite: String, trans_name: String, names: (String, String) },
-    BlocksWithSameTransName { role: String, sprite: Option<String>, trans_name: String, names: (String, String) },
+    EntitiesWithSameTransName { role: String, trans_name: String, names: (String, String) },
+    FieldsWithSameTransName { role: String, entity: String, trans_name: String, names: (String, String) },
+    LocalsWithSameTransName { role: String, entity: String, trans_name: String, names: (String, String) },
+    CostumesWithSameTransName { role: String, entity: String, trans_name: String, names: (String, String) },
+    BlocksWithSameTransName { role: String, entity: Option<String>, trans_name: String, names: (String, String) },
 
-    BlocksWithSameName { role: String, sprite: Option<String>, name: String, sigs: (String, String) },
+    BlocksWithSameName { role: String, entity: Option<String>, name: String, sigs: (String, String) },
 
     // TODO: get rid of these cases when new features are added
-    BlockCurrentlyUnsupported { role: String, sprite: String, block_type: String, what: String },
+    BlockCurrentlyUnsupported { role: String, entity: String, block_type: String, what: String },
 }
 impl From<xmlparser::Error> for Error {
     fn from(error: xmlparser::Error) -> Error {
@@ -394,7 +393,7 @@ pub struct Role {
     pub stage_size: (usize, usize),
     pub globals: Vec<VariableDef>,
     pub funcs: Vec<Function>,
-    pub sprites: Vec<Sprite>,
+    pub entities: Vec<Entity>,
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -407,7 +406,7 @@ pub struct Function {
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct Sprite {
+pub struct Entity {
     pub name: String,
     pub trans_name: String,
     pub fields: Vec<VariableDef>,
@@ -524,7 +523,7 @@ pub enum Stmt {
     Forward { distance: Expr, comment: Option<String> },
     ChangePos { dx: Option<Expr>, dy: Option<Expr>, comment: Option<String> },
     SetPos { x: Option<Expr>, y: Option<Expr>, comment: Option<String> },
-    /// Similar to `SetPos` except that the target can be either a list of `[x, y]` coordinates or a sprite.
+    /// Similar to `SetPos` except that the target can be either a list of `[x, y]` coordinates or a entity.
     Goto { target: Expr, comment: Option<String> },
 
     TurnRight { angle: Expr, comment: Option<String> },
@@ -735,8 +734,10 @@ macro_rules! define_local_and_ref {
         let name = $name;
         match $self.locals.define(name.clone(), $value) {
             Ok(_) => (), // redefining locals is fine
-            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), sprite: Some($self.sprite.name.clone()) }),
-            Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), trans_name, names }),
+            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), entity: Some($self.entity.name.clone()) }),
+            Err(SymbolError::ConflictingTrans { trans_name, names }) => if names.0 != names.1 { // redefining locals is fine
+                return Err(Error::LocalsWithSameTransName { role: $self.role.name.clone(), entity: $self.entity.name.clone(), trans_name, names });
+            }
         }
         $self.locals.get(&name).unwrap().ref_at(VarLocation::Local)
     }}
@@ -747,7 +748,7 @@ macro_rules! check_children_get_comment {
         let req = $req;
         #[allow(unused_comparisons)]
         if $expr.children.len() < req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: s.into(), needed: req, got: $expr.children.len() } });
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: s.into(), needed: req, got: $expr.children.len() } });
         }
         match $expr.children.get(req) {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
@@ -798,13 +799,13 @@ macro_rules! variadic_op {
 macro_rules! grab_option {
     ($self:ident, $s:ident, $child:expr) => {{
         let res = match $child.get(&["option"]) {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() } }),
             Some(f) => {
-                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }) }
+                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }) }
                 f.text.as_str()
             }
         };
-        if res == "" { return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }) }
+        if res == "" { return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }) }
         res
     }}
 }
@@ -812,12 +813,12 @@ macro_rules! grab_entity {
     ($self:ident, $s:ident, $child:expr, $comment:ident) => {
         match $child.text.as_str() {
             "" => match $child.children.is_empty() {
-                true => return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), block_type: $s.into() }),
+                true => return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }),
                 false => $self.parse_expr($child)?,
             },
             "myself" => Expr::This { comment: $comment },
-            name => match $self.role.sprites.get(name) {
-                None => return Err(Error::UnknownEntity { role: $self.role.name.clone(), sprite: $self.sprite.name.clone(), entity: name.into() }),
+            name => match $self.role.entities.get(name) {
+                None => return Err(Error::UnknownEntity { role: $self.role.name.clone(), entity: $self.entity.name.clone(), unknown: name.into() }),
                 Some(entity) => Expr::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone(), comment: $comment },
             }
         }
@@ -836,16 +837,16 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
 struct ScriptInfo<'a, 'b, 'c> {
     parser: &'a Parser,
     role: &'c RoleInfo<'a>,
-    sprite: &'c SpriteInfo<'a, 'b>,
+    entity: &'c EntityInfo<'a, 'b>,
     locals: SymbolTable<'a>,
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
-    fn new(sprite: &'c SpriteInfo<'a, 'b>) -> Self {
+    fn new(entity: &'c EntityInfo<'a, 'b>) -> Self {
         Self {
-            parser: sprite.parser,
-            role: sprite.role,
-            sprite,
-            locals: SymbolTable::new(sprite.parser)
+            parser: entity.parser,
+            role: entity.role,
+            entity,
+            locals: SymbolTable::new(entity.parser)
         }
     }
     fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
@@ -864,14 +865,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let FnCall { function, args, comment } = self.parse_fn_call(stmt)?;
                     stmts.push(Stmt::RunFn { function, args, comment });
                 }
-                x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), meta_type: x.to_owned() } }),
+                x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } }),
             }
         }
         Ok(Script { hat, stmts })
     }
     fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Hat>, Error> {
         let s = match stmt.attr("s") {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
             Some(v) => v.value.as_str(),
         };
         Ok(Some(match s {
@@ -900,25 +901,25 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "scrolled-down" => Hat::ScrollDown { comment },
                     "dropped" => Hat::Dropped { comment },
                     "stopped" => Hat::Stopped { comment },
-                    x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                    x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                 }
             }
             "receiveMessage" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let child = &stmt.children[0];
-                if child.name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                if child.name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
                 let msg_type = match child.text.as_str() {
-                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                     x => x.to_owned(),
                 };
                 Hat::LocalMessage { msg_type, comment }
             }
             "receiveSocketMessage" => {
-                if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
-                if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }) }
+                if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
+                if stmt.children[0].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
 
                 let msg_type = match stmt.children[0].text.as_str() {
-                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                    "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                     x => x.to_owned(),
                 };
 
@@ -934,22 +935,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
                 Hat::NetworkMessage { msg_type, fields, comment }
             }
-            x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
+            x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
         }))
     }
     fn parse_rpc(&self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
-        if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
-        for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
-        for i in 0..=1 { if stmt.children[i].name.is_empty() { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into() }) } }
+        if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
+        for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() }) } }
+        for i in 0..=1 { if stmt.children[i].name.is_empty() { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() }) } }
 
         let service = stmt.children[0].text.clone();
         let rpc = stmt.children[1].text.clone();
 
         let arg_names = match SERVICE_INFO.get(service.as_str()) {
-            None => return Err(Error::UnknownService { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), service }),
+            None => return Err(Error::UnknownService { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service }),
             Some(x) => match x.get(rpc.as_str()) {
-                None => return Err(Error::UnknownRPC { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: block_type.into(), service, rpc }),
+                None => return Err(Error::UnknownRPC { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service, rpc }),
                 Some(&x) => x,
             }
         };
@@ -965,7 +966,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn parse_fn_call(&self, stmt: &Xml) -> Result<FnCall, Error> {
         let s = match stmt.attr("s") {
             Some(v) => v.value.as_str(),
-            None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), sprite: Some(self.sprite.name.clone()) } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
         };
 
         let name = block_name_from_ref(s);
@@ -982,7 +983,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
         let s = match stmt.attr("s") {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
             Some(v) => v.value.as_str(),
         };
         Ok(match s {
@@ -998,7 +999,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let comment = check_children_get_comment!(self, stmt, s => 2);
                 let var = match stmt.children[0].name.as_str() {
                     "l" => self.reference_var(&stmt.children[0].text)?,
-                    _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), sprite: self.sprite.name.clone() }),
+                    _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), entity: self.entity.name.clone() }),
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
                 match s {
@@ -1012,7 +1013,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let start = self.parse_expr(&stmt.children[1])?;
                 let stop = self.parse_expr(&stmt.children[2])?;
@@ -1026,7 +1027,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
                 let var = define_local_and_ref!(self, var.to_owned(), 0f64.into()); // define after bounds, but before loop body
@@ -1069,8 +1070,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::Pop { list, comment },
                         "all" => Stmt::RemoveAll { list, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -1086,8 +1087,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::Push { list, value, comment },
                         "random" | "any" => Stmt::InsertAtRand { list, value, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -1103,8 +1104,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Some(opt) => match opt.text.as_str() {
                         "last" => Stmt::LastIndexAssign { list, value, comment },
                         "random" | "any" => Stmt::RandIndexAssign { list, value, comment },
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                        x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
@@ -1124,7 +1125,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let opt = grab_option!(self, s, val);
                         match opt {
                             "Turtle" => None,
-                            x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), what: format!("{} with project costume ({}) currently not supported", s, x) }),
+                            x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("{} with project costume ({}) currently not supported", s, x) }),
                         }
                     }
                     else {
@@ -1142,7 +1143,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let opt = grab_option!(self, s, child);
                     match opt {
                         "random" => Expr::RandInclusive { a: Box::new(0f64.into()), b: Box::new(360f64.into()), comment: None },
-                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: opt.into() } }),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
                     }
                 } else { self.parse_expr(child)? };
 
@@ -1166,7 +1167,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         }
                         "mouse-pointer" => Stmt::SetPos { x: Some(Expr::MouseX { comment: None }), y: Some(Expr::MouseY { comment: None }), comment },
                         "center" => Stmt::SetPos { x: Some(0f64.into()), y: Some(0f64.into()), comment },
-                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: opt.into() } }),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
                     }
                 }
                 else {
@@ -1183,9 +1184,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let color = match stmt.get(&["color"]) {
                     Some(color) => match parse_color(&color.text) {
                         Some(color) => color,
-                        None => return Err(Error::InvalidProject { error: ProjectError::FailedToParseColor { role: self.role.name.clone(), sprite: self.sprite.name.clone(), color: color.text.clone() } }),
+                        None => return Err(Error::InvalidProject { error: ProjectError::FailedToParseColor { role: self.role.name.clone(), entity: self.entity.name.clone(), color: color.text.clone() } }),
                     }
-                    None => return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                    None => return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                 };
                 Stmt::SetPenColor { color, comment }
             }
@@ -1198,10 +1199,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doSocketMessage" => {
                 let msg_type = match stmt.children.get(0) {
                     Some(value) if value.name != "comment" => value.text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() } }),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let fields = match self.role.msg_types.get(msg_type) {
-                    None => return Err(Error::UnknownMessageType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), msg_type: msg_type.into() }),
+                    None => return Err(Error::UnknownMessageType { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into() }),
                     Some(x) => x,
                 };
 
@@ -1210,13 +1211,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 let values = stmt.children[1..argc - 1].iter().map(|x| self.parse_expr(x)).collect::<Result<Vec<_>,_>>()?;
                 if fields.len() != values.len() {
-                    return Err(Error::MessageTypeWrongNumberArgs { role: self.role.name.clone(), sprite: self.sprite.name.clone(), msg_type: msg_type.into(), block_type: s.into(), got: values.len(), expected: fields.len() });
+                    return Err(Error::MessageTypeWrongNumberArgs { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into(), block_type: s.into(), got: values.len(), expected: fields.len() });
                 }
 
                 let target_xml = &stmt.children[argc - 1];
                 let target = match target_xml.get(&["option"]) {
                     Some(x) => match x.text.as_str() {
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
+                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                         x => x.into(),
                     }
                     None => self.parse_expr(target_xml)?,
@@ -1252,21 +1253,21 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "up" => noarg_op!(self, stmt, s => Stmt::PenUp),
             "clear" => noarg_op!(self, stmt, s => Stmt::PenClear),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
-            _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+            _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
     fn reference_var(&self, name: &str) -> Result<VariableRef, Error> {
-        let locs = [(&self.locals, VarLocation::Local), (&self.sprite.fields, VarLocation::Field), (&self.role.globals, VarLocation::Global)];
+        let locs = [(&self.locals, VarLocation::Local), (&self.entity.fields, VarLocation::Field), (&self.role.globals, VarLocation::Global)];
         match locs.iter().find_map(|v| v.0.get(name).map(|x| x.ref_at(v.1))) {
             Some(v) => Ok(v),
-            None => Err(Error::UndefinedVariable { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name: name.into() })
+            None => Err(Error::UndefinedVariable { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
         }
     }
     fn reference_fn(&self, name: &str) -> Result<FnRef, Error> {
-        let locs = [(&self.sprite.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
+        let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
         match locs.iter().find_map(|v| v.0.get(name).map(|x| x.fn_ref_at(v.1))) {
             Some(v) => Ok(v),
-            None => Err(Error::UndefinedFn { role: self.role.name.clone(), sprite: self.sprite.name.clone(), name: name.into() })
+            None => Err(Error::UndefinedFn { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
         }
     }
     fn cnd_adjust_index(&self, index: Expr, condition: bool, delta: f64) -> Expr {
@@ -1280,7 +1281,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             match val {
                 "true" => Ok(true.into()),
                 "false" => Ok(false.into()),
-                _ => Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), sprite: self.sprite.name.clone(), value: val.into() } })
+                _ => Err(Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), entity: self.entity.name.clone(), value: val.into() } })
             }
         };
         match expr.name.as_str() {
@@ -1301,10 +1302,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let mut values = Vec::with_capacity(expr.children.len());
                     for item in expr.children.iter() {
                         match item.children.get(0) {
-                            None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                            None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
                             Some(x) => match self.parse_expr(x)? {
                                 Expr::Value(v) => values.push(v),
-                                _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), sprite: Some(self.sprite.name.clone()) } }),
+                                _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
                             }
                         }
                     }
@@ -1322,7 +1323,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     return Ok(Expr::Variable { var, comment });
                 }
                 let s = match expr.attr("s") {
-                    None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                    None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
                     Some(v) => v.value.as_str(),
                 };
                 Ok(match s {
@@ -1368,8 +1369,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             Some(opt) => match opt.text.as_str() {
                                 "last" => Expr::ListLastIndex { list, comment },
                                 "any" => Expr::ListRandIndex { list, comment },
-                                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into() }),
-                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                             None => {
                                 let index = self.cnd_adjust_index(self.parse_expr(&expr.children[0])?, self.parser.adjust_to_zero_index, -1.0).into();
@@ -1397,7 +1398,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
                         Some(v) if v.text == "true" => true.into(),
                         Some(v) if v.text == "false" => false.into(),
-                        _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.role.name.clone(), sprite: self.sprite.name.clone() } }),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
                     }
                     "reportMonadic" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
@@ -1428,7 +1429,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "2^" => Expr::Pow { base: Box::new(2f64.into()), power: value, comment },
                             "10^" => Expr::Pow { base: Box::new(10f64.into()), power: value, comment },
 
-                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: func.into() } }),
+                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
                     }
                     "reportIfElse" => {
@@ -1463,7 +1464,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 "mouse-pointer" => Expr::IsTouchingMouse { comment },
                                 "pen trails" => Expr::IsTouchingDrawings { comment },
                                 "edge" => Expr::IsTouchingEdge { comment },
-                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.into(), got: x.into() } }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                         }
                         else {
@@ -1483,15 +1484,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
 
-                    _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: s.to_owned() }),
+                    _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
             }
-            x => Err(Error::UnknownBlockType { role: self.role.name.clone(), sprite: self.sprite.name.clone(), block_type: x.into() }),
+            x => Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() }),
         }
     }
 }
 
-struct SpriteInfo<'a, 'b> {
+struct EntityInfo<'a, 'b> {
     parser: &'a Parser,
     role: &'b RoleInfo<'a>,
     name: String,
@@ -1500,7 +1501,7 @@ struct SpriteInfo<'a, 'b> {
     funcs: SymbolTable<'a>,
     costumes: SymbolTable<'a>,
 }
-impl<'a, 'b> SpriteInfo<'a, 'b> {
+impl<'a, 'b> EntityInfo<'a, 'b> {
     fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Self {
         Self {
             parser: role.parser,
@@ -1512,30 +1513,30 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             costumes: SymbolTable::new(role.parser),
         }
     }
-    fn parse(mut self, sprite: &'a Xml) -> Result<Sprite, Error> {
-        for costume in sprite.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
+    fn parse(mut self, entity: &'a Xml) -> Result<Entity, Error> {
+        for costume in entity.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
             if let Some(ident) = costume.get(&["ref"]).map(|r| r.attr("mediaID")).flatten() {
                 let ident = ident.value.as_str();
                 if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_cst_") {
-                    return Err(Error::InvalidProject { error: ProjectError::CostumeIdFmt { role: self.role.name.clone(), sprite: self.name, id: ident.into() } });
+                    return Err(Error::InvalidProject { error: ProjectError::CostumeIdFmt { role: self.role.name.clone(), entity: self.name, id: ident.into() } });
                 }
                 let name = &ident[self.name.len() + 5..];
 
                 let content = match self.role.images.get(ident) {
                     Some(&x) => x,
-                    None => return Err(Error::InvalidProject { error: ProjectError::CostumeUndefinedRef { role: self.role.name.clone(), sprite: self.name, id: ident.into() } }),
+                    None => return Err(Error::InvalidProject { error: ProjectError::CostumeUndefinedRef { role: self.role.name.clone(), entity: self.name, id: ident.into() } }),
                 };
 
                 match self.costumes.define(name.into(), content.into()) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), sprite: self.name, name: prev.name } }),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.name) }),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameTransName { role: self.role.name.clone(), sprite: self.name, trans_name, names }),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), entity: self.name, name: prev.name } }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.name) }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameTransName { role: self.role.name.clone(), entity: self.name, trans_name, names }),
                 }
             }
         }
 
-        let blocks = sprite.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
+        let blocks = entity.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
         for block in blocks {
             parse_block_header(block, &mut self.funcs, &self.role.name, Some(&self.name))?;
         }
@@ -1544,32 +1545,32 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             funcs.push(parse_block(block, &self.funcs, self.role, Some(&self))?);
         }
 
-        let active_costume = match sprite.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
+        let active_costume = match entity.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
             Some(idx) if idx >= 1 && idx <= self.costumes.len() => Some(idx - 1),
             _ => None,
         };
-        let color = sprite.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0));
-        let visible = !sprite.attr("hidden").and_then(|s| s.value.parse::<bool>().ok()).unwrap_or(false);
+        let color = entity.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0));
+        let visible = !entity.attr("hidden").and_then(|s| s.value.parse::<bool>().ok()).unwrap_or(false);
 
-        let float_attr = |attr: &str| sprite.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
+        let float_attr = |attr: &str| entity.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
         let pos = (float_attr("x").unwrap_or(0.0), float_attr("y").unwrap_or(0.0));
         let heading = float_attr("heading").unwrap_or(0.0);
         let scale = float_attr("scale").unwrap_or(0.0);
 
-        if let Some(fields) = sprite.get(&["variables"]) {
+        if let Some(fields) = entity.get(&["variables"]) {
             let dummy_script = ScriptInfo::new(&self);
 
             let mut defs = vec![];
             for def in fields.children.iter().filter(|v| v.name == "variable") {
                 let name = match def.attr("name") {
-                    None => return Err(Error::InvalidProject { error: ProjectError::UnnamedField { role: self.role.name.clone(), sprite: self.name } }),
+                    None => return Err(Error::InvalidProject { error: ProjectError::UnnamedField { role: self.role.name.clone(), entity: self.name } }),
                     Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
-                    None => return Err(Error::InvalidProject { error: ProjectError::FieldNoValue { role: self.role.name.clone(), sprite: self.name, name } }),
+                    None => return Err(Error::InvalidProject { error: ProjectError::FieldNoValue { role: self.role.name.clone(), entity: self.name, name } }),
                     Some(x) => match dummy_script.parse_expr(x)? {
                         Expr::Value(v) => v,
-                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), sprite: Some(self.name) } }),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.name) } }),
                     }
                 };
                 defs.push((name, value));
@@ -1578,15 +1579,15 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             for (name, value) in defs {
                 match self.fields.define(name.clone(), value) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), sprite: self.name.clone(), name: prev.name } }),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), sprite: Some(self.name.clone()) }),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::FieldsWithSameTransName { role: self.role.name.clone(), sprite: self.name.clone(), trans_name, names }),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), entity: self.name.clone(), name: prev.name } }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.name.clone()) }),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::FieldsWithSameTransName { role: self.role.name.clone(), entity: self.name.clone(), trans_name, names }),
                 }
             }
         }
 
         let mut scripts = vec![];
-        if let Some(scripts_xml) = sprite.get(&["scripts"]) {
+        if let Some(scripts_xml) = entity.get(&["scripts"]) {
             for script_xml in scripts_xml.children.iter() {
                 match script_xml.children.as_slice() {
                     [] => continue,
@@ -1604,7 +1605,7 @@ impl<'a, 'b> SpriteInfo<'a, 'b> {
             }
         }
 
-        Ok(Sprite {
+        Ok(Entity {
             name: self.name,
             trans_name: self.trans_name,
             fields: self.fields.into_defs(),
@@ -1658,31 +1659,31 @@ fn test_block_name_from_ref() {
     assert_eq!(block_name_from_ref("hello %world "), "hello \t ");
 }
 
-fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, sprite: Option<&str>) -> Result<(), Error> {
-    let sprite = || sprite.map(|v| v.to_owned());
+fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, entity: Option<&str>) -> Result<(), Error> {
+    let entity = || entity.map(|v| v.to_owned());
 
     let s = match block.attr("s") {
         Some(v) => v.value.as_str(),
-        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: role.into(), sprite: sprite() } }),
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: role.into(), entity: entity() } }),
     };
     let returns = match block.attr("type") {
         Some(v) => match v.value.as_str() {
             "command" => false,
             "reporter" | "predicate" => true,
-            x => return Err(Error::InvalidProject { error: ProjectError::CustomBlockUnknownType { role: role.into(), sprite: sprite(), sig: s.into(), ty: x.into() } }),
+            x => return Err(Error::InvalidProject { error: ProjectError::CustomBlockUnknownType { role: role.into(), entity: entity(), sig: s.into(), ty: x.into() } }),
         }
-        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutType { role: role.into(), sprite: sprite(), sig: s.into() } }),
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutType { role: role.into(), entity: entity(), sig: s.into() } }),
     };
 
     let name = block_name_from_def(s);
     match funcs.define(name, vec![Value::from(s), Value::from(returns)].into()) {
         Ok(None) => Ok(()),
-        Ok(Some(prev)) => Err(Error::BlocksWithSameName { role: role.into(), sprite: sprite(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
-        Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(role.into()), sprite: sprite() }),
-        Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::BlocksWithSameTransName { role: role.into(), sprite: sprite(), trans_name, names }),
+        Ok(Some(prev)) => Err(Error::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
+        Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(role.into()), entity: entity() }),
+        Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::BlocksWithSameTransName { role: role.into(), entity: entity(), trans_name, names }),
     }
 }
-fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, sprite: Option<&SpriteInfo>) -> Result<Function, Error> {
+fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Error> {
     let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
     let entry = funcs.get(&block_name_from_def(s)).unwrap();
     let (s2, returns) = get_block_info(&entry.value); // unwrap ok because header parser
@@ -1690,10 +1691,10 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, spr
 
     let code = match block.get(&["script"]) {
         Some(v) => v,
-        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutCode { role: role.name.clone(), sprite: sprite.map(|v| v.name.clone()), sig: s.into() } }),
+        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutCode { role: role.name.clone(), entity: entity.map(|v| v.name.clone()), sig: s.into() } }),
     };
-    let finalize = |sprite_info: &SpriteInfo| {
-        let mut script_info = ScriptInfo::new(sprite_info);
+    let finalize = |entity_info: &EntityInfo| {
+        let mut script_info = ScriptInfo::new(entity_info);
         for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
             define_local_and_ref!(script_info, param, 0f64.into());
         }
@@ -1708,11 +1709,11 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, spr
             stmts,
         })
     };
-    match sprite {
+    match entity {
         Some(v) => finalize(v),
         None => {
-            let sprite = SpriteInfo::new(role, VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global });
-            finalize(&sprite)
+            let entity = EntityInfo::new(role, VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global });
+            finalize(&entity)
         }
     }
 }
@@ -1721,7 +1722,7 @@ struct RoleInfo<'a> {
     parser: &'a Parser,
     name: String,
     globals: SymbolTable<'a>,
-    sprites: SymbolTable<'a>,
+    entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
     images: LinkedHashMap<&'a str, &'a str>,
     msg_types: LinkedHashMap<&'a str, Vec<&'a str>>,
@@ -1732,7 +1733,7 @@ impl<'a> RoleInfo<'a> {
             parser,
             name,
             globals: SymbolTable::new(parser),
-            sprites: SymbolTable::new(parser),
+            entities: SymbolTable::new(parser),
             funcs: SymbolTable::new(parser),
             images: Default::default(),
             msg_types: Default::default(),
@@ -1807,8 +1808,8 @@ impl<'a> RoleInfo<'a> {
 
         if let Some(globals) = content.get(&["variables"]) {
             let dummy_name = VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global };
-            let dummy_sprite = SpriteInfo::new(&self, dummy_name); // fine to do before sprites/blocks/etc. since globals are just values (not stmts or exprs)
-            let dummy_script = ScriptInfo::new(&dummy_sprite);
+            let dummy_entity = EntityInfo::new(&self, dummy_name); // fine to do before entities/blocks/etc. since globals are just values (not stmts or exprs)
+            let dummy_script = ScriptInfo::new(&dummy_entity);
 
             let mut defs = vec![];
             for def in globals.children.iter().filter(|v| v.name == "variable") {
@@ -1820,7 +1821,7 @@ impl<'a> RoleInfo<'a> {
                     None => return Err(Error::InvalidProject { error: ProjectError::GlobalNoValue { role, name } }),
                     Some(x) => match dummy_script.parse_expr(x)? {
                         Expr::Value(v) => v,
-                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role, sprite: None } }),
+                        _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role, entity: None } }),
                     }
                 };
                 defs.push((name, value));
@@ -1830,25 +1831,25 @@ impl<'a> RoleInfo<'a> {
                 match self.globals.define(name.clone(), value) {
                     Ok(None) => (),
                     Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role: self.name.clone(), name: prev.name } }),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.name.clone()), sprite: None }),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.name.clone()), entity: None }),
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::GlobalsWithSameTransName { role: self.name.clone(), trans_name, names }),
                 }
             }
         }
 
-        let mut sprites_raw = vec![];
-        if let Some(sprites_xml) = stage.get(&["sprites"]) {
-            for sprite in iter::once(stage).chain(sprites_xml.children.iter().filter(|s| s.name == "sprite")) {
-                let name = match sprite.attr("name") {
-                    None => return Err(Error::InvalidProject { error: ProjectError::UnnamedSprite { role } }),
-                    Some(x) => match self.sprites.define(x.value.clone(), 0f64.into()) {
-                        Ok(None) => self.sprites.get(&x.value).unwrap().ref_at(VarLocation::Global),
-                        Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::SpritesWithSameName { role, name: prev.name } }),
-                        Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { role: Some(role), sprite: Some(name.clone()), name }),
-                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::SpritesWithSameTransName { role, trans_name, names }),
+        let mut entities_raw = vec![];
+        if let Some(entities_xml) = stage.get(&["sprites"]) {
+            for entity in iter::once(stage).chain(entities_xml.children.iter().filter(|s| s.name == "sprite")) {
+                let name = match entity.attr("name") {
+                    None => return Err(Error::InvalidProject { error: ProjectError::UnnamedEntity { role } }),
+                    Some(x) => match self.entities.define(x.value.clone(), 0f64.into()) {
+                        Ok(None) => self.entities.get(&x.value).unwrap().ref_at(VarLocation::Global),
+                        Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::EntitiesWithSameName { role, name: prev.name } }),
+                        Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { role: Some(role), entity: Some(name.clone()), name }),
+                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::EntitiesWithSameTransName { role, trans_name, names }),
                     }
                 };
-                sprites_raw.push((sprite, name));
+                entities_raw.push((entity, name));
             }
         }
 
@@ -1857,12 +1858,12 @@ impl<'a> RoleInfo<'a> {
             parse_block_header(block, &mut self.funcs, &self.name, None)?;
         }
 
-        // ------------------------------------------------------------------------------------ //
-        // -- we now have all the necessary items defined to parse exprs, stmts, and sprites -- //
-        // ------------------------------------------------------------------------------------ //
+        // ----------------------------------------------------------------------------------- //
+        // -- we now have all the necessary items defined to parse exprs, stmts, and entity -- //
+        // ----------------------------------------------------------------------------------- //
 
         let funcs = blocks.iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
-        let sprites = sprites_raw.into_iter().map(|(sprite, name)| SpriteInfo::new(&self, name).parse(sprite)).collect::<Result<Vec<_>,_>>()?;
+        let entities = entities_raw.into_iter().map(|(entity, name)| EntityInfo::new(&self, name).parse(entity)).collect::<Result<Vec<_>,_>>()?;
 
         Ok(Role {
             name: role,
@@ -1870,7 +1871,7 @@ impl<'a> RoleInfo<'a> {
             stage_size: (stage_width, stage_height),
             globals: self.globals.into_defs(),
             funcs,
-            sprites,
+            entities,
         })
     }
 }
