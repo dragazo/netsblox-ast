@@ -45,8 +45,8 @@ fn test_lambdas_no_captures_no_inputs() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
     match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 1);
             match &stmts[0] {
@@ -57,8 +57,8 @@ fn test_lambdas_no_captures_no_inputs() {
         x => panic!("{:?}", x),
     }
     match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 2);
         }
@@ -78,8 +78,8 @@ fn test_lambdas_no_captures() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
     match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["#1", "#2"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["#1", "#2"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 1);
             match &stmts[0] {
@@ -90,8 +90,8 @@ fn test_lambdas_no_captures() {
         x => panic!("{:?}", x),
     }
     match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 3);
         }
@@ -111,8 +111,8 @@ fn test_lambdas_adv_1() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
     match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
             match &stmts[0] {
@@ -123,8 +123,8 @@ fn test_lambdas_adv_1() {
         x => panic!("{:?}", x),
     }
     match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 3);
         }
@@ -144,8 +144,8 @@ fn test_lambdas_adv_2_rep_captures() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
     match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
             match &stmts[0] {
@@ -156,8 +156,8 @@ fn test_lambdas_adv_2_rep_captures() {
         x => panic!("{:?}", x),
     }
     match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 4);
         }
@@ -177,8 +177,8 @@ fn test_lambdas_adv_3_nested_captures() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
     match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["foo"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["foo"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
             match &stmts[0] {
@@ -189,13 +189,13 @@ fn test_lambdas_adv_3_nested_captures() {
         x => panic!("{:?}", x),
     }
     match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+        Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 2);
             match &stmts[1] {
-                Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
-                    assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+                Stmt::Assign { value: Expr::Closure { params, captures, stmts, comment: _ }, .. } => {
+                    assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                     assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b", "temp", "brg"]);
                     assert_eq!(stmts.len(), 1);
                     match &stmts[0] {
@@ -205,6 +205,65 @@ fn test_lambdas_adv_3_nested_captures() {
                 }
                 x => panic!("{:?}", x),
             }
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_run_call_lambdas() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="67.14285714285715" y="77.66666666666701"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="evaluate"><block s="reifyReporter"><autolambda><block s="reportSum"><l>4</l><l>5</l></block></autolambda><list></list></block><list></list></block></block><block s="doSetVar"><l>b</l><block s="evaluate"><block s="reifyReporter"><autolambda><block s="reportModulus"><block s="reportSum"><block var="#3"/><block var="#1"/></block><block var="merp"/></block></autolambda><list><l>#1</l><l>merp</l><l>#3</l></list></block><list><l>6</l><l>1</l><l>4</l></list></block></block><block s="doRun"><block s="reifyScript"><script><block s="doSetVar"><l>a</l><l>7</l></block></script><list></list></block><list></list></block><block s="doRun"><block s="reifyScript"><script><block s="doSetVar"><l>a</l><block s="reportSum"><block s="reportProduct"><block var="val"/><block var="b"/></block><block var="rgt"/></block></block></script><list><l>val</l><l>rgt</l></list></block><list><l>8</l><l>7</l></list></block></script>"##,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 5);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::CallClosure { closure, args, comment: _ }, .. } => {
+            match &**closure {
+                Expr::Closure { params, captures, stmts, comment: _ } => {
+                    assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
+                    assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
+                    assert_eq!(stmts.len(), 1);
+                }
+                x => panic!("{:?}", x),
+            }
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::CallClosure { closure, args, comment: _ }, .. } => {
+            match &**closure {
+                Expr::Closure { params, captures, stmts, comment: _ } => {
+                    assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["#1", "merp", "#3"]);
+                    assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
+                    assert_eq!(stmts.len(), 1);
+                }
+                x => panic!("{:?}", x),
+            }
+            assert_eq!(args.len(), 3);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[3] {
+        Stmt::RunClosure { closure: Expr::Closure { params, captures, stmts, comment: _ }, args, comment: _ } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a"]);
+            assert_eq!(stmts.len(), 1);
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[4] {
+        Stmt::RunClosure { closure: Expr::Closure { params, captures, stmts, comment: _ }, args, comment: _ } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["val", "rgt"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
+            assert_eq!(stmts.len(), 1);
+            assert_eq!(args.len(), 2);
         }
         x => panic!("{:?}", x),
     }

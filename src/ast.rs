@@ -488,8 +488,8 @@ pub enum Hat {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Stmt {
-    /// Assign the given value to each of the listed variables (afterwards, they should all be ref-eq).
-    Assign { vars: Vec<VariableRef>, value: Expr, comment: Option<String> },
+    VarDecl { vars: Vec<VariableDef>, comment: Option<String> },
+    Assign { var: VariableRef, value: Expr, comment: Option<String> },
     AddAssign { var: VariableRef, value: Expr, comment: Option<String> },
 
     Warp { stmts: Vec<Stmt>, comment: Option<String> },
@@ -553,6 +553,7 @@ pub enum Stmt {
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, comment: Option<String> },
     RunFn { function: FnRef, args: Vec<Expr>, comment: Option<String> },
+    RunClosure { closure: Expr, args: Vec<Expr>, comment: Option<String> },
 
     /// Sends a message to local entities (not over the network).
     /// If `target` is `None`, this should broadcast to all entities.
@@ -722,7 +723,8 @@ pub enum Expr {
 
     RpcError { comment: Option<String> },
 
-    Closure { inputs: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt>, comment: Option<String> },
+    Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt>, comment: Option<String> },
+    CallClosure { closure: Box<Expr>, args: Vec<Expr>, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -733,7 +735,7 @@ impl From<Rpc> for Expr {
     }
 }
 
-macro_rules! define_local_and_ref {
+macro_rules! decl_local {
     ($self:ident, $name:expr, $value:expr) => {{
         let name = $name;
         let value = $value;
@@ -745,7 +747,7 @@ macro_rules! define_local_and_ref {
             }
             Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), entity: Some($self.entity.name.clone()) }),
         }
-        locals.get(&name).unwrap().ref_at(VarLocation::Local)
+        locals.get(&name).unwrap()
     }}
 }
 macro_rules! check_children_get_comment {
@@ -937,7 +939,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         comment = Some(clean_newlines(&child.text));
                     }
                     if child.name != "l" { break }
-                    let var = define_local_and_ref!(self, child.text.clone(), 0f64.into());
+                    let var = decl_local!(self, child.text.clone(), 0f64.into()).ref_at(VarLocation::Local);
                     fields.push(var);
                 }
                 Hat::NetworkMessage { msg_type, fields, comment }
@@ -998,9 +1000,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
-                    vars.push(define_local_and_ref!(self, var.text.clone(), 0f64.into()));
+                    vars.push(decl_local!(self, var.text.clone(), 0f64.into()).clone());
                 }
-                Stmt::Assign { vars, value: 0f64.into(), comment }
+                Stmt::VarDecl { vars, comment }
             }
             "doSetVar" | "doChangeVar" => {
                 let comment = check_children_get_comment!(self, stmt, s => 2);
@@ -1010,7 +1012,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
                 match s {
-                    "doSetVar" => Stmt::Assign { vars: vec![var], value, comment },
+                    "doSetVar" => Stmt::Assign { var, value, comment },
                     "doChangeVar" => Stmt::AddAssign { var, value, comment },
                     _ => unreachable!(),
                 }
@@ -1024,7 +1026,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let start = self.parse_expr(&stmt.children[1])?;
                 let stop = self.parse_expr(&stmt.children[2])?;
-                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into()); // define after bounds, but before loop body
+                let var = decl_local!(self, var.to_owned(), 0f64.into()).ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
                 Stmt::ForLoop { var, start, stop, stmts, comment }
@@ -1037,7 +1039,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
-                let var = define_local_and_ref!(self, var.to_owned(), 0f64.into()); // define after bounds, but before loop body
+                let var = decl_local!(self, var.to_owned(), 0f64.into()).ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
                 Stmt::ForeachLoop { var, items, stmts, comment }
@@ -1231,6 +1233,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
 
                 Stmt::SendNetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) }
+            }
+            "doRun" => {
+                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let closure = self.parse_expr(&stmt.children[0])?;
+                let mut args = Vec::with_capacity(stmt.children[1].children.len());
+                for arg in stmt.children[1].children.iter() {
+                    args.push(self.parse_expr(arg)?);
+                }
+                Stmt::RunClosure { closure, args, comment }
             }
             "changeScale" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
             "setScale" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
@@ -1508,9 +1519,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let is_script = s == "reifyScript";
                         let comment = check_children_get_comment!(self, expr, s => 2);
 
-                        let mut inputs = SymbolTable::new(self.parser);
+                        let mut params = SymbolTable::new(self.parser);
                         for input in expr.children[1].children.iter() {
-                            match inputs.define(input.text.clone(), 0.0.into()) {
+                            match params.define(input.text.clone(), 0.0.into()) {
                                 Ok(None) => (),
                                 Ok(Some(prev)) => return Err(Error::InputsWithSameName { role: self.role.name.clone(), name: prev.name, entity: Some(self.entity.name.clone()) }),
                                 Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names }),
@@ -1518,7 +1529,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                         }
 
-                        self.locals.push((inputs.clone(), Default::default()));
+                        self.locals.push((params.clone(), Default::default()));
                         let locals_len = self.locals.len();
                         let stmts = match is_script {
                             true => self.parse(&expr.children[0])?.stmts,
@@ -1534,7 +1545,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             self.reference_var(&var.name).unwrap();
                         }
 
-                        Expr::Closure { inputs: inputs.into_defs(), captures, stmts, comment }
+                        Expr::Closure { params: params.into_defs(), captures, stmts, comment }
+                    }
+                    "evaluate" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let closure = Box::new(self.parse_expr(&expr.children[0])?);
+                        let mut args = Vec::with_capacity(expr.children[1].children.len());
+                        for input in expr.children[1].children.iter() {
+                            args.push(self.parse_expr(input)?);
+                        }
+                        Expr::CallClosure { closure, args, comment }
                     }
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
@@ -1749,7 +1769,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
         for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
-            define_local_and_ref!(script_info, param, 0f64.into());
+            decl_local!(script_info, param, 0f64.into());
         }
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
