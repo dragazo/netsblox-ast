@@ -32,3 +32,180 @@ fn test_local_dupe() {
     let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
     parser.parse(&script).unwrap();
 }
+
+#[test]
+fn test_lambdas_no_captures_no_inputs() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r#"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l>2</l><l>3</l></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l><l>b</l></list></block><block s="doSetVar"><l>temp</l><l>67</l></block></script><list></list></block></block></script>"#,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0] {
+                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(stmts.len(), 2);
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_lambdas_no_captures() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block var="#1"/><block var="#2"/></block></autolambda><list><l>#1</l><l>#2</l></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l><l>b</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["#1", "#2"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0] {
+                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(stmts.len(), 3);
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_lambdas_adv_1() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block var="a"/><block var="b"/></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0] {
+                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
+            assert_eq!(stmts.len(), 3);
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_lambdas_adv_2_rep_captures() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportDifference"><block s="reportProduct"><block s="reportSum"><block var="a"/><block var="b"/></block><block var="b"/></block><block var="a"/></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block><block s="doSetVar"><l>b</l><block s="reportLessThan"><block var="temp"/><block var="b"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0] {
+                Stmt::Return { .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
+            assert_eq!(stmts.len(), 4);
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_lambdas_adv_3_nested_captures() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportDifference"><block s="reportProduct"><block s="reportSum"><block var="a"/><block var="b"/></block><block var="foo"/></block><block var="a"/></block></autolambda><list><l>foo</l></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block s="reifyReporter"><autolambda><block s="reportPower"><block var="b"/><block s="reportSum"><block var="temp"/><block var="brg"/></block></block></autolambda><list></list></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
+    );
+    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+    match &stmts[1] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["foo"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0] {
+                Stmt::Return { .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2] {
+        Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+            assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
+            assert_eq!(stmts.len(), 2);
+            match &stmts[1] {
+                Stmt::Assign { value: Expr::Closure { inputs, captures, stmts, comment: _ }, .. } => {
+                    assert_eq!(inputs.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
+                    assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b", "temp", "brg"]);
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0] {
+                        Stmt::Return { .. } => (),
+                        x => panic!("{:?}", x),
+                    }
+                }
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+}

@@ -92,6 +92,7 @@ fn clean_newlines(s: &str) -> String {
 }
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
+#[cfg(test)]
 fn xml_escape(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     for c in input.chars() {
@@ -287,6 +288,7 @@ pub enum Error {
     CostumesWithSameTransName { role: String, entity: String, trans_name: String, names: (String, String) },
     BlocksWithSameTransName { role: String, entity: Option<String>, trans_name: String, names: (String, String) },
 
+    InputsWithSameName { role: String, entity: Option<String>, name: String },
     BlocksWithSameName { role: String, entity: Option<String>, name: String, sigs: (String, String) },
 
     // TODO: get rid of these cases when new features are added
@@ -719,6 +721,8 @@ pub enum Expr {
     IsTouchingDrawings { comment: Option<String> },
 
     RpcError { comment: Option<String> },
+
+    Closure { inputs: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt>, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -732,25 +736,28 @@ impl From<Rpc> for Expr {
 macro_rules! define_local_and_ref {
     ($self:ident, $name:expr, $value:expr) => {{
         let name = $name;
-        match $self.locals.define(name.clone(), $value) {
+        let value = $value;
+        let locals = &mut $self.locals.last_mut().unwrap().0;
+        match locals.define(name.clone(), value) {
             Ok(_) => (), // redefining locals is fine
-            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), entity: Some($self.entity.name.clone()) }),
             Err(SymbolError::ConflictingTrans { trans_name, names }) => if names.0 != names.1 { // redefining locals is fine
                 return Err(Error::LocalsWithSameTransName { role: $self.role.name.clone(), entity: $self.entity.name.clone(), trans_name, names });
             }
+            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), entity: Some($self.entity.name.clone()) }),
         }
-        $self.locals.get(&name).unwrap().ref_at(VarLocation::Local)
+        locals.get(&name).unwrap().ref_at(VarLocation::Local)
     }}
 }
 macro_rules! check_children_get_comment {
-    ($self:ident, $expr:ident, $s:expr => $req:expr) => {{
+    ($self:ident, $expr:expr, $s:expr => $req:expr) => {{
         let s = $s;
         let req = $req;
+        let expr = $expr;
         #[allow(unused_comparisons)]
-        if $expr.children.len() < req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: s.into(), needed: req, got: $expr.children.len() } });
+        if expr.children.len() < req {
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: s.into(), needed: req, got: expr.children.len() } });
         }
-        match $expr.children.get(req) {
+        match expr.children.get(req) {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         }
@@ -838,7 +845,7 @@ struct ScriptInfo<'a, 'b, 'c> {
     parser: &'a Parser,
     role: &'c RoleInfo<'a>,
     entity: &'c EntityInfo<'a, 'b>,
-    locals: SymbolTable<'a>,
+    locals: Vec<(SymbolTable<'a>, Vec<VariableRef>)>, // tuples of (locals, captures)
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn new(entity: &'c EntityInfo<'a, 'b>) -> Self {
@@ -846,7 +853,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             parser: entity.parser,
             role: entity.role,
             entity,
-            locals: SymbolTable::new(entity.parser)
+            locals: vec![(SymbolTable::new(entity.parser), Default::default())],
         }
     }
     fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
@@ -939,7 +946,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             _ => return Ok(None),
         }))
     }
-    fn parse_rpc(&self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
+    fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
         if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
         for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() }) } }
         for i in 0..=1 { if stmt.children[i].name.is_empty() { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() }) } }
@@ -963,7 +970,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
         Ok(Rpc { service, rpc, args, comment })
     }
-    fn parse_fn_call(&self, stmt: &Xml) -> Result<FnCall, Error> {
+    fn parse_fn_call(&mut self, stmt: &Xml) -> Result<FnCall, Error> {
         let s = match stmt.attr("s") {
             Some(v) => v.value.as_str(),
             None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
@@ -1256,12 +1263,21 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
-    fn reference_var(&self, name: &str) -> Result<VariableRef, Error> {
-        let locs = [(&self.locals, VarLocation::Local), (&self.entity.fields, VarLocation::Field), (&self.role.globals, VarLocation::Global)];
-        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.ref_at(v.1))) {
-            Some(v) => Ok(v),
-            None => Err(Error::UndefinedVariable { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
+    fn reference_var(&mut self, name: &str) -> Result<VariableRef, Error> {
+        for (i, locals) in self.locals.iter().rev().enumerate() {
+            if let Some(x) = locals.0.get(name) {
+                let res = x.ref_at(VarLocation::Local);
+                if i != 0 {
+                    let (locals, captures) = self.locals.last_mut().unwrap();
+                    locals.define(res.name.clone(), 0.0.into()).unwrap();
+                    captures.push(res.clone());
+                }
+                return Ok(res)
+            }
         }
+        if let Some(x) = self.entity.fields.get(name) { return Ok(x.ref_at(VarLocation::Field)) }
+        if let Some(x) = self.role.globals.get(name) { return Ok(x.ref_at(VarLocation::Global)) }
+        Err(Error::UndefinedVariable { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
     }
     fn reference_fn(&self, name: &str) -> Result<FnRef, Error> {
         let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
@@ -1276,7 +1292,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             false => index,
         }
     }
-    fn parse_expr(&self, expr: &Xml) -> Result<Expr, Error> {
+    fn parse_expr(&mut self, expr: &Xml) -> Result<Expr, Error> {
         let parse_bool = |val: &str| -> Result<Expr, Error> {
             match val {
                 "true" => Ok(true.into()),
@@ -1355,7 +1371,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(0.0f64.into()), comment }
                     }
 
-                    "reportListIndex" => self.cnd_adjust_index(binary_op!(self, expr, s => Expr::ListFind : value, list), self.parser.adjust_to_zero_index, 1.0),
+                    "reportListIndex" => {
+                        let index = binary_op!(self, expr, s => Expr::ListFind : value, list);
+                        self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0)
+                    }
                     "reportListContainsItem" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let value = self.parse_expr(&expr.children[0])?.into();
@@ -1373,7 +1392,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                             None => {
-                                let index = self.cnd_adjust_index(self.parse_expr(&expr.children[0])?, self.parser.adjust_to_zero_index, -1.0).into();
+                                let index = self.parse_expr(&expr.children[0])?;
+                                let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Expr::ListIndex { list, index, comment }
                             }
                         }
@@ -1484,6 +1504,39 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
 
+                    "reifyScript" | "reifyReporter" => {
+                        let is_script = s == "reifyScript";
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+
+                        let mut inputs = SymbolTable::new(self.parser);
+                        for input in expr.children[1].children.iter() {
+                            match inputs.define(input.text.clone(), 0.0.into()) {
+                                Ok(None) => (),
+                                Ok(Some(prev)) => return Err(Error::InputsWithSameName { role: self.role.name.clone(), name: prev.name, entity: Some(self.entity.name.clone()) }),
+                                Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names }),
+                                Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) }),
+                            }
+                        }
+
+                        self.locals.push((inputs.clone(), Default::default()));
+                        let locals_len = self.locals.len();
+                        let stmts = match is_script {
+                            true => self.parse(&expr.children[0])?.stmts,
+                            false => {
+                                let _ = check_children_get_comment!(self, &expr.children[0], s => 1);
+                                let value = self.parse_expr(&expr.children[0].children[0])?;
+                                vec![Stmt::Return { value, comment: None }]
+                            }
+                        };
+                        assert_eq!(locals_len, self.locals.len());
+                        let (_, captures) = self.locals.pop().unwrap();
+                        for var in captures.iter() {
+                            self.reference_var(&var.name).unwrap();
+                        }
+
+                        Expr::Closure { inputs: inputs.into_defs(), captures, stmts, comment }
+                    }
+
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
             }
@@ -1558,7 +1611,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         let scale = float_attr("scale").unwrap_or(0.0);
 
         if let Some(fields) = entity.get(&["variables"]) {
-            let dummy_script = ScriptInfo::new(&self);
+            let mut dummy_script = ScriptInfo::new(&self);
 
             let mut defs = vec![];
             for def in fields.children.iter().filter(|v| v.name == "variable") {
@@ -1698,7 +1751,9 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
         for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
             define_local_and_ref!(script_info, param, 0f64.into());
         }
-        let params = script_info.locals.clone().into_defs();
+        debug_assert_eq!(script_info.locals.len(), 1);
+        debug_assert_eq!(script_info.locals[0].1.len(), 0);
+        let params = script_info.locals[0].0.clone().into_defs();
         let stmts = script_info.parse(code)?.stmts;
 
         Ok(Function {
@@ -1809,7 +1864,7 @@ impl<'a> RoleInfo<'a> {
         if let Some(globals) = content.get(&["variables"]) {
             let dummy_name = VariableRef { name: "global".into(), trans_name: "global".into(), location: VarLocation::Global };
             let dummy_entity = EntityInfo::new(&self, dummy_name); // fine to do before entities/blocks/etc. since globals are just values (not stmts or exprs)
-            let dummy_script = ScriptInfo::new(&dummy_entity);
+            let mut dummy_script = ScriptInfo::new(&dummy_entity);
 
             let mut defs = vec![];
             for def in globals.children.iter().filter(|v| v.name == "variable") {

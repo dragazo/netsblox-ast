@@ -5,6 +5,7 @@
         "Upvar",
         "aiohttp",
         "apos",
+        "autolambda",
         "cafile",
         "certifi",
         "dealloc",
