@@ -613,6 +613,11 @@ pub enum Constant {
     E, Pi,
 }
 #[derive(Debug, Clone)]
+pub enum TextSplitMode {
+    Letter, Word, Tab, CR, LF, Csv, Json,
+    Custom(Box<Expr>),
+}
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Expr {
     Value(Value),
@@ -725,6 +730,8 @@ pub enum Expr {
 
     Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt>, comment: Option<String> },
     CallClosure { closure: Box<Expr>, args: Vec<Expr>, comment: Option<String> },
+
+    TextSplit { text: Box<Expr>, mode: TextSplitMode, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1408,6 +1415,25 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 Expr::ListIndex { list, index, comment }
                             }
                         }
+                    }
+                    "reportTextSplit" => {
+                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let text = self.parse_expr(&expr.children[0])?.into();
+                        let mode = match expr.children[1].get(&["option"]) {
+                            Some(opt) => match opt.text.as_str() {
+                                "letter" => TextSplitMode::Letter,
+                                "word" => TextSplitMode::Word,
+                                "line" => TextSplitMode::LF,
+                                "tab" => TextSplitMode::Tab,
+                                "cr" => TextSplitMode::CR,
+                                "csv" => TextSplitMode::Csv,
+                                "json" => TextSplitMode::Json,
+                                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
+                            }
+                            None => TextSplitMode::Custom(self.parse_expr(&expr.children[1])?.into()),
+                        };
+                        Expr::TextSplit { text, mode, comment }
                     }
 
                     "reportStringSize" => unary_op!(self, expr, s => Expr::Strlen),
