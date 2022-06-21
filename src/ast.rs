@@ -1190,11 +1190,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Stmt::Goto { target: self.parse_expr(child)?, comment }
                 }
             }
-            "doBroadcast" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
-                let msg_type = self.parse_expr(&stmt.children[0])?;
-                Stmt::SendLocalMessage { target: None, msg_type, wait: false, comment }
-            }
             "setColor" => {
                 let comment = check_children_get_comment!(self, stmt, s => 1);
                 let color = match stmt.get(&["color"]) {
@@ -1250,6 +1245,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
                 Stmt::RunClosure { closure, args, comment }
             }
+            "doBroadcast" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: false } : msg_type),
+            "doBroadcastAndWait" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: true } : msg_type),
             "changeScale" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
             "setScale" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
             "doSayFor" => binary_op!(self, stmt, s => Stmt::Say : content, duration),
