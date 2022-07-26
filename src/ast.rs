@@ -1108,7 +1108,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
-                        let index = self.parse_expr(&stmt.children[0])?;
+                        let index = self.parse_expr(&stmt.children[1])?;
                         Stmt::InsertAt { list, value, index, comment }
                     }
                 }
@@ -1319,10 +1319,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
                 Some(child) if child.name == "bool" => parse_bool(&child.text),
-                _ => match expr.text.parse::<f64>() {
-                    Ok(v) => Ok(v.into()),
-                    Err(_) => Ok(expr.text.clone().into()),
-                }
+                _ => Ok(expr.text.clone().into()),
             }
             "bool" => parse_bool(&expr.text),
             "list" => match expr.attr("struct") {
