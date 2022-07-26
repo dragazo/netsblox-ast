@@ -64,6 +64,12 @@ lazy_static! {
             rpcs.insert("start", [].as_slice());
             rpcs
         });
+        services.insert("BingTraffic", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("search", ["westLongitude", "northLatitude", "eastLongitude", "southLatitude"].as_slice());
+            rpcs.insert("stop", [].as_slice());
+            rpcs
+        });
         services.insert("CARES data", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("get1222021", ["Well A"].as_slice());
@@ -178,6 +184,8 @@ lazy_static! {
             rpcs.insert("deleteVariable", ["name", "password"].as_slice());
             rpcs.insert("getUserVariable", ["name"].as_slice());
             rpcs.insert("getVariable", ["name", "password"].as_slice());
+            rpcs.insert("listenToUserVariable", ["name", "msgType", "duration"].as_slice());
+            rpcs.insert("listenToVariable", ["name", "msgType", "password", "duration"].as_slice());
             rpcs.insert("lockVariable", ["name", "password"].as_slice());
             rpcs.insert("setUserVariable", ["name", "value"].as_slice());
             rpcs.insert("setVariable", ["name", "value", "password"].as_slice());
@@ -205,6 +213,15 @@ lazy_static! {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("annotate", ["text", "annotators"].as_slice());
             rpcs.insert("getAnnotators", [].as_slice());
+            rpcs
+        });
+        services.insert("DailyWordGuess", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getWordList", [].as_slice());
+            rpcs.insert("giveUp", [].as_slice());
+            rpcs.insert("guess", ["word"].as_slice());
+            rpcs.insert("timeRemaining", [].as_slice());
+            rpcs.insert("triesRemaining", [].as_slice());
             rpcs
         });
         services.insert("EarthOrbit", {
@@ -414,6 +431,14 @@ lazy_static! {
             rpcs.insert("getTemperatureData", ["core", "startyear", "endyear"].as_slice());
             rpcs
         });
+        services.insert("IoTScape", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getDevices", ["service"].as_slice());
+            rpcs.insert("getMessageTypes", ["service"].as_slice());
+            rpcs.insert("getServices", [].as_slice());
+            rpcs.insert("send", ["service", "id", "command"].as_slice());
+            rpcs
+        });
         services.insert("KeyValueStore", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("child", ["key", "password"].as_slice());
@@ -421,6 +446,13 @@ lazy_static! {
             rpcs.insert("get", ["key", "password"].as_slice());
             rpcs.insert("parent", ["key"].as_slice());
             rpcs.insert("put", ["key", "value", "password"].as_slice());
+            rpcs
+        });
+        services.insert("LIDARSensor", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getDevices", [].as_slice());
+            rpcs.insert("getRange", ["id"].as_slice());
+            rpcs.insert("listen", ["id"].as_slice());
             rpcs
         });
         services.insert("LandOceanTemperatureIndex", {
@@ -669,6 +701,7 @@ lazy_static! {
             rpcs.insert("getCompassDirection", ["device"].as_slice());
             rpcs.insert("getCompassHeading", ["device"].as_slice());
             rpcs.insert("getFacingDirection", ["device"].as_slice());
+            rpcs.insert("getGPSHeading", ["device"].as_slice());
             rpcs.insert("getGameRotation", ["device"].as_slice());
             rpcs.insert("getGravity", ["device"].as_slice());
             rpcs.insert("getGyroscope", ["device"].as_slice());
@@ -846,9 +879,9 @@ lazy_static! {
             rpcs.insert("channelDetails", ["id"].as_slice());
             rpcs.insert("channelFeed", ["id", "numResult"].as_slice());
             rpcs.insert("privateChannelFeed", ["id", "numResult", "apiKey"].as_slice());
-            rpcs.insert("searchByLocation", ["latitude", "longitude", "distance", "limit"].as_slice());
-            rpcs.insert("searchByTag", ["tag", "limit"].as_slice());
-            rpcs.insert("searchByTagAndLocation", ["tag", "latitude", "longitude", "distance", "limit"].as_slice());
+            rpcs.insert("searchByLocation", ["latitude", "longitude", "distance", "limit", "updatedSince"].as_slice());
+            rpcs.insert("searchByTag", ["tag", "limit", "updatedSince"].as_slice());
+            rpcs.insert("searchByTagAndLocation", ["tag", "latitude", "longitude", "distance", "limit", "updatedSince"].as_slice());
             rpcs
         });
         services.insert("ThisXDoesNotExist", {
@@ -871,12 +904,6 @@ lazy_static! {
             rpcs.insert("getValue", ["Measure"].as_slice());
             rpcs.insert("getYEA", ["Measure"].as_slice());
             rpcs.insert("getYear", ["Measure"].as_slice());
-            rpcs
-        });
-        services.insert("Traffic", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("search", ["westLongitude", "northLatitude", "eastLongitude", "southLatitude"].as_slice());
-            rpcs.insert("stop", [].as_slice());
             rpcs
         });
         services.insert("Translation", {
@@ -963,6 +990,14 @@ lazy_static! {
             rpcs.insert("get172", ["Well A"].as_slice());
             rpcs.insert("getAllWellAValues", [].as_slice());
             rpcs.insert("getTable", [].as_slice());
+            rpcs
+        });
+        services.insert("WordGuess", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getWordList", ["length"].as_slice());
+            rpcs.insert("giveUp", [].as_slice());
+            rpcs.insert("guess", ["word"].as_slice());
+            rpcs.insert("start", ["length"].as_slice());
             rpcs
         });
         services.insert("brian's First Service", {
@@ -1086,6 +1121,17 @@ lazy_static! {
             rpcs.insert("getHomeTeamColumn", [].as_slice());
             rpcs.insert("getTable", [].as_slice());
             rpcs.insert("getValue", ["date", "column name"].as_slice());
+            rpcs
+        });
+        services.insert("test1", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("get1Column", [].as_slice());
+            rpcs.insert("get2By1", [].as_slice());
+            rpcs.insert("get2Column", [].as_slice());
+            rpcs.insert("get3By1", [].as_slice());
+            rpcs.insert("get3Column", [].as_slice());
+            rpcs.insert("getTable", [].as_slice());
+            rpcs.insert("getValue", ["1", "column name"].as_slice());
             rpcs
         });
         services

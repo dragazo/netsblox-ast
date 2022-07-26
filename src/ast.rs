@@ -658,6 +658,7 @@ pub enum Expr {
     MakeList { values: Vec<Expr>, comment: Option<String> },
     Listcat { lists: Vec<Expr>, comment: Option<String> },
     Listlen { value: Box<Expr>, comment: Option<String> },
+    ListIsEmpty { value: Box<Expr>, comment: Option<String> },
     /// Given a list, returns a new (shallow copy) of all the items except the first.
     /// If the list is empty, an empty list is returned.
     ListAllButFirst { value: Box<Expr>, comment: Option<String> },
@@ -1380,11 +1381,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportRound" => unary_op!(self, expr, s => Expr::Round),
 
                     "reportListLength" => unary_op!(self, expr, s => Expr::Listlen),
-                    "reportListIsEmpty" => {
-                        let comment = check_children_get_comment!(self, expr, s => 1);
-                        let value = self.parse_expr(&expr.children[0])?.into();
-                        Expr::Greater { left: Box::new(Expr::Listlen { value, comment: None }), right: Box::new(0.0f64.into()), comment }
-                    }
+                    "reportListIsEmpty" => unary_op!(self, expr, s => Expr::ListIsEmpty),
 
                     "reportListIndex" => {
                         let index = binary_op!(self, expr, s => Expr::ListFind : value, list);
