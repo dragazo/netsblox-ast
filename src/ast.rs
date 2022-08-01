@@ -561,6 +561,8 @@ pub enum Stmt {
     /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
     SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool, comment: Option<String> },
     SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)>, comment: Option<String> },
+
+    Ask { prompt: Expr, comment: Option<String> },
 }
 
 impl From<Rpc> for Stmt {
@@ -733,6 +735,8 @@ pub enum Expr {
     CallClosure { closure: Box<Expr>, args: Vec<Expr>, comment: Option<String> },
 
     TextSplit { text: Box<Expr>, mode: TextSplitMode, comment: Option<String> },
+
+    Answer { comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1276,6 +1280,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "up" => noarg_op!(self, stmt, s => Stmt::PenUp),
             "clear" => noarg_op!(self, stmt, s => Stmt::PenClear),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
+            "doAsk" => unary_op!(self, stmt, s => Stmt::Ask : prompt),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -1531,6 +1536,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "direction" => noarg_op!(self, expr, s => Expr::Heading),
 
                     "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
+
+                    "getLastAnswer" => noarg_op!(self, expr, s => Expr::Answer),
 
                     "reifyScript" | "reifyReporter" => {
                         let is_script = s == "reifyScript";

@@ -1,6 +1,6 @@
 [package]
 name = "netsblox-ast"
-version = "0.2.7"
+version = "0.2.8"
 authors = ["Devin Jean <emailcruzjean@yahoo.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
