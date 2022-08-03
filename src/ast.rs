@@ -563,6 +563,8 @@ pub enum Stmt {
     SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)>, comment: Option<String> },
 
     Ask { prompt: Expr, comment: Option<String> },
+
+    ResetTimer { comment: Option<String> },
 }
 
 impl From<Rpc> for Stmt {
@@ -737,6 +739,8 @@ pub enum Expr {
     TextSplit { text: Box<Expr>, mode: TextSplitMode, comment: Option<String> },
 
     Answer { comment: Option<String> },
+
+    Timer { comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1281,6 +1285,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "clear" => noarg_op!(self, stmt, s => Stmt::PenClear),
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             "doAsk" => unary_op!(self, stmt, s => Stmt::Ask : prompt),
+            "doResetTimer" => noarg_op!(self, stmt, s => Stmt::ResetTimer),
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -1538,6 +1543,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
 
                     "getLastAnswer" => noarg_op!(self, expr, s => Expr::Answer),
+
+                    "getTimer" => noarg_op!(self, expr, s => Expr::Timer),
 
                     "reifyScript" | "reifyReporter" => {
                         let is_script = s == "reifyScript";
