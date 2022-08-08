@@ -666,8 +666,11 @@ pub enum Expr {
     /// Given a list, returns a new (shallow copy) of all the items except the first.
     /// If the list is empty, an empty list is returned.
     ListAllButFirst { value: Box<Expr>, comment: Option<String> },
+    /// Given a value and a list, returns a new list (shallow copy) with the item prepended.
+    ListItemInFrontOf { item: Box<Expr>, list: Box<Expr>, comment: Option<String> },
     /// Returns the (1-based) index of value in the list, or 0 if not present.
     ListFind { list: Box<Expr>, value: Box<Expr>, comment: Option<String> },
+    ListContains { list: Box<Expr>, value: Box<Expr>, comment: Option<String> },
 
     ListIndex { list: Box<Expr>, index: Box<Expr>, comment: Option<String> },
     ListRandIndex { list: Box<Expr>, comment: Option<String> },
@@ -1394,12 +1397,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let index = binary_op!(self, expr, s => Expr::ListFind : value, list);
                         self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0)
                     }
-                    "reportListContainsItem" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
-                        let value = self.parse_expr(&expr.children[0])?.into();
-                        let list = self.parse_expr(&expr.children[1])?.into();
-                        Expr::Greater { left: Box::new(Expr::ListFind { value, list, comment: None }), right: Box::new(if self.parser.adjust_to_zero_index { -1.0 } else { 0.0 }.into()), comment }
-                    }
+                    "reportListContainsItem" => binary_op!(self, expr, s => Expr::ListContains : list, value),
+
                     "reportListItem" => {
                         let comment = check_children_get_comment!(self, expr, s => 2);
                         let list = self.parse_expr(&expr.children[1])?.into();
@@ -1442,12 +1441,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
 
                     "reportCDR" => unary_op!(self, expr, s => Expr::ListAllButFirst),
-                    "reportCONS" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
-                        let val = self.parse_expr(&expr.children[0])?;
-                        let list = self.parse_expr(&expr.children[0])?;
-                        Expr::Listcat { lists: vec![val, list], comment}
-                    }
+                    "reportCONS" => binary_op!(self, expr, s => Expr::ListItemInFrontOf : item, list),
 
                     "reportJoinWords" => variadic_op!(self, expr, s => Expr::Strcat),
                     "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::Listcat : lists),
