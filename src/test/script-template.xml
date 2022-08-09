@@ -1,0 +1,22 @@
+<room name="untitled" app="NetsBlox 1.29.1, http://netsblox.org">
+    <role name="myRole">
+        <project name="myRole" app="NetsBlox 1.29.1, http://netsblox.org" version="1.29.1">
+            <notes></notes>
+            <stage name="Stage" width="480" height="360" costume="0" color="255,255,255,1" tempo="60" threadsafe="false" penlog="false" volume="100" pan="0" lines="round" ternary="false" hyperops="true" codify="false" inheritance="false" sublistIDs="false" scheduled="false">
+                <costumes><list struct="atomic"></list></costumes>
+                <sounds><list struct="atomic"></list></sounds>
+                <variables>{fields}</variables>
+                <blocks>{methods}</blocks>
+                <messageTypes></messageTypes>
+                <scripts>{scripts}</scripts>
+                <sprites></sprites>
+            </stage>
+            <hidden></hidden>
+            <headers></headers>
+            <code></code>
+            <blocks>{funcs}</blocks>
+            <variables>{globals}</variables>
+        </project>
+        <media name="myRole" app="NetsBlox 1.29.1, http://netsblox.org" version="1.29.1"></media>
+    </role>
+</room>
