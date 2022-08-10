@@ -744,6 +744,11 @@ pub enum Expr {
     Answer { comment: Option<String> },
 
     Timer { comment: Option<String> },
+
+    Map { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
+    Keep { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
+    FindFirst { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
+    Combine { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1540,7 +1545,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "getTimer" => noarg_op!(self, expr, s => Expr::Timer),
 
-                    "reifyScript" | "reifyReporter" => {
+                    "reportMap" => binary_op!(self, expr, s => Expr::Map : f, list),
+                    "reportKeep" => binary_op!(self, expr, s => Expr::Keep : f, list),
+                    "reportFindFirst" => binary_op!(self, expr, s => Expr::FindFirst : f, list),
+                    "reportCombine" => binary_op!(self, expr, s => Expr::Combine : list, f),
+
+                    "reifyScript" | "reifyReporter" | "reifyPredicate" => {
                         let is_script = s == "reifyScript";
                         let comment = check_children_get_comment!(self, expr, s => 2);
 
