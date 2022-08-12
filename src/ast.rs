@@ -2022,20 +2022,40 @@ impl Parser {
         let mut xml = xmlparser::Tokenizer::from(xml);
         while let Some(Ok(e)) = xml.next() {
             if let xmlparser::Token::ElementStart { local, .. } = e {
-                if local.as_str() != "room" { continue }
-                let project = parse_xml_root(&mut xml, local.as_str())?;
-                let proj_name = project.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+                let (proj_name, roles) = match local.as_str() {
+                    "room" => {
+                        let project_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
 
-                let mut roles = Vec::with_capacity(project.children.len());
-                for child in project.children.iter() {
-                    if child.name == "role" {
-                        let role_name = match child.attr("name") {
-                            None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
-                            Some(x) => x.value.clone(),
-                        };
-                        roles.push(RoleInfo::new(self, role_name).parse(child)?);
+                        let mut roles = Vec::with_capacity(project_xml.children.len());
+                        for child in project_xml.children.iter() {
+                            if child.name == "role" {
+                                let role_name = match child.attr("name") {
+                                    None => return Err(Error::InvalidProject { error: ProjectError::UnnamedRole }),
+                                    Some(x) => x.value.clone(),
+                                };
+                                roles.push(RoleInfo::new(self, role_name).parse(child)?);
+                            }
+                        }
+
+                        (proj_name, roles)
                     }
-                }
+                    "project" => {
+                        let project_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+
+                        let role_xml = Xml {
+                            name: "role".into(),
+                            text: "".into(),
+                            attrs: vec![XmlAttr { name: "name".into(), value: proj_name.clone() }],
+                            children: vec![project_xml]
+                        };
+                        let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
+
+                        (proj_name, vec![role])
+                    }
+                    _ => continue,
+                };
 
                 let mut project = Some(Project { name: proj_name, roles });
                 if self.optimize { project = Some(self.opt(mem::take(&mut project).unwrap())?) }
