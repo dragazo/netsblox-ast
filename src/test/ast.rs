@@ -8,7 +8,7 @@ fn test_opt_cmp() {
         funcs = "", methods = "",
         scripts = r#"<script x="0" y="0"><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block s="reportEquals"><block var="temp"/><block var="temp"/></block></block><block s="doSetVar"><l>temp</l><block s="reportNot"><block s="reportEquals"><block var="temp"/><block var="temp"/></block></block></block><block s="doSetVar"><l>temp</l><block s="reportLessThan"><block var="temp"/><block var="temp"/></block></block><block s="doSetVar"><l>temp</l><block s="reportNot"><block s="reportLessThan"><block var="temp"/><block var="temp"/></block></block></block><block s="doSetVar"><l>temp</l><block s="reportGreaterThan"><block var="temp"/><block var="temp"/></block></block><block s="doSetVar"><l>temp</l><block s="reportNot"><block s="reportGreaterThan"><block var="temp"/><block var="temp"/></block></block></block></script>"#,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 7);
@@ -29,7 +29,7 @@ fn test_local_dupe() {
         methods = "",
         scripts = "",
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     parser.parse(&script).unwrap();
 }
 
@@ -40,7 +40,7 @@ fn test_lambdas_no_captures_no_inputs() {
         funcs = "", methods = "",
         scripts = r#"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l>2</l><l>3</l></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l><l>b</l></list></block><block s="doSetVar"><l>temp</l><l>67</l></block></script><list></list></block></block></script>"#,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
@@ -73,7 +73,7 @@ fn test_lambdas_no_captures() {
         funcs = "", methods = "",
         scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block var="#1"/><block var="#2"/></block></autolambda><list><l>#1</l><l>#2</l></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l><l>b</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
@@ -106,7 +106,7 @@ fn test_lambdas_adv_1() {
         funcs = "", methods = "",
         scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block var="a"/><block var="b"/></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
@@ -139,7 +139,7 @@ fn test_lambdas_adv_2_rep_captures() {
         funcs = "", methods = "",
         scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportDifference"><block s="reportProduct"><block s="reportSum"><block var="a"/><block var="b"/></block><block var="b"/></block><block var="a"/></block></autolambda><list></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block var="ght"/></block><block s="doSetVar"><l>b</l><block s="reportPower"><block var="temp"/><block var="brg"/></block></block><block s="doSetVar"><l>b</l><block s="reportLessThan"><block var="temp"/><block var="b"/></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
@@ -172,7 +172,7 @@ fn test_lambdas_adv_3_nested_captures() {
         funcs = "", methods = "",
         scripts = r##"<script x="75" y="89.02380952380952"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportDifference"><block s="reportProduct"><block s="reportSum"><block var="a"/><block var="b"/></block><block var="foo"/></block><block var="a"/></block></autolambda><list><l>foo</l></list></block></block><block s="doSetVar"><l>b</l><block s="reifyScript"><script><block s="doDeclareVariables"><list><l>temp</l></list></block><block s="doSetVar"><l>temp</l><block s="reifyReporter"><autolambda><block s="reportPower"><block var="b"/><block s="reportSum"><block var="temp"/><block var="brg"/></block></block></autolambda><list></list></block></block></script><list><l>ght</l><l>brg</l></list></block></block></script>"##,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
@@ -217,7 +217,7 @@ fn test_run_call_lambdas() {
         funcs = "", methods = "",
         scripts = r##"<script x="67.14285714285715" y="77.66666666666701"><block s="doDeclareVariables"><list><l>a</l><l>b</l></list></block><block s="doSetVar"><l>a</l><block s="evaluate"><block s="reifyReporter"><autolambda><block s="reportSum"><l>4</l><l>5</l></block></autolambda><list></list></block><list></list></block></block><block s="doSetVar"><l>b</l><block s="evaluate"><block s="reifyReporter"><autolambda><block s="reportModulus"><block s="reportSum"><block var="#3"/><block var="#1"/></block><block var="merp"/></block></autolambda><list><l>#1</l><l>merp</l><l>#3</l></list></block><list><l>6</l><l>1</l><l>4</l></list></block></block><block s="doRun"><block s="reifyScript"><script><block s="doSetVar"><l>a</l><l>7</l></block></script><list></list></block><list></list></block><block s="doRun"><block s="reifyScript"><script><block s="doSetVar"><l>a</l><block s="reportSum"><block s="reportProduct"><block var="val"/><block var="b"/></block><block var="rgt"/></block></block></script><list><l>val</l><l>rgt</l></list></block><list><l>8</l><l>7</l></list></block></script>"##,
     );
-    let parser = ParserBuilder::default().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 5);
@@ -266,5 +266,263 @@ fn test_run_call_lambdas() {
             assert_eq!(args.len(), 2);
         }
         x => panic!("{:?}", x),
+    }
+}
+
+#[test]
+fn test_auto_fill_lambda_args() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="58.57142857142858" y="44.571428571428555"><block s="doDeclareVariables"><list><l>a</l></list></block><block s="doSetVar"><l>a</l><block s="reportSum"><l>6</l><l>7</l></block></block><block s="doSetVar"><l>a</l><block s="reportSum"><l>6</l><l></l></block></block><block s="doSetVar"><l>a</l><block s="reportSum"><l></l><l>7</l></block></block><block s="doSetVar"><l>a</l><block s="reportSum"><l></l><l></l></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l>6</l><l>7</l></block></autolambda><list></list></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l>6</l><l></l></block></autolambda><list></list></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l></l><l>7</l></block></autolambda><list></list></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><l></l><l></l></block></autolambda><list></list></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block s="reportSum"><l></l><block s="reifyReporter"><autolambda><block s="reportSum"><l></l><l></l></block></autolambda><list></list></block></block><l></l></block></autolambda><list></list></block></block><block s="doSetVar"><l>a</l><block s="reifyReporter"><autolambda><block s="reportSum"><block s="reportSum"><l></l><block s="reifyReporter"><autolambda><block s="reportSum"><block var="#1"/><l></l></block></autolambda><list><l>#1</l></list></block></block><l></l></block></autolambda><list></list></block></block></script>"##,
+    );
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 11);
+
+    for (i, expect_left, expect_right) in [(1, "6", "7"), (2, "6", ""), (3, "", "7"), (4, "", "")] {
+        match &stmts[i] {
+            Stmt::Assign { value, .. } => match value {
+                Expr::Add { left, right, .. } => {
+                    match &**left {
+                        Expr::Value(Value::String(x)) => assert_eq!(x, expect_left),
+                        x => panic!("{x:?}"),
+                    }
+                    match &**right {
+                        Expr::Value(Value::String(x)) => assert_eq!(x, expect_right),
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+            x => panic!("{x:?}"),
+        }
+    }
+
+    match &stmts[5] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[6] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[7] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[8] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 2);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(params[1].name, "%2");
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[9] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 4);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(params[1].name, "%2");
+                assert_eq!(params[2].name, "%3");
+                assert_eq!(params[3].name, "%4");
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Add { left, right, .. } => {
+                                    match &**left {
+                                        Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                        x => panic!("{x:?}"),
+                                    }
+                                    match &**right {
+                                        Expr::Closure { params, stmts, .. } => {
+                                            assert_eq!(params.len(), 2);
+                                            assert_eq!(params[0].name, "%2");
+                                            assert_eq!(params[1].name, "%3");
+                                            assert_eq!(stmts.len(), 1);
+                                            match &stmts[0] {
+                                                Stmt::Return { value, .. } => match value {
+                                                    Expr::Add { left, right, .. } => {
+                                                        match &**left {
+                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                                                            x => panic!("{x:?}"),
+                                                        }
+                                                        match &**right {
+                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "%3"),
+                                                            x => panic!("{x:?}"),
+                                                        }
+                                                    }
+                                                    x => panic!("{x:?}"),
+                                                }
+                                                x => panic!("{x:?}"),
+                                            }
+                                        }
+                                        x => panic!("{x:?}"),
+                                    }
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%4"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[10] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Closure { params, stmts, .. } => {
+                assert_eq!(params.len(), 2);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(params[1].name, "%2");
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0] {
+                    Stmt::Return { value, .. } => match value {
+                        Expr::Add { left, right, .. } => {
+                            match &**left {
+                                Expr::Add { left, right, .. } => {
+                                    match &**left {
+                                        Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                        x => panic!("{x:?}"),
+                                    }
+                                    match &**right {
+                                        Expr::Closure { params, stmts, .. } => {
+                                            assert_eq!(params.len(), 1);
+                                            assert_eq!(params[0].name, "#1");
+                                            assert_eq!(stmts.len(), 1);
+                                            match &stmts[0] {
+                                                Stmt::Return { value, .. } => match value {
+                                                    Expr::Add { left, right, .. } => {
+                                                        match &**left {
+                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "#1"),
+                                                            x => panic!("{x:?}"),
+                                                        }
+                                                        match &**right {
+                                                            Expr::Value(Value::String(x)) => assert_eq!(x, ""),
+                                                            x => panic!("{x:?}"),
+                                                        }
+                                                    }
+                                                    x => panic!("{x:?}"),
+                                                }
+                                                x => panic!("{x:?}"),
+                                            }
+                                        }
+                                        x => panic!("{x:?}"),
+                                    }
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                            match &**right {
+                                Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
     }
 }

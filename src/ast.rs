@@ -266,6 +266,7 @@ pub enum Error {
     XmlUnescapeError { illegal_sequence: String },
 
     InvalidProject { error: ProjectError },
+    AutofillGenerateError { input: usize },
     NameTransformError { name: String, role: Option<String>, entity: Option<String> },
     UnknownBlockType { role: String, entity: String, block_type: String },
     DerefAssignment { role: String, entity: String },
@@ -303,7 +304,7 @@ impl From<xmlparser::Error> for Error {
 #[derive(Debug)]
 pub enum SymbolError {
     NameTransformError { name: String },
-    ConflictingTrans { trans_name: String, names: (String, String) }
+    ConflictingTrans { trans_name: String, names: (String, String) },
 }
 
 #[derive(Clone)]
@@ -353,6 +354,9 @@ impl<'a> SymbolTable<'a> {
     }
     fn len(&self) -> usize {
         self.orig_to_def.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.orig_to_def.is_empty()
     }
 }
 #[test]
@@ -759,39 +763,9 @@ impl From<Rpc> for Expr {
     }
 }
 
-macro_rules! decl_local {
-    ($self:ident, $name:expr, $value:expr) => {{
-        let name = $name;
-        let value = $value;
-        let locals = &mut $self.locals.last_mut().unwrap().0;
-        match locals.define(name.clone(), value) {
-            Ok(_) => (), // redefining locals is fine
-            Err(SymbolError::ConflictingTrans { trans_name, names }) => if names.0 != names.1 { // redefining locals is fine
-                return Err(Error::LocalsWithSameTransName { role: $self.role.name.clone(), entity: $self.entity.name.clone(), trans_name, names });
-            }
-            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some($self.role.name.clone()), entity: Some($self.entity.name.clone()) }),
-        }
-        locals.get(&name).unwrap()
-    }}
-}
-macro_rules! check_children_get_comment {
-    ($self:ident, $expr:expr, $s:expr => $req:expr) => {{
-        let s = $s;
-        let req = $req;
-        let expr = $expr;
-        #[allow(unused_comparisons)]
-        if expr.children.len() < req {
-            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: s.into(), needed: req, got: expr.children.len() } });
-        }
-        match expr.children.get(req) {
-            Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
-            None => None,
-        }
-    }}
-}
 macro_rules! binary_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $left:ident, $right:ident) => {{
-        let comment = check_children_get_comment!($self, $expr, $s => 2);
+        let comment = $self.check_children_get_comment($expr, $s, 2)?;
         let $left = $self.parse_expr(&$expr.children[0])?.into();
         let $right = $self.parse_expr(&$expr.children[1])?.into();
         $res { $left, $right, comment, $( $($field : $value),* )? }
@@ -802,7 +776,7 @@ macro_rules! binary_op {
 }
 macro_rules! unary_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
-        let comment = check_children_get_comment!($self, $expr, $s => 1);
+        let comment = $self.check_children_get_comment($expr, $s, 1)?;
         let $val = $self.parse_expr(&$expr.children[0])?.into();
         $res { $val, comment, $( $($field : $value),* )? }
     }};
@@ -812,13 +786,13 @@ macro_rules! unary_op {
 }
 macro_rules! noarg_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {{
-        let comment = check_children_get_comment!($self, $expr, $s => 0);
+        let comment = $self.check_children_get_comment($expr, $s, 0)?;
         $res { comment, $( $($field : $value),* )? }
     }}
 }
 macro_rules! variadic_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
-        let comment = check_children_get_comment!($self, $expr, $s => 1);
+        let comment = $self.check_children_get_comment($expr, $s, 1)?;
         let mut $val = vec![];
         for item in $expr.children[0].children.iter() {
             $val.push($self.parse_expr(item)?);
@@ -827,34 +801,6 @@ macro_rules! variadic_op {
     }};
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
         variadic_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
-    }
-}
-macro_rules! grab_option {
-    ($self:ident, $s:ident, $child:expr) => {{
-        let res = match $child.get(&["option"]) {
-            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() } }),
-            Some(f) => {
-                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }) }
-                f.text.as_str()
-            }
-        };
-        if res == "" { return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }) }
-        res
-    }}
-}
-macro_rules! grab_entity {
-    ($self:ident, $s:ident, $child:expr, $comment:ident) => {
-        match $child.text.as_str() {
-            "" => match $child.children.is_empty() {
-                true => return Err(Error::BlockOptionNotSelected { role: $self.role.name.clone(), entity: $self.entity.name.clone(), block_type: $s.into() }),
-                false => $self.parse_expr($child)?,
-            },
-            "myself" => Expr::This { comment: $comment },
-            name => match $self.role.entities.get(name) {
-                None => return Err(Error::UnknownEntity { role: $self.role.name.clone(), entity: $self.entity.name.clone(), unknown: name.into() }),
-                Some(entity) => Expr::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone(), comment: $comment },
-            }
-        }
     }
 }
 
@@ -872,6 +818,9 @@ struct ScriptInfo<'a, 'b, 'c> {
     role: &'c RoleInfo<'a>,
     entity: &'c EntityInfo<'a, 'b>,
     locals: Vec<(SymbolTable<'a>, Vec<VariableRef>)>, // tuples of (locals, captures)
+
+    autofill_args: Vec<String>,
+    in_autofill_mode: bool,
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn new(entity: &'c EntityInfo<'a, 'b>) -> Self {
@@ -880,7 +829,54 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             role: entity.role,
             entity,
             locals: vec![(SymbolTable::new(entity.parser), Default::default())],
+
+            autofill_args: vec![],
+            in_autofill_mode: false,
         }
+    }
+    fn check_children_get_comment(&self, expr: &Xml, s: &str, req: usize) -> Result<Option<String>, Error> {
+        if expr.children.len() < req {
+            return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: req, got: expr.children.len() } });
+        }
+        Ok(match expr.children.get(req) {
+            Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
+            None => None,
+        })
+    }
+    fn decl_local(&mut self, name: String, value: Value) -> Result<&VariableDef, Error> {
+        let locals = &mut self.locals.last_mut().unwrap().0;
+        match locals.define(name.clone(), value) {
+            Ok(_) => (), // redefining locals is fine
+            Err(SymbolError::ConflictingTrans { trans_name, names }) => if names.0 != names.1 { // redefining locals is fine
+                return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names });
+            }
+            Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) }),
+        }
+        Ok(locals.get(&name).unwrap())
+    }
+    fn grab_option<'x>(&self, s: &str, child: &'x Xml) -> Result<&'x str, Error> {
+        let res = match child.get(&["option"]) {
+            None => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
+            Some(f) => {
+                if f.children.len() != 0 { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
+                f.text.as_str()
+            }
+        };
+        if res == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
+        Ok(res)
+    }
+    fn grab_entity(&mut self, s: &str, child: &Xml, comment: Option<String>) -> Result<Expr, Error> {
+        Ok(match child.text.as_str() {
+            "" => match child.children.is_empty() {
+                true => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                false => self.parse_expr(child)?,
+            },
+            "myself" => Expr::This { comment },
+            name => match self.role.entities.get(name) {
+                None => return Err(Error::UnknownEntity { role: self.role.name.clone(), entity: self.entity.name.clone(), unknown: name.into() }),
+                Some(entity) => Expr::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone(), comment },
+            }
+        })
     }
     fn parse(&mut self, script: &Xml) -> Result<Script, Error> {
         if script.children.is_empty() { return Ok(Script { hat: None, stmts: vec![] }) }
@@ -910,22 +906,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
         Ok(Some(match s {
             "receiveGo" => {
-                let comment = check_children_get_comment!(self, stmt, s => 0);
+                let comment = self.check_children_get_comment(stmt, s, 0)?;
                 Hat::OnFlag { comment }
             }
             "receiveCondition" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
                 Hat::When { condition, comment }
             }
             "receiveKey" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
-                let key = grab_option!(self, s, stmt.children[0]);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
+                let key = self.grab_option(s, &stmt.children[0])?;
                 Hat::OnKey { key: key.into(), comment }
             }
             "receiveInteraction" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
-                match grab_option!(self, s, stmt.children[0]) {
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
+                match self.grab_option(s, &stmt.children[0])? {
                     "pressed" => Hat::MouseDown { comment },
                     "clicked" => Hat::MouseUp { comment },
                     "mouse-entered" => Hat::MouseEnter { comment },
@@ -938,7 +934,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "receiveMessage" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let child = &stmt.children[0];
                 if child.name != "l" { return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
                 let msg_type = match child.text.as_str() {
@@ -963,7 +959,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         comment = Some(clean_newlines(&child.text));
                     }
                     if child.name != "l" { break }
-                    let var = decl_local!(self, child.text.clone(), 0f64.into()).ref_at(VarLocation::Local);
+                    let var = self.decl_local(child.text.clone(), 0f64.into())?.ref_at(VarLocation::Local);
                     fields.push(var);
                 }
                 Hat::NetworkMessage { msg_type, fields, comment }
@@ -988,7 +984,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
         };
 
-        let comment = check_children_get_comment!(self, stmt, block_type => 2 + arg_names.len());
+        let comment = self.check_children_get_comment(stmt, block_type, 2 + arg_names.len())?;
         let mut args = Vec::with_capacity(arg_names.len());
         for (&arg_name, child) in arg_names.iter().zip(&stmt.children[2 .. 2 + arg_names.len()]) {
             let val = self.parse_expr(child)?;
@@ -1005,7 +1001,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let name = block_name_from_ref(s);
         let argc = ArgIter::new(s).count();
         let function = self.reference_fn(&name)?;
-        let comment = check_children_get_comment!(self, stmt, s => argc);
+        let comment = self.check_children_get_comment(stmt, s, argc)?;
 
         let mut args = Vec::with_capacity(argc);
         for expr in stmt.children[..argc].iter() {
@@ -1021,15 +1017,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
         Ok(match s {
             "doDeclareVariables" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
-                    vars.push(decl_local!(self, var.text.clone(), 0f64.into()).clone());
+                    vars.push(self.decl_local(var.text.clone(), 0f64.into())?.clone());
                 }
                 Stmt::VarDecl { vars, comment }
             }
             "doSetVar" | "doChangeVar" => {
-                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let comment = self.check_children_get_comment(stmt, s, 2)?;
                 let var = match stmt.children[0].name.as_str() {
                     "l" => self.reference_var(&stmt.children[0].text)?,
                     _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), entity: self.entity.name.clone() }),
@@ -1042,7 +1038,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doFor" => {
-                let comment = check_children_get_comment!(self, stmt, s => 4);
+                let comment = self.check_children_get_comment(stmt, s, 4)?;
 
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
@@ -1050,26 +1046,26 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let start = self.parse_expr(&stmt.children[1])?;
                 let stop = self.parse_expr(&stmt.children[2])?;
-                let var = decl_local!(self, var.to_owned(), 0f64.into()).ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
                 Stmt::ForLoop { var, start, stop, stmts, comment }
             }
             "doForEach" => {
-                let comment = check_children_get_comment!(self, stmt, s => 3);
+                let comment = self.check_children_get_comment(stmt, s, 3)?;
 
                 let var = match stmt.children[0].name.as_str() {
                     "l" => stmt.children[0].text.as_str(),
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
-                let var = decl_local!(self, var.to_owned(), 0f64.into()).ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
                 Stmt::ForeachLoop { var, items, stmts, comment }
             }
             "doRepeat" | "doUntil" | "doIf" => {
-                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let comment = self.check_children_get_comment(stmt, s, 2)?;
                 let expr = self.parse_expr(&stmt.children[0])?;
                 let stmts = self.parse(&stmt.children[1])?.stmts;
                 match s {
@@ -1080,24 +1076,24 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doForever" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
                 Stmt::InfLoop { stmts, comment }
             }
             "doIfElse" => {
-                let comment = check_children_get_comment!(self, stmt, s => 3);
+                let comment = self.check_children_get_comment(stmt, s, 3)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
                 let then = self.parse(&stmt.children[1])?.stmts;
                 let otherwise = self.parse(&stmt.children[2])?.stmts;
                 Stmt::IfElse { condition, then, otherwise, comment }
             }
             "doWarp" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
                 Stmt::Warp { stmts, comment }
             }
             "doDeleteFromList" => {
-                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let comment = self.check_children_get_comment(stmt, s, 2)?;
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
@@ -1113,7 +1109,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doInsertInList" => {
-                let comment = check_children_get_comment!(self, stmt, s => 3);
+                let comment = self.check_children_get_comment(stmt, s, 3)?;
                 let value = self.parse_expr(&stmt.children[0])?;
                 let list = self.parse_expr(&stmt.children[2])?;
                 match stmt.children[1].get(&["option"]) {
@@ -1130,7 +1126,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doReplaceInList" => {
-                let comment = check_children_get_comment!(self, stmt, s => 3);
+                let comment = self.check_children_get_comment(stmt, s, 3)?;
                 let value = self.parse_expr(&stmt.children[2])?;
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
@@ -1147,7 +1143,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doSwitchToCostume" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
 
                 let costume = {
                     let val = &stmt.children[0];
@@ -1155,8 +1151,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         None
                     }
                     else if val.name == "l" && val.get(&["option"]).is_some() {
-                        let opt = grab_option!(self, s, val);
-                        match opt {
+                        match self.grab_option(s, val)? {
                             "Turtle" => None,
                             x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("{} with project costume ({}) currently not supported", s, x) }),
                         }
@@ -1169,11 +1164,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Stmt::SwitchCostume { costume, comment }
             }
             "setHeading" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
 
                 let child = &stmt.children[0];
                 let value = if child.name == "l" && child.get(&["option"]).is_some() {
-                    let opt = grab_option!(self, s, child);
+                    let opt = self.grab_option(s, child)?;
                     match opt {
                         "random" => Expr::RandInclusive { a: Box::new(0f64.into()), b: Box::new(360f64.into()), comment: None },
                         _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
@@ -1183,11 +1178,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Stmt::SetHeading { value, comment }
             }
             "doGotoObject" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
 
                 let child = &stmt.children[0];
                 if child.name == "l" && child.get(&["option"]).is_some() {
-                    let opt = grab_option!(self, s, child);
+                    let opt = self.grab_option(s, child)?;
                     match opt {
                         "random position" => {
                             let half_width = Expr::Div { left: Box::new(Expr::StageWidth { comment: None }), right: Box::new(2f64.into()), comment: None };
@@ -1208,7 +1203,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "setColor" => {
-                let comment = check_children_get_comment!(self, stmt, s => 1);
+                let comment = self.check_children_get_comment(stmt, s, 1)?;
                 let color = match stmt.get(&["color"]) {
                     Some(color) => match parse_color(&color.text) {
                         Some(color) => color,
@@ -1219,7 +1214,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Stmt::SetPenColor { color, comment }
             }
             "write" => {
-                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let comment = self.check_children_get_comment(stmt, s, 2)?;
                 let content = self.parse_expr(&stmt.children[0])?;
                 let font_size = self.parse_expr(&stmt.children[1])?;
                 Stmt::Write { content, font_size, comment }
@@ -1254,7 +1249,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Stmt::SendNetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) }
             }
             "doRun" => {
-                let comment = check_children_get_comment!(self, stmt, s => 2);
+                let comment = self.check_children_get_comment(stmt, s, 2)?;
                 let closure = self.parse_expr(&stmt.children[0])?;
                 let mut args = Vec::with_capacity(stmt.children[1].children.len());
                 for arg in stmt.children[1].children.iter() {
@@ -1337,7 +1332,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
                 Some(child) if child.name == "bool" => parse_bool(&child.text),
-                _ => Ok(expr.text.clone().into()),
+                _ => match !expr.text.is_empty() || !self.in_autofill_mode {
+                    true => Ok(expr.text.clone().into()),
+                    false => {
+                        let input = self.autofill_args.len() + 1;
+                        let name = self.parser.autofill_generator.as_ref()(input).map_err(|_| Error::AutofillGenerateError { input })?;
+                        self.autofill_args.push(name.clone());
+
+                        let trans_name = match self.parser.name_transformer.as_ref()(&name) {
+                            Ok(x) => x,
+                            Err(_) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) }),
+                        };
+                        Ok(Expr::Variable { var: VariableRef { name, trans_name, location: VarLocation::Local }, comment: None })
+                    }
+                }
             }
             "bool" => parse_bool(&expr.text),
             "list" => match expr.attr("struct") {
@@ -1365,7 +1373,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "block" => {
                 if let Some(var) = expr.attr("var") {
-                    let comment = check_children_get_comment!(self, expr, "var" => 0);
+                    let comment = self.check_children_get_comment(expr, "var", 0)?;
                     let var = self.reference_var(&var.value)?;
                     return Ok(Expr::Variable { var, comment });
                 }
@@ -1405,7 +1413,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportListContainsItem" => binary_op!(self, expr, s => Expr::ListContains : list, value),
 
                     "reportListItem" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let comment = self.check_children_get_comment(expr, s, 2)?;
                         let list = self.parse_expr(&expr.children[1])?.into();
                         match expr.children[0].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
@@ -1422,7 +1430,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         }
                     }
                     "reportTextSplit" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let comment = self.check_children_get_comment(expr, s, 2)?;
                         let text = self.parse_expr(&expr.children[0])?.into();
                         let mode = match expr.children[1].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
@@ -1458,8 +1466,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         _ => return Err(Error::InvalidProject { error: ProjectError::InvalidBoolLiteral { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
                     }
                     "reportMonadic" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
-                        let func = grab_option!(self, s, expr.children[0]);
+                        let comment = self.check_children_get_comment(expr, s, 2)?;
+                        let func = self.grab_option(s, &expr.children[0])?;
                         let value = Box::new(self.parse_expr(&expr.children[1])?);
                         match func {
                             "id" => *value,
@@ -1490,7 +1498,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         }
                     }
                     "reportIfElse" => {
-                        let comment = check_children_get_comment!(self, expr, s => 3);
+                        let comment = self.check_children_get_comment(expr, s, 3)?;
                         let condition = Box::new(self.parse_expr(&expr.children[0])?);
                         let then = Box::new(self.parse_expr(&expr.children[1])?);
                         let otherwise = Box::new(self.parse_expr(&expr.children[2])?);
@@ -1509,15 +1517,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "reportPenTrailsAsCostume" => noarg_op!(self, expr, s => Expr::ImageOfDrawings),
                     "reportImageOfObject" => {
-                        let comment = check_children_get_comment!(self, expr, s => 1);
-                        let entity = grab_entity!(self, s, &expr.children[0], None).into();
+                        let comment = self.check_children_get_comment(expr, s, 1)?;
+                        let entity = self.grab_entity(s, &expr.children[0], None)?.into();
                         Expr::ImageOfEntity { entity, comment }
                     }
                     "reportTouchingObject" => {
-                        let comment = check_children_get_comment!(self, expr, s => 1);
+                        let comment = self.check_children_get_comment(expr, s, 1)?;
                         let child = &expr.children[0];
                         if child.name == "l" && child.get(&["option"]).is_some() {
-                            match grab_option!(self, s, child) {
+                            match self.grab_option(s, child)? {
                                 "mouse-pointer" => Expr::IsTouchingMouse { comment },
                                 "pen trails" => Expr::IsTouchingDrawings { comment },
                                 "edge" => Expr::IsTouchingEdge { comment },
@@ -1525,7 +1533,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                         }
                         else {
-                            let entity = grab_entity!(self, s, child, None).into();
+                            let entity = self.grab_entity(s, child, None)?.into();
                             Expr::IsTouchingEntity { entity, comment }
                         }
                     }
@@ -1552,24 +1560,31 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "reifyScript" | "reifyReporter" | "reifyPredicate" => {
                         let is_script = s == "reifyScript";
-                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let comment = self.check_children_get_comment(expr, s, 2)?;
 
                         let mut params = SymbolTable::new(self.parser);
-                        for input in expr.children[1].children.iter() {
-                            match params.define(input.text.clone(), 0.0.into()) {
-                                Ok(None) => (),
-                                Ok(Some(prev)) => return Err(Error::InputsWithSameName { role: self.role.name.clone(), name: prev.name, entity: Some(self.entity.name.clone()) }),
-                                Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names }),
-                                Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) }),
+                        fn define_param(script_info: &ScriptInfo, params: &mut SymbolTable, name: String) -> Result<(), Error> {
+                            match params.define(name, 0.0.into()) {
+                                Ok(None) => Ok(()),
+                                Ok(Some(prev)) => Err(Error::InputsWithSameName { role: script_info.role.name.clone(), name: prev.name, entity: Some(script_info.entity.name.clone()) }),
+                                Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::LocalsWithSameTransName { role: script_info.role.name.clone(), entity: script_info.entity.name.clone(), trans_name, names }),
+                                Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(script_info.role.name.clone()), entity: Some(script_info.entity.name.clone()) }),
                             }
                         }
+                        for input in expr.children[1].children.iter() {
+                            define_param(self, &mut params, input.text.clone())?;
+                        }
+
+                        let prev_in_autofill_mode = self.in_autofill_mode;
+                        let prev_autofill_args_len = self.autofill_args.len();
+                        self.in_autofill_mode = params.is_empty();
 
                         self.locals.push((params.clone(), Default::default()));
                         let locals_len = self.locals.len();
                         let stmts = match is_script {
                             true => self.parse(&expr.children[0])?.stmts,
                             false => {
-                                let _ = check_children_get_comment!(self, &expr.children[0], s => 1);
+                                let _ = self.check_children_get_comment(&expr.children[0], s, 1)?;
                                 let value = self.parse_expr(&expr.children[0].children[0])?;
                                 vec![Stmt::Return { value, comment: None }]
                             }
@@ -1580,10 +1595,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             self.reference_var(&var.name).unwrap();
                         }
 
+                        for autofill_arg in &self.autofill_args[prev_autofill_args_len..] {
+                            define_param(self, &mut params, autofill_arg.clone())?;
+                        }
+
+                        self.in_autofill_mode = prev_in_autofill_mode;
+                        if !self.in_autofill_mode {
+                            self.autofill_args.clear();
+                        }
+
                         Expr::Closure { params: params.into_defs(), captures, stmts, comment }
                     }
                     "evaluate" => {
-                        let comment = check_children_get_comment!(self, expr, s => 2);
+                        let comment = self.check_children_get_comment(expr, s, 2)?;
                         let closure = Box::new(self.parse_expr(&expr.children[0])?);
                         let mut args = Vec::with_capacity(expr.children[1].children.len());
                         for input in expr.children[1].children.iter() {
@@ -1804,7 +1828,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
         for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
-            decl_local!(script_info, param, 0f64.into());
+            script_info.decl_local(param, 0f64.into())?;
         }
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
@@ -2011,12 +2035,24 @@ pub struct Parser {
     /// All symbol names in the program will be passed through this function,
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
     /// The default operation performs no conversion.
+    /// Note that non-default transform strategies may also require a custom [`ParserBuilder::autofill_generator`].
     #[builder(default = "Rc::new(|v| Ok(v.into()))")]
     name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
+
+    /// A generator used to produce symbol names for auto-fill closure arguments.
+    /// The function receives a number that can be used to differentiate different generated arguments.
+    /// It is expected that multiple calls to this function with the same input will produce the same output symbol name.
+    /// The default is to produce a string of format `%n` where `n` is the input number.
+    /// Note that, after generation, symbol names are still passed through [`ParserBuilder::name_transformer`] as usual.
+    #[builder(default = r#"Rc::new(|v| Ok(format!("%{}", v)))"#)]
+    autofill_generator: Rc<dyn Fn(usize) -> Result<String, ()>>,
 }
 impl Parser {
     fn opt(&self, project: Project) -> Result<Project, Error> {
         Ok(project)
+    }
+    pub fn builder() -> ParserBuilder {
+        ParserBuilder::default()
     }
     pub fn parse(&self, xml: &str) -> Result<Project, Error> {
         let mut xml = xmlparser::Tokenizer::from(xml);
