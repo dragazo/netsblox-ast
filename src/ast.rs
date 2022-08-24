@@ -564,7 +564,11 @@ pub enum Stmt {
     /// Otherwise `target` is either a single target or a list of targets to send to.
     /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
     SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool, comment: Option<String> },
+    /// Sends a message over the network to the specified targets.
+    /// `target` may be a single target or a list of targets.
     SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)>, comment: Option<String> },
+    /// Sends a reply from a received message that was blocking (sender's `wait` flag was `true`).
+    SendNetworkReply { value: Expr, comment: Option<String> },
 
     Ask { prompt: Expr, comment: Option<String> },
 
@@ -753,6 +757,8 @@ pub enum Expr {
     Keep { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
     FindFirst { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
     Combine { f: Box<Expr>, list: Box<Expr>, comment: Option<String> },
+
+    NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)>, comment: Option<String> },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -811,6 +817,13 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
     } else {
         None
     }
+}
+
+struct NetworkMessage {
+    target: Expr,
+    msg_type: String,
+    values: Vec<(String, Expr)>,
+    comment: Option<String>,
 }
 
 struct ScriptInfo<'a, 'b, 'c> {
@@ -1009,6 +1022,35 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
 
         Ok(FnCall { function, args, comment })
+    }
+    fn parse_send_message_common(&mut self, stmt: &Xml, s: &str) -> Result<NetworkMessage, Error> {
+        let msg_type = match stmt.children.get(0) {
+            Some(value) if value.name != "comment" => value.text.as_str(),
+            _ => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
+        };
+        let fields = match self.role.msg_types.get(msg_type) {
+            None => return Err(Error::UnknownMessageType { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into() }),
+            Some(x) => x,
+        };
+
+        let (argc, comment) = stmt.children.iter().enumerate().find(|(_, x)| x.name == "comment").map(|(i, x)| (i, Some(x.text.as_str()))).unwrap_or((stmt.children.len(), None));
+        assert!(argc >= 1); // due to msg_type from above
+
+        let values = stmt.children[1..argc - 1].iter().map(|x| self.parse_expr(x)).collect::<Result<Vec<_>,_>>()?;
+        if fields.len() != values.len() {
+            return Err(Error::MessageTypeWrongNumberArgs { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into(), block_type: s.into(), got: values.len(), expected: fields.len() });
+        }
+
+        let target_xml = &stmt.children[argc - 1];
+        let target = match target_xml.get(&["option"]) {
+            Some(x) => match x.text.as_str() {
+                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                x => x.into(),
+            }
+            None => self.parse_expr(target_xml)?,
+        };
+
+        Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) })
     }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
         let s = match stmt.attr("s") {
@@ -1213,40 +1255,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 Stmt::SetPenColor { color, comment }
             }
-            "write" => {
-                let comment = self.check_children_get_comment(stmt, s, 2)?;
-                let content = self.parse_expr(&stmt.children[0])?;
-                let font_size = self.parse_expr(&stmt.children[1])?;
-                Stmt::Write { content, font_size, comment }
-            }
             "doSocketMessage" => {
-                let msg_type = match stmt.children.get(0) {
-                    Some(value) if value.name != "comment" => value.text.as_str(),
-                    _ => return Err(Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
-                };
-                let fields = match self.role.msg_types.get(msg_type) {
-                    None => return Err(Error::UnknownMessageType { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into() }),
-                    Some(x) => x,
-                };
-
-                let (argc, comment) = stmt.children.iter().enumerate().find(|(_, x)| x.name == "comment").map(|(i, x)| (i, Some(x.text.as_str()))).unwrap_or((stmt.children.len(), None));
-                assert!(argc >= 1); // due to msg_type from above
-
-                let values = stmt.children[1..argc - 1].iter().map(|x| self.parse_expr(x)).collect::<Result<Vec<_>,_>>()?;
-                if fields.len() != values.len() {
-                    return Err(Error::MessageTypeWrongNumberArgs { role: self.role.name.clone(), entity: self.entity.name.clone(), msg_type: msg_type.into(), block_type: s.into(), got: values.len(), expected: fields.len() });
-                }
-
-                let target_xml = &stmt.children[argc - 1];
-                let target = match target_xml.get(&["option"]) {
-                    Some(x) => match x.text.as_str() {
-                        "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
-                        x => x.into(),
-                    }
-                    None => self.parse_expr(target_xml)?,
-                };
-
-                Stmt::SendNetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), comment: comment.map(|x| x.to_owned()) }
+                let NetworkMessage { target, msg_type, values, comment } = self.parse_send_message_common(stmt, s)?;
+                Stmt::SendNetworkMessage { target, msg_type, values, comment }
             }
             "doRun" => {
                 let comment = self.check_children_get_comment(stmt, s, 2)?;
@@ -1257,8 +1268,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
                 Stmt::RunClosure { closure, args, comment }
             }
+            "write" => binary_op!(self, stmt, s => Stmt::Write : content, font_size),
             "doBroadcast" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: false } : msg_type),
             "doBroadcastAndWait" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: true } : msg_type),
+            "doSocketResponse" => unary_op!(self, stmt, s => Stmt::SendNetworkReply),
             "changeScale" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
             "setScale" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
             "doSayFor" => binary_op!(self, stmt, s => Stmt::Say : content, duration),
@@ -1614,6 +1627,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             args.push(self.parse_expr(input)?);
                         }
                         Expr::CallClosure { closure, args, comment }
+                    }
+
+                    "doSocketRequest" => {
+                        let NetworkMessage { target, msg_type, values, comment } = self.parse_send_message_common(expr, s)?;
+                        Expr::NetworkMessageReply { target: Box::new(target), msg_type, values, comment }
                     }
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
