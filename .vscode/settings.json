@@ -19,5 +19,8 @@
         "sigs",
         "vals",
         "xmlparser"
+    ],
+    "cSpell.words": [
+        "collab"
     ]
 }
