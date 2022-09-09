@@ -643,13 +643,24 @@ pub enum TextSplitMode {
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum VariadicInput {
+    /// A fixed list of inputs specified inline.
+    Fixed(Vec<Expr>),
+    /// Inputs are the contents of an expression, which is expected to evaluate to a list.
+    VarArgs(Box<Expr>),
+}
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Expr {
     Value(Value),
     Variable { var: VariableRef, info: BlockInfo },
 
-    Add { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Add { values: VariadicInput, info: BlockInfo },
+    Mul { values: VariadicInput, info: BlockInfo },
+    Min { values: VariadicInput, info: BlockInfo },
+    Max { values: VariadicInput, info: BlockInfo },
+
     Sub { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Mul { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     Div { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     /// Mathematical modulus (not remainder!). For instance, `-1 mod 7 == 6`.
     Mod { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
@@ -679,8 +690,9 @@ pub enum Expr {
     /// Get a list of all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
     MakeListRange { start: Box<Expr>, stop: Box<Expr>, info: BlockInfo },
 
-    MakeList { values: Vec<Expr>, info: BlockInfo },
-    MakeListConcat { lists: Vec<Expr>, info: BlockInfo },
+    MakeList { values: VariadicInput, info: BlockInfo },
+    MakeListConcat { lists: VariadicInput, info: BlockInfo },
+
     ListLength { value: Box<Expr>, info: BlockInfo },
     ListIsEmpty { value: Box<Expr>, info: BlockInfo },
     /// Given a list, returns a new (shallow copy) of all the items except the first.
@@ -696,7 +708,7 @@ pub enum Expr {
     ListLastIndex { list: Box<Expr>, info: BlockInfo },
     ListGetRandom { list: Box<Expr>, info: BlockInfo },
 
-    Strcat { values: Vec<Expr>, info: BlockInfo },
+    Strcat { values: VariadicInput, info: BlockInfo },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
     Strlen { value: Box<Expr>, info: BlockInfo },
 
@@ -781,6 +793,15 @@ impl From<Rpc> for Expr {
     }
 }
 
+macro_rules! mock_binary_op {
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $values:ident) => {{
+        let raw = binary_op!($self, $expr, $s => MockVariadic);
+        $res { $values: VariadicInput::Fixed(vec![raw.left, raw.right]), info: raw.info, $( $($field : $value),* )? }
+    }};
+    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
+        mock_binary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
+    }
+}
 macro_rules! binary_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $left:ident, $right:ident) => {{
         let info = $self.check_children_get_info($expr, $s, 2)?;
@@ -811,10 +832,17 @@ macro_rules! noarg_op {
 macro_rules! variadic_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
         let info = $self.check_children_get_info($expr, $s, 1)?;
-        let mut $val = vec![];
-        for item in $expr.children[0].children.iter() {
-            $val.push($self.parse_expr(item)?);
-        }
+        let child = &$expr.children[0];
+        let $val = match child.text.as_str() {
+            "list" => {
+                let mut res = vec![];
+                for item in child.children.iter() {
+                    res.push($self.parse_expr(item)?);
+                }
+                VariadicInput::Fixed(res)
+            }
+            _ => VariadicInput::VarArgs(Box::new($self.parse_expr(child)?)),
+        };
         $res { $val, info, $( $($field : $value),* )? }
     }};
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
@@ -829,6 +857,12 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
     } else {
         None
     }
+}
+
+struct MockVariadic {
+    left: Expr,
+    right: Expr,
+    info: BlockInfo,
 }
 
 struct NetworkMessage {
@@ -1347,7 +1381,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     }
     fn cnd_adjust_index(&self, index: Expr, condition: bool, delta: f64) -> Expr {
         match condition {
-            true => Expr::Add { left: index.into(), right: Box::new(delta.into()), info: BlockInfo::none() },
+            true => Expr::Add { values: VariadicInput::Fixed(vec![index.into(), delta.into()]), info: BlockInfo::none() },
             false => index,
         }
     }
@@ -1412,9 +1446,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Some(v) => v.value.as_str(),
                 };
                 Ok(match s {
-                    "reportSum" => binary_op!(self, expr, s => Expr::Add),
+                    "reportVariadicSum" => variadic_op!(self, expr, s => Expr::Add),
+                    "reportVariadicProduct" => variadic_op!(self, expr, s => Expr::Mul),
+                    "reportVariadicMin" => variadic_op!(self, expr, s => Expr::Min),
+                    "reportVariadicMax" => variadic_op!(self, expr, s => Expr::Max),
+
+                    "reportSum" => mock_binary_op!(self, expr, s => Expr::Add),
+                    "reportProduct" => mock_binary_op!(self, expr, s => Expr::Mul),
+                    "reportMin" => mock_binary_op!(self, expr, s => Expr::Min),
+                    "reportMax" => mock_binary_op!(self, expr, s => Expr::Max),
+
                     "reportDifference" => binary_op!(self, expr, s => Expr::Sub),
-                    "reportProduct" => binary_op!(self, expr, s => Expr::Mul),
                     "reportQuotient" => binary_op!(self, expr, s => Expr::Div),
                     "reportModulus" => binary_op!(self, expr, s => Expr::Mod),
                     "reportPower" => binary_op!(self, expr, s => Expr::Pow : base, power),

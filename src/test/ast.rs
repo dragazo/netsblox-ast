@@ -284,12 +284,19 @@ fn test_auto_fill_lambda_args() {
     for (i, expect_left, expect_right) in [(1, "6", "7"), (2, "6", ""), (3, "", "7"), (4, "", "")] {
         match &stmts[i] {
             Stmt::Assign { value, .. } => match value {
-                Expr::Add { left, right, .. } => {
-                    match &**left {
+                Expr::Add { values, .. } => {
+                    let (left, right) = match values {
+                        VariadicInput::Fixed(x) => {
+                            assert_eq!(x.len(), 2);
+                            (&x[0], &x[1])
+                        }
+                        x => panic!("{x:?}"),
+                    };
+                    match left {
                         Expr::Value(Value::String(x)) => assert_eq!(x, expect_left),
                         x => panic!("{x:?}"),
                     }
-                    match &**right {
+                    match right {
                         Expr::Value(Value::String(x)) => assert_eq!(x, expect_right),
                         x => panic!("{x:?}"),
                     }
@@ -307,12 +314,19 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
                                 Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
                                 x => panic!("{x:?}"),
                             }
@@ -334,12 +348,19 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
                                 Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
@@ -361,12 +382,19 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
                                 x => panic!("{x:?}"),
                             }
@@ -389,12 +417,19 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
                                 x => panic!("{x:?}"),
                             }
@@ -419,14 +454,28 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
-                                Expr::Add { left, right, .. } => {
-                                    match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
+                                Expr::Add { values, .. } => {
+                                    let (left, right) = match values {
+                                        VariadicInput::Fixed(x) => {
+                                            assert_eq!(x.len(), 2);
+                                            (&x[0], &x[1])
+                                        }
+                                        x => panic!("{x:?}"),
+                                    };
+                                    match left {
                                         Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
                                         x => panic!("{x:?}"),
                                     }
-                                    match &**right {
+                                    match right {
                                         Expr::Closure { params, stmts, .. } => {
                                             assert_eq!(params.len(), 2);
                                             assert_eq!(params[0].name, "%2");
@@ -434,12 +483,19 @@ fn test_auto_fill_lambda_args() {
                                             assert_eq!(stmts.len(), 1);
                                             match &stmts[0] {
                                                 Stmt::Return { value, .. } => match value {
-                                                    Expr::Add { left, right, .. } => {
-                                                        match &**left {
+                                                    Expr::Add { values, .. } => {
+                                                        let (left, right) = match values {
+                                                            VariadicInput::Fixed(x) => {
+                                                                assert_eq!(x.len(), 2);
+                                                                (&x[0], &x[1])
+                                                            }
+                                                            x => panic!("{x:?}"),
+                                                        };
+                                                        match left {
                                                             Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
                                                             x => panic!("{x:?}"),
                                                         }
-                                                        match &**right {
+                                                        match right {
                                                             Expr::Variable { var, .. } => assert_eq!(var.name, "%3"),
                                                             x => panic!("{x:?}"),
                                                         }
@@ -454,7 +510,7 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%4"),
                                 x => panic!("{x:?}"),
                             }
@@ -477,26 +533,47 @@ fn test_auto_fill_lambda_args() {
                 assert_eq!(stmts.len(), 1);
                 match &stmts[0] {
                     Stmt::Return { value, .. } => match value {
-                        Expr::Add { left, right, .. } => {
-                            match &**left {
-                                Expr::Add { left, right, .. } => {
-                                    match &**left {
+                        Expr::Add { values, .. } => {
+                            let (left, right) = match values {
+                                VariadicInput::Fixed(x) => {
+                                    assert_eq!(x.len(), 2);
+                                    (&x[0], &x[1])
+                                }
+                                x => panic!("{x:?}"),
+                            };
+                            match left {
+                                Expr::Add { values, .. } => {
+                                    let (left, right) = match values {
+                                        VariadicInput::Fixed(x) => {
+                                            assert_eq!(x.len(), 2);
+                                            (&x[0], &x[1])
+                                        }
+                                        x => panic!("{x:?}"),
+                                    };
+                                    match left {
                                         Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
                                         x => panic!("{x:?}"),
                                     }
-                                    match &**right {
+                                    match right {
                                         Expr::Closure { params, stmts, .. } => {
                                             assert_eq!(params.len(), 1);
                                             assert_eq!(params[0].name, "#1");
                                             assert_eq!(stmts.len(), 1);
                                             match &stmts[0] {
                                                 Stmt::Return { value, .. } => match value {
-                                                    Expr::Add { left, right, .. } => {
-                                                        match &**left {
+                                                    Expr::Add { values, .. } => {
+                                                        let (left, right) = match values {
+                                                            VariadicInput::Fixed(x) => {
+                                                                assert_eq!(x.len(), 2);
+                                                                (&x[0], &x[1])
+                                                            }
+                                                            x => panic!("{x:?}"),
+                                                        };
+                                                        match left {
                                                             Expr::Variable { var, .. } => assert_eq!(var.name, "#1"),
                                                             x => panic!("{x:?}"),
                                                         }
-                                                        match &**right {
+                                                        match right {
                                                             Expr::Value(Value::String(x)) => assert_eq!(x, ""),
                                                             x => panic!("{x:?}"),
                                                         }
@@ -511,7 +588,7 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             }
-                            match &**right {
+                            match right {
                                 Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
                                 x => panic!("{x:?}"),
                             }
