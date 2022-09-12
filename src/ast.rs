@@ -832,17 +832,7 @@ macro_rules! noarg_op {
 macro_rules! variadic_op {
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
         let info = $self.check_children_get_info($expr, $s, 1)?;
-        let child = &$expr.children[0];
-        let $val = match child.text.as_str() {
-            "list" => {
-                let mut res = vec![];
-                for item in child.children.iter() {
-                    res.push($self.parse_expr(item)?);
-                }
-                VariadicInput::Fixed(res)
-            }
-            _ => VariadicInput::VarArgs(Box::new($self.parse_expr(child)?)),
-        };
+        let $val = $self.parse_varargs(&$expr.children[0])?;
         $res { $val, info, $( $($field : $value),* )? }
     }};
     ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
@@ -1384,6 +1374,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             true => Expr::Add { values: VariadicInput::Fixed(vec![index.into(), delta.into()]), info: BlockInfo::none() },
             false => index,
         }
+    }
+    fn parse_varargs(&mut self, varargs_root: &Xml) -> Result<VariadicInput, Error> {
+        Ok(match varargs_root.name.as_str() {
+            "list" => {
+                let mut res = vec![];
+                for item in varargs_root.children.iter() {
+                    res.push(self.parse_expr(item)?);
+                }
+                VariadicInput::Fixed(res)
+            }
+            _ => VariadicInput::VarArgs(Box::new(self.parse_expr(varargs_root)?)),
+        })
     }
     fn parse_expr(&mut self, expr: &Xml) -> Result<Expr, Error> {
         let parse_bool = |val: &str| -> Result<Expr, Error> {
