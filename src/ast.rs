@@ -668,6 +668,8 @@ pub enum Expr {
     Pow { base: Box<Expr>, power: Box<Expr>, info: BlockInfo },
     Log { value: Box<Expr>, base: Box<Expr>, info: BlockInfo },
 
+    Atan2 { y: Box<Expr>, x: Box<Expr>, info: BlockInfo },
+
     /// Short-circuiting logical `or`.
     And { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     /// Short-circuiting logical `and`.
@@ -680,8 +682,11 @@ pub enum Expr {
     /// Otherwise returns `false`.
     Identical { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     Eq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Neq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     Less { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    LessEq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
     Greater { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    GreaterEq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
 
     /// Get a random number between `a` and `b` (inclusive).
     /// There are no ordering guarantees (swapping `a` and `b` is equivalent).
@@ -694,6 +699,19 @@ pub enum Expr {
     MakeListConcat { lists: VariadicInput, info: BlockInfo },
 
     ListLength { value: Box<Expr>, info: BlockInfo },
+    ListRank { value: Box<Expr>, info: BlockInfo },
+    ListDims { value: Box<Expr>, info: BlockInfo },
+    ListFlatten { value: Box<Expr>, info: BlockInfo },
+    ListColumns { value: Box<Expr>, info: BlockInfo },
+    ListRev { value: Box<Expr>, info: BlockInfo },
+
+    ListLines { value: Box<Expr>, info: BlockInfo },
+    ListCsv { value: Box<Expr>, info: BlockInfo },
+    ListJson { value: Box<Expr>, info: BlockInfo },
+
+    ListReshape { value: Box<Expr>, dims: VariadicInput, info: BlockInfo },
+    ListCombinations { sources: VariadicInput, info: BlockInfo },
+
     ListIsEmpty { value: Box<Expr>, info: BlockInfo },
     /// Given a list, returns a new (shallow copy) of all the items except the first.
     /// If the list is empty, an empty list is returned.
@@ -1462,14 +1480,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportQuotient" => binary_op!(self, expr, s => Expr::Div),
                     "reportModulus" => binary_op!(self, expr, s => Expr::Mod),
                     "reportPower" => binary_op!(self, expr, s => Expr::Pow : base, power),
+                    "reportAtan2" => binary_op!(self, expr, s => Expr::Atan2 : y, x),
 
                     "reportAnd" => binary_op!(self, expr, s => Expr::And),
                     "reportOr" => binary_op!(self, expr, s => Expr::Or),
 
                     "reportIsIdentical" => binary_op!(self, expr, s => Expr::Identical),
                     "reportEquals" => binary_op!(self, expr, s => Expr::Eq),
+                    "reportNotEquals" => binary_op!(self, expr, s => Expr::Neq),
                     "reportLessThan" => binary_op!(self, expr, s => Expr::Less),
+                    "reportLessThanOrEquals" => binary_op!(self, expr, s => Expr::LessEq),
                     "reportGreaterThan" => binary_op!(self, expr, s => Expr::Greater),
+                    "reportGreaterThanOrEquals" => binary_op!(self, expr, s => Expr::GreaterEq),
 
                     "reportRandom" => binary_op!(self, expr, s => Expr::Random : a, b),
                     "reportNumbers" => binary_op!(self, expr, s => Expr::MakeListRange : start, stop),
@@ -1533,6 +1555,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportJoinWords" => variadic_op!(self, expr, s => Expr::Strcat),
                     "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::MakeListConcat : lists),
                     "reportNewList" => variadic_op!(self, expr, s => Expr::MakeList),
+                    "reportCrossproduct" => variadic_op!(self, expr, s => Expr::ListCombinations : sources),
 
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
                         Some(v) if v.text == "true" => true.into(),
@@ -1571,6 +1594,32 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
                     }
+                    "reportListAttribute" => {
+                        let info = self.check_children_get_info(expr, s, 2)?;
+                        let func = self.grab_option(s, &expr.children[0])?;
+                        let value = Box::new(self.parse_expr(&expr.children[1])?);
+                        match func {
+                            "length" => Expr::ListLength { value, info },
+                            "rank" => Expr::ListRank { value, info },
+                            "dimensions" => Expr::ListDims { value, info },
+                            "flatten" => Expr::ListFlatten { value, info },
+                            "columns" => Expr::ListColumns { value, info },
+                            "reverse" => Expr::ListRev { value, info },
+
+                            "lines" => Expr::ListLines { value, info },
+                            "csv" => Expr::ListCsv { value, info },
+                            "json" => Expr::ListJson { value, info },
+
+                            _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } }),
+                        }
+                    }
+                    "reportReshape" => {
+                        let info = self.check_children_get_info(expr, s, 2)?;
+                        let value = Box::new(self.parse_expr(&expr.children[0])?);
+                        let dims = self.parse_varargs(&expr.children[1])?;
+                        Expr::ListReshape { value, dims, info }
+                    }
+
                     "reportIfElse" => {
                         let info = self.check_children_get_info(expr, s, 3)?;
                         let condition = Box::new(self.parse_expr(&expr.children[0])?);
