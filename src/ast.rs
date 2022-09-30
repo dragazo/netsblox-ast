@@ -372,6 +372,12 @@ fn test_sym_tab() {
 }
 
 #[derive(Debug)]
+struct Syscall {
+    name: Expr,
+    args: VariadicInput,
+    info: BlockInfo,
+}
+#[derive(Debug)]
 struct Rpc {
     service: String,
     rpc: String,
@@ -585,6 +591,8 @@ pub enum Stmt {
     Ask { prompt: Expr, info: BlockInfo },
 
     ResetTimer { info: BlockInfo },
+
+    Syscall { name: Expr, args: VariadicInput, info: BlockInfo },
 }
 
 impl From<Rpc> for Stmt {
@@ -801,6 +809,9 @@ pub enum Expr {
     Combine { f: Box<Expr>, list: Box<Expr>, info: BlockInfo },
 
     NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)>, info: BlockInfo },
+
+    Syscall { name: Box<Expr>, args: VariadicInput, info: BlockInfo },
+    SyscallError { info: BlockInfo },
 }
 impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
 
@@ -1037,6 +1048,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
         }))
+    }
+    fn parse_syscall(&mut self, stmt: &Xml, block_type: &str) -> Result<Syscall, Error> {
+        let info = self.check_children_get_info(stmt, block_type, 2)?;
+        let name = self.parse_expr(&stmt.children[0])?;
+        let args = self.parse_varargs(&stmt.children[1])?;
+        Ok(Syscall { name, args, info })
     }
     fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
         if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
@@ -1326,6 +1343,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     args.push(self.parse_expr(arg)?);
                 }
                 Stmt::RunClosure { closure, args, info }
+            }
+            "nativeRunSyscall" => {
+                let info = self.parse_syscall(stmt, s)?;
+                Stmt::Syscall { name: info.name, args: info.args, info: info.info }
             }
             "write" => binary_op!(self, stmt, s => Stmt::Write : content, font_size),
             "doBroadcast" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: false } : msg_type),
@@ -1743,6 +1764,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(expr, s)?;
                         Expr::NetworkMessageReply { target: Box::new(target), msg_type, values, info }
                     }
+
+                    "nativeCallSyscall" => {
+                        let info = self.parse_syscall(expr, s)?;
+                        Expr::Syscall { name: Box::new(info.name), args: info.args, info: info.info }
+                    }
+                    "nativeSyscallError" => noarg_op!(self, expr, s => Expr::SyscallError),
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
