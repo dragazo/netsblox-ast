@@ -395,11 +395,11 @@ struct FnCall {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct BlockInfo {
     pub comment: Option<String>,
-    pub collab_id: Option<String>,
+    pub location: Option<String>,
 }
 impl BlockInfo {
     fn none() -> Self {
-        BlockInfo { comment: None, collab_id: None }
+        BlockInfo { comment: None, location: None }
     }
 }
 
@@ -920,8 +920,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         };
-        let collab_id = expr.attr("collabId").map(|x| x.value.clone());
-        Ok(BlockInfo { comment, collab_id })
+        let location = expr.attr("collabId").map(|x| x.value.clone());
+        Ok(BlockInfo { comment, location })
     }
     fn decl_local(&mut self, name: String, value: Value) -> Result<&VariableDef, Error> {
         let locals = &mut self.locals.last_mut().unwrap().0;
@@ -1042,8 +1042,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let var = self.decl_local(child.text.clone(), 0f64.into())?.ref_at(VarLocation::Local);
                     fields.push(var);
                 }
-                let collab_id = stmt.attr("collabId").map(|x| x.value.clone());
-                Hat::NetworkMessage { msg_type, fields, info: BlockInfo { comment, collab_id } }
+                let location = stmt.attr("collabId").map(|x| x.value.clone());
+                Hat::NetworkMessage { msg_type, fields, info: BlockInfo { comment, location } }
             }
             x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
@@ -1125,8 +1125,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let comment = comment.map(|x| x.to_owned());
-        let collab_id = stmt.attr("collabId").map(|x| x.value.clone());
-        Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), info: BlockInfo { comment, collab_id } })
+        let location = stmt.attr("collabId").map(|x| x.value.clone());
+        Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values).collect(), info: BlockInfo { comment, location } })
     }
     fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Error> {
         let s = match stmt.attr("s") {
