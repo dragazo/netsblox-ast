@@ -492,113 +492,124 @@ pub struct Script {
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub enum Hat {
-    OnFlag { info: BlockInfo },
-    OnKey { key: String, info: BlockInfo },
-    MouseDown { info: BlockInfo },
-    MouseUp { info: BlockInfo },
-    MouseEnter { info: BlockInfo },
-    MouseLeave { info: BlockInfo },
-    ScrollUp { info: BlockInfo },
-    ScrollDown { info: BlockInfo },
-    Dropped { info: BlockInfo },
-    Stopped { info: BlockInfo },
-    When { condition: Expr, info: BlockInfo },
-    LocalMessage { msg_type: String, info: BlockInfo },
-    NetworkMessage { msg_type: String, fields: Vec<VariableRef>, info: BlockInfo },
+pub struct Hat {
+    pub kind: HatKind,
+    pub info: BlockInfo,
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub enum Stmt {
-    DeclareLocals { vars: Vec<VariableDef>, info: BlockInfo },
-    Assign { var: VariableRef, value: Expr, info: BlockInfo },
-    AddAssign { var: VariableRef, value: Expr, info: BlockInfo },
+pub enum HatKind {
+    OnFlag,
+    OnKey { key: String },
+    MouseDown,
+    MouseUp,
+    MouseEnter,
+    MouseLeave,
+    ScrollUp,
+    ScrollDown,
+    Dropped,
+    Stopped,
+    When { condition: Expr },
+    LocalMessage { msg_type: String },
+    NetworkMessage { msg_type: String, fields: Vec<VariableRef> },
+}
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct Stmt {
+    pub kind: StmtKind,
+    pub info: BlockInfo,
+}
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum StmtKind {
+    DeclareLocals { vars: Vec<VariableDef> },
+    Assign { var: VariableRef, value: Expr },
+    AddAssign { var: VariableRef, value: Expr },
 
-    Warp { stmts: Vec<Stmt>, info: BlockInfo },
+    Warp { stmts: Vec<Stmt> },
 
-    InfLoop { stmts: Vec<Stmt>, info: BlockInfo },
-    ForeachLoop { var: VariableRef, items: Expr, stmts: Vec<Stmt>, info: BlockInfo },
-    ForLoop { var: VariableRef, start: Expr, stop: Expr, stmts: Vec<Stmt>, info: BlockInfo },
-    UntilLoop { condition: Expr, stmts: Vec<Stmt>, info: BlockInfo },
-    Repeat { times: Expr, stmts: Vec<Stmt>, info: BlockInfo },
+    InfLoop { stmts: Vec<Stmt> },
+    ForeachLoop { var: VariableRef, items: Expr, stmts: Vec<Stmt> },
+    ForLoop { var: VariableRef, start: Expr, stop: Expr, stmts: Vec<Stmt> },
+    UntilLoop { condition: Expr, stmts: Vec<Stmt> },
+    Repeat { times: Expr, stmts: Vec<Stmt> },
 
-    If { condition: Expr, then: Vec<Stmt>, info: BlockInfo },
-    IfElse { condition: Expr, then: Vec<Stmt>, otherwise: Vec<Stmt>, info: BlockInfo },
+    If { condition: Expr, then: Vec<Stmt> },
+    IfElse { condition: Expr, then: Vec<Stmt>, otherwise: Vec<Stmt> },
 
-    ListInsert { list: Expr, value: Expr, index: Expr, info: BlockInfo },
-    ListInsertLast { list: Expr, value: Expr, info: BlockInfo },
-    ListInsertRandom { list: Expr, value: Expr, info: BlockInfo },
+    ListInsert { list: Expr, value: Expr, index: Expr },
+    ListInsertLast { list: Expr, value: Expr },
+    ListInsertRandom { list: Expr, value: Expr },
 
-    ListRemove { list: Expr, index: Expr, info: BlockInfo },
-    ListRemoveLast { list: Expr, info: BlockInfo },
-    ListRemoveAll { list: Expr, info: BlockInfo },
+    ListRemove { list: Expr, index: Expr },
+    ListRemoveLast { list: Expr },
+    ListRemoveAll { list: Expr },
 
-    ListAssign { list: Expr, value: Expr, index: Expr, info: BlockInfo },
-    ListAssignLast { list: Expr, value: Expr, info: BlockInfo },
-    ListAssignRandom { list: Expr, value: Expr, info: BlockInfo },
+    ListAssign { list: Expr, value: Expr, index: Expr },
+    ListAssignLast { list: Expr, value: Expr },
+    ListAssignRandom { list: Expr, value: Expr },
 
-    Return { value: Expr, info: BlockInfo },
+    Return { value: Expr },
 
-    Sleep { seconds: Expr, info: BlockInfo },
-    WaitUntil { condition: Expr, info: BlockInfo },
+    Sleep { seconds: Expr },
+    WaitUntil { condition: Expr },
 
-    SwitchCostume { costume: Option<Expr>, info: BlockInfo },
+    SwitchCostume { costume: Option<Expr> },
 
-    Forward { distance: Expr, info: BlockInfo },
-    ChangePos { dx: Option<Expr>, dy: Option<Expr>, info: BlockInfo },
-    SetPos { x: Option<Expr>, y: Option<Expr>, info: BlockInfo },
+    Forward { distance: Expr },
+    ChangePos { dx: Option<Expr>, dy: Option<Expr> },
+    SetPos { x: Option<Expr>, y: Option<Expr> },
     /// Similar to `SetPos` except that the target can be either a list of `[x, y]` coordinates or a entity.
-    Goto { target: Expr, info: BlockInfo },
+    Goto { target: Expr },
 
-    TurnRight { angle: Expr, info: BlockInfo },
-    TurnLeft { angle: Expr, info: BlockInfo },
-    SetHeading { value: Expr, info: BlockInfo },
+    TurnRight { angle: Expr },
+    TurnLeft { angle: Expr },
+    SetHeading { value: Expr },
 
-    BounceOffEdge { info: BlockInfo },
+    BounceOffEdge,
 
-    PenDown { info: BlockInfo },
-    PenUp { info: BlockInfo },
-    PenClear { info: BlockInfo },
-    Stamp { info: BlockInfo },
-    Write { content: Expr, font_size: Expr, info: BlockInfo },
-    SetPenColor { color: (u8, u8, u8), info: BlockInfo },
+    PenDown,
+    PenUp,
+    PenClear,
+    Stamp,
+    Write { content: Expr, font_size: Expr },
+    SetPenColor { color: (u8, u8, u8) },
 
-    Say { content: Expr, duration: Option<Expr>, info: BlockInfo },
-    Think { content: Expr, duration: Option<Expr>, info: BlockInfo },
+    Say { content: Expr, duration: Option<Expr> },
+    Think { content: Expr, duration: Option<Expr> },
 
-    SetVisible { value: bool, info: BlockInfo },
-    ChangeScalePercent { amount: Expr, info: BlockInfo },
-    SetScalePercent { value: Expr, info: BlockInfo },
+    SetVisible { value: bool },
+    ChangeScalePercent { amount: Expr },
+    SetScalePercent { value: Expr },
 
-    ChangePenSize { amount: Expr, info: BlockInfo },
-    SetPenSize { value: Expr, info: BlockInfo },
+    ChangePenSize { amount: Expr },
+    SetPenSize { value: Expr },
 
-    RunRpc { service: String, rpc: String, args: Vec<(String, Expr)>, info: BlockInfo },
-    RunFn { function: FnRef, args: Vec<Expr>, info: BlockInfo },
-    RunClosure { closure: Expr, args: Vec<Expr>, info: BlockInfo },
+    RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
+    RunFn { function: FnRef, args: Vec<Expr> },
+    RunClosure { closure: Expr, args: Vec<Expr> },
 
     /// Sends a message to local entities (not over the network).
     /// If `target` is `None`, this should broadcast to all entities.
     /// Otherwise `target` is either a single target or a list of targets to send to.
     /// The `wait` flag determines if the broadcast should be blocking (wait for receivers to terminate).
-    SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool, info: BlockInfo },
+    SendLocalMessage { target: Option<Expr>, msg_type: Expr, wait: bool },
     /// Sends a message over the network to the specified targets.
     /// `target` may be a single target or a list of targets.
-    SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)>, info: BlockInfo },
+    SendNetworkMessage { target: Expr, msg_type: String, values: Vec<(String, Expr)> },
     /// Sends a reply from a received message that was blocking (sender's `wait` flag was `true`).
-    SendNetworkReply { value: Expr, info: BlockInfo },
+    SendNetworkReply { value: Expr },
 
-    Ask { prompt: Expr, info: BlockInfo },
+    Ask { prompt: Expr },
 
-    ResetTimer { info: BlockInfo },
+    ResetTimer,
 
-    Syscall { name: Expr, args: VariadicInput, info: BlockInfo },
+    Syscall { name: Expr, args: VariadicInput },
 }
-
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
         let Rpc { service, rpc, args, info } = rpc;
-        Stmt::RunRpc { service, rpc, args, info }
+        Stmt { kind: StmtKind::RunRpc { service, rpc, args }, info }
     }
 }
 
@@ -659,213 +670,176 @@ pub enum VariadicInput {
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub enum Expr {
+pub struct Expr {
+    pub kind: ExprKind,
+    pub info: BlockInfo,
+}
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum ExprKind {
     Value(Value),
-    Variable { var: VariableRef, info: BlockInfo },
+    Variable { var: VariableRef },
 
-    Add { values: VariadicInput, info: BlockInfo },
-    Mul { values: VariadicInput, info: BlockInfo },
-    Min { values: VariadicInput, info: BlockInfo },
-    Max { values: VariadicInput, info: BlockInfo },
+    Add { values: VariadicInput },
+    Mul { values: VariadicInput },
+    Min { values: VariadicInput },
+    Max { values: VariadicInput },
 
-    Sub { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Div { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Sub { left: Box<Expr>, right: Box<Expr> },
+    Div { left: Box<Expr>, right: Box<Expr> },
     /// Mathematical modulus (not remainder!). For instance, `-1 mod 7 == 6`.
-    Mod { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Mod { left: Box<Expr>, right: Box<Expr> },
 
-    Pow { base: Box<Expr>, power: Box<Expr>, info: BlockInfo },
-    Log { value: Box<Expr>, base: Box<Expr>, info: BlockInfo },
+    Pow { base: Box<Expr>, power: Box<Expr> },
+    Log { value: Box<Expr>, base: Box<Expr> },
 
-    Atan2 { y: Box<Expr>, x: Box<Expr>, info: BlockInfo },
+    Atan2 { y: Box<Expr>, x: Box<Expr> },
 
     /// Short-circuiting logical `or`.
-    And { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    And { left: Box<Expr>, right: Box<Expr> },
     /// Short-circuiting logical `and`.
-    Or { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Or { left: Box<Expr>, right: Box<Expr> },
     /// Lazily-evaluated conditional expression. Returns `then` if `condition` is true, otherwise `otherwise`.
-    Conditional { condition: Box<Expr>, then: Box<Expr>, otherwise: Box<Expr>, info: BlockInfo },
+    Conditional { condition: Box<Expr>, then: Box<Expr>, otherwise: Box<Expr> },
 
     /// If both values are lists, returns true of they are references to the same list.
     /// If both values are non-lists, returns true if the values are equal.
     /// Otherwise returns `false`.
-    Identical { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Eq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Neq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Less { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    LessEq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    Greater { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
-    GreaterEq { left: Box<Expr>, right: Box<Expr>, info: BlockInfo },
+    Identical { left: Box<Expr>, right: Box<Expr> },
+    Eq { left: Box<Expr>, right: Box<Expr> },
+    Neq { left: Box<Expr>, right: Box<Expr> },
+    Less { left: Box<Expr>, right: Box<Expr> },
+    LessEq { left: Box<Expr>, right: Box<Expr> },
+    Greater { left: Box<Expr>, right: Box<Expr> },
+    GreaterEq { left: Box<Expr>, right: Box<Expr> },
 
     /// Get a random number between `a` and `b` (inclusive).
     /// There are no ordering guarantees (swapping `a` and `b` is equivalent).
     /// If both values are integers, the result is an integer, otherwise continuous floats are returned.
-    Random { a: Box<Expr>, b: Box<Expr>, info: BlockInfo },
+    Random { a: Box<Expr>, b: Box<Expr> },
     /// Get a list of all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
-    MakeListRange { start: Box<Expr>, stop: Box<Expr>, info: BlockInfo },
+    MakeListRange { start: Box<Expr>, stop: Box<Expr> },
 
-    MakeList { values: VariadicInput, info: BlockInfo },
-    MakeListConcat { lists: VariadicInput, info: BlockInfo },
+    MakeList { values: VariadicInput },
+    MakeListConcat { lists: VariadicInput },
 
-    ListLength { value: Box<Expr>, info: BlockInfo },
-    ListRank { value: Box<Expr>, info: BlockInfo },
-    ListDims { value: Box<Expr>, info: BlockInfo },
-    ListFlatten { value: Box<Expr>, info: BlockInfo },
-    ListColumns { value: Box<Expr>, info: BlockInfo },
-    ListRev { value: Box<Expr>, info: BlockInfo },
+    ListLength { value: Box<Expr> },
+    ListRank { value: Box<Expr> },
+    ListDims { value: Box<Expr> },
+    ListFlatten { value: Box<Expr> },
+    ListColumns { value: Box<Expr> },
+    ListRev { value: Box<Expr> },
 
-    ListLines { value: Box<Expr>, info: BlockInfo },
-    ListCsv { value: Box<Expr>, info: BlockInfo },
-    ListJson { value: Box<Expr>, info: BlockInfo },
+    ListLines { value: Box<Expr> },
+    ListCsv { value: Box<Expr> },
+    ListJson { value: Box<Expr> },
 
-    ListReshape { value: Box<Expr>, dims: VariadicInput, info: BlockInfo },
-    ListCombinations { sources: VariadicInput, info: BlockInfo },
+    ListReshape { value: Box<Expr>, dims: VariadicInput },
+    ListCombinations { sources: VariadicInput },
 
-    ListIsEmpty { value: Box<Expr>, info: BlockInfo },
+    ListIsEmpty { value: Box<Expr> },
     /// Given a list, returns a new (shallow copy) of all the items except the first.
     /// If the list is empty, an empty list is returned.
-    ListCdr { value: Box<Expr>, info: BlockInfo },
+    ListCdr { value: Box<Expr> },
     /// Given a value and a list, returns a new list (shallow copy) with the item prepended.
-    ListCons { item: Box<Expr>, list: Box<Expr>, info: BlockInfo },
+    ListCons { item: Box<Expr>, list: Box<Expr> },
     /// Returns the (1-based) index of value in the list, or 0 if not present.
-    ListFind { list: Box<Expr>, value: Box<Expr>, info: BlockInfo },
-    ListContains { list: Box<Expr>, value: Box<Expr>, info: BlockInfo },
+    ListFind { list: Box<Expr>, value: Box<Expr> },
+    ListContains { list: Box<Expr>, value: Box<Expr> },
 
-    ListGet { list: Box<Expr>, index: Box<Expr>, info: BlockInfo },
-    ListLastIndex { list: Box<Expr>, info: BlockInfo },
-    ListGetRandom { list: Box<Expr>, info: BlockInfo },
+    ListGet { list: Box<Expr>, index: Box<Expr> },
+    ListLastIndex { list: Box<Expr> },
+    ListGetRandom { list: Box<Expr> },
 
-    Strcat { values: VariadicInput, info: BlockInfo },
+    Strcat { values: VariadicInput },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
-    Strlen { value: Box<Expr>, info: BlockInfo },
+    Strlen { value: Box<Expr> },
 
     /// Convert a unicode code point into a 1-character string.
-    UnicodeToChar { value: Box<Expr>, info: BlockInfo },
+    UnicodeToChar { value: Box<Expr> },
     /// Convert a 1-character string into its unicode code point.
-    CharToUnicode { value: Box<Expr>, info: BlockInfo },
+    CharToUnicode { value: Box<Expr> },
 
-    Not { value: Box<Expr>, info: BlockInfo },
-    Neg { value: Box<Expr>, info: BlockInfo },
-    Abs { value: Box<Expr>, info: BlockInfo },
-    Sqrt { value: Box<Expr>, info: BlockInfo },
+    Not { value: Box<Expr> },
+    Neg { value: Box<Expr> },
+    Abs { value: Box<Expr> },
+    Sqrt { value: Box<Expr> },
 
-    Floor { value: Box<Expr>, info: BlockInfo },
-    Ceil { value: Box<Expr>, info: BlockInfo },
-    Round { value: Box<Expr>, info: BlockInfo },
+    Floor { value: Box<Expr> },
+    Ceil { value: Box<Expr> },
+    Round { value: Box<Expr> },
 
-    Sin { value: Box<Expr>, info: BlockInfo },
-    Cos { value: Box<Expr>, info: BlockInfo },
-    Tan { value: Box<Expr>, info: BlockInfo },
+    Sin { value: Box<Expr> },
+    Cos { value: Box<Expr> },
+    Tan { value: Box<Expr> },
 
-    Asin { value: Box<Expr>, info: BlockInfo },
-    Acos { value: Box<Expr>, info: BlockInfo },
-    Atan { value: Box<Expr>, info: BlockInfo },
+    Asin { value: Box<Expr> },
+    Acos { value: Box<Expr> },
+    Atan { value: Box<Expr> },
 
-    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)>, info: BlockInfo },
-    CallFn { function: FnRef, args: Vec<Expr>, info: BlockInfo },
+    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
+    CallFn { function: FnRef, args: Vec<Expr> },
 
-    StageWidth { info: BlockInfo },
-    StageHeight { info: BlockInfo },
+    StageWidth,
+    StageHeight,
 
-    MouseX { info: BlockInfo },
-    MouseY { info: BlockInfo },
+    MouseX,
+    MouseY,
 
-    Latitude { info: BlockInfo },
-    Longitude { info: BlockInfo },
+    Latitude,
+    Longitude,
 
-    YPos { info: BlockInfo },
-    XPos { info: BlockInfo },
-    Heading { info: BlockInfo },
+    YPos,
+    XPos,
+    Heading,
 
-    PenDown { info: BlockInfo },
+    PenDown,
 
-    Scale { info: BlockInfo },
-    IsVisible { info: BlockInfo },
+    Scale,
+    IsVisible,
 
-    This { info: BlockInfo },
-    Entity { name: String, trans_name: String, info: BlockInfo },
+    This,
+    Entity { name: String, trans_name: String },
 
-    ImageOfEntity { entity: Box<Expr>, info: BlockInfo },
-    ImageOfDrawings { info: BlockInfo },
+    ImageOfEntity { entity: Box<Expr> },
+    ImageOfDrawings,
 
-    IsTouchingEntity { entity: Box<Expr>, info: BlockInfo },
-    IsTouchingMouse { info: BlockInfo },
-    IsTouchingEdge { info: BlockInfo },
-    IsTouchingDrawings { info: BlockInfo },
+    IsTouchingEntity { entity: Box<Expr> },
+    IsTouchingMouse,
+    IsTouchingEdge,
+    IsTouchingDrawings,
 
-    RpcError { info: BlockInfo },
+    RpcError,
 
-    Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt>, info: BlockInfo },
-    CallClosure { closure: Box<Expr>, args: Vec<Expr>, info: BlockInfo },
+    Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt> },
+    CallClosure { closure: Box<Expr>, args: Vec<Expr> },
 
-    TextSplit { text: Box<Expr>, mode: TextSplitMode, info: BlockInfo },
+    TextSplit { text: Box<Expr>, mode: TextSplitMode },
 
-    Answer { info: BlockInfo },
+    Answer,
 
-    Timer { info: BlockInfo },
+    Timer,
 
-    Map { f: Box<Expr>, list: Box<Expr>, info: BlockInfo },
-    Keep { f: Box<Expr>, list: Box<Expr>, info: BlockInfo },
-    FindFirst { f: Box<Expr>, list: Box<Expr>, info: BlockInfo },
-    Combine { f: Box<Expr>, list: Box<Expr>, info: BlockInfo },
+    Map { f: Box<Expr>, list: Box<Expr> },
+    Keep { f: Box<Expr>, list: Box<Expr> },
+    FindFirst { f: Box<Expr>, list: Box<Expr> },
+    Combine { f: Box<Expr>, list: Box<Expr> },
 
-    NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)>, info: BlockInfo },
+    NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)> },
 
-    Syscall { name: Box<Expr>, args: VariadicInput, info: BlockInfo },
-    SyscallError { info: BlockInfo },
+    Syscall { name: Box<Expr>, args: VariadicInput },
+    SyscallError,
 }
-impl<T: Into<Value>> From<T> for Expr { fn from(v: T) -> Expr { Expr::Value(v.into()) } }
+impl<T: Into<Value>> From<T> for Expr {
+    fn from(v: T) -> Expr {
+        Expr { kind: ExprKind::Value(v.into()), info: BlockInfo::none() }
+    }
+}
 
 impl From<Rpc> for Expr {
     fn from(rpc: Rpc) -> Expr {
         let Rpc { service, rpc, args, info } = rpc;
-        Expr::CallRpc { service, rpc, args, info }
-    }
-}
-
-macro_rules! mock_binary_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $values:ident) => {{
-        let raw = binary_op!($self, $expr, $s => MockVariadic);
-        $res { $values: VariadicInput::Fixed(vec![raw.left, raw.right]), info: raw.info, $( $($field : $value),* )? }
-    }};
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
-        mock_binary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
-    }
-}
-macro_rules! binary_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $left:ident, $right:ident) => {{
-        let info = $self.check_children_get_info($expr, $s, 2)?;
-        let $left = $self.parse_expr(&$expr.children[0])?.into();
-        let $right = $self.parse_expr(&$expr.children[1])?.into();
-        $res { $left, $right, info, $( $($field : $value),* )? }
-    }};
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
-        binary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : left, right }
-    }
-}
-macro_rules! unary_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
-        let info = $self.check_children_get_info($expr, $s, 1)?;
-        let $val = $self.parse_expr(&$expr.children[0])?.into();
-        $res { $val, info, $( $($field : $value),* )? }
-    }};
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? ) => {
-        unary_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : value }
-    }
-}
-macro_rules! noarg_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {{
-        let info = $self.check_children_get_info($expr, $s, 0)?;
-        $res { info, $( $($field : $value),* )? }
-    }}
-}
-macro_rules! variadic_op {
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })? : $val:ident) => {{
-        let info = $self.check_children_get_info($expr, $s, 1)?;
-        let $val = $self.parse_varargs(&$expr.children[0])?;
-        $res { $val, info, $( $($field : $value),* )? }
-    }};
-    ($self:ident, $expr:ident, $s:expr => $res:path $({ $($field:ident : $value:expr),*$(,)? })?) => {
-        variadic_op! { $self, $expr, $s => $res $({ $($field : $value),* })? : values }
+        Expr { kind: ExprKind::CallRpc { service, rpc, args }, info }
     }
 }
 
@@ -876,12 +850,6 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
     } else {
         None
     }
-}
-
-struct MockVariadic {
-    left: Expr,
-    right: Expr,
-    info: BlockInfo,
 }
 
 struct NetworkMessage {
@@ -951,10 +919,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 true => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                 false => self.parse_expr(child)?,
             },
-            "myself" => Expr::This { info },
+            "myself" => Expr { kind: ExprKind::This, info },
             name => match self.role.entities.get(name) {
                 None => return Err(Error::UnknownEntity { role: self.role.name.clone(), entity: self.entity.name.clone(), unknown: name.into() }),
-                Some(entity) => Expr::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone(), info },
+                Some(entity) => Expr { kind: ExprKind::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone() }, info },
             }
         })
     }
@@ -972,7 +940,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 "block" => stmts.push(self.parse_block(stmt)?),
                 "custom-block" => {
                     let FnCall { function, args, info } = self.parse_fn_call(stmt)?;
-                    stmts.push(Stmt::RunFn { function, args, info });
+                    stmts.push(Stmt { kind: StmtKind::RunFn { function, args }, info });
                 }
                 x => return Err(Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } }),
             }
@@ -987,29 +955,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok(Some(match s {
             "receiveGo" => {
                 let info = self.check_children_get_info(stmt, s, 0)?;
-                Hat::OnFlag { info }
+                Hat { kind: HatKind::OnFlag, info }
             }
             "receiveCondition" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
-                Hat::When { condition, info }
+                Hat { kind: HatKind::When { condition }, info }
             }
             "receiveKey" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let key = self.grab_option(s, &stmt.children[0])?;
-                Hat::OnKey { key: key.into(), info }
+                Hat { kind: HatKind::OnKey { key: key.into() }, info }
             }
             "receiveInteraction" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 match self.grab_option(s, &stmt.children[0])? {
-                    "pressed" => Hat::MouseDown { info },
-                    "clicked" => Hat::MouseUp { info },
-                    "mouse-entered" => Hat::MouseEnter { info },
-                    "mouse-departed" => Hat::MouseLeave { info },
-                    "scrolled-up" => Hat::ScrollUp { info },
-                    "scrolled-down" => Hat::ScrollDown { info },
-                    "dropped" => Hat::Dropped { info },
-                    "stopped" => Hat::Stopped { info },
+                    "pressed" => Hat { kind: HatKind::MouseDown, info },
+                    "clicked" => Hat { kind: HatKind::MouseUp, info },
+                    "mouse-entered" => Hat { kind: HatKind::MouseEnter, info },
+                    "mouse-departed" => Hat { kind: HatKind::MouseLeave, info },
+                    "scrolled-up" => Hat { kind: HatKind::ScrollUp, info },
+                    "scrolled-down" => Hat { kind: HatKind::ScrollDown, info },
+                    "dropped" => Hat { kind: HatKind::Dropped, info },
+                    "stopped" => Hat { kind: HatKind::Stopped, info },
                     x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                 }
             }
@@ -1021,7 +989,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                     x => x.to_owned(),
                 };
-                Hat::LocalMessage { msg_type, info }
+                Hat { kind: HatKind::LocalMessage { msg_type }, info }
             }
             "receiveSocketMessage" => {
                 if stmt.children.is_empty() { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: 1, got: 0 } }) }
@@ -1043,7 +1011,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     fields.push(var);
                 }
                 let location = stmt.attr("collabId").map(|x| x.value.clone());
-                Hat::NetworkMessage { msg_type, fields, info: BlockInfo { comment, location } }
+                Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info: BlockInfo { comment, location } }
             }
             x if x.starts_with("receive") => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() }),
             _ => return Ok(None),
@@ -1140,7 +1108,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for var in stmt.children[0].children.iter() {
                     vars.push(self.decl_local(var.text.clone(), 0f64.into())?.clone());
                 }
-                Stmt::DeclareLocals { vars, info }
+                Stmt { kind: StmtKind::DeclareLocals { vars }, info }
             }
             "doSetVar" | "doChangeVar" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
@@ -1150,8 +1118,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
                 match s {
-                    "doSetVar" => Stmt::Assign { var, value, info },
-                    "doChangeVar" => Stmt::AddAssign { var, value, info },
+                    "doSetVar" => Stmt { kind: StmtKind::Assign { var, value }, info },
+                    "doChangeVar" => Stmt { kind: StmtKind::AddAssign { var, value }, info },
                     _ => unreachable!(),
                 }
             }
@@ -1167,7 +1135,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                Stmt::ForLoop { var, start, stop, stmts, info }
+                Stmt { kind: StmtKind::ForLoop { var, start, stop, stmts }, info }
             }
             "doForEach" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
@@ -1180,49 +1148,49 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                Stmt::ForeachLoop { var, items, stmts, info }
+                Stmt { kind: StmtKind::ForeachLoop { var, items, stmts }, info }
             }
             "doRepeat" | "doUntil" | "doIf" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let expr = self.parse_expr(&stmt.children[0])?;
                 let stmts = self.parse(&stmt.children[1])?.stmts;
                 match s {
-                    "doRepeat" => Stmt::Repeat { times: expr, stmts, info },
-                    "doUntil" => Stmt::UntilLoop { condition: expr, stmts, info },
-                    "doIf" => Stmt::If { condition: expr, then: stmts, info },
+                    "doRepeat" => Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info },
+                    "doUntil" => Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info },
+                    "doIf" => Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info },
                     _ => unreachable!(),
                 }
             }
             "doForever" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Stmt::InfLoop { stmts, info }
+                Stmt { kind: StmtKind::InfLoop { stmts }, info }
             }
             "doIfElse" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
                 let then = self.parse(&stmt.children[1])?.stmts;
                 let otherwise = self.parse(&stmt.children[2])?.stmts;
-                Stmt::IfElse { condition, then, otherwise, info }
+                Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }
             }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Stmt::Warp { stmts, info }
+                Stmt { kind: StmtKind::Warp { stmts }, info }
             }
             "doDeleteFromList" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Stmt::ListRemoveLast { list, info },
-                        "all" => Stmt::ListRemoveAll { list, info },
+                        "last" => Stmt { kind: StmtKind::ListRemoveLast { list }, info },
+                        "all" => Stmt { kind: StmtKind::ListRemoveAll { list }, info },
                         "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                         x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
-                        Stmt::ListRemove { list, index, info }
+                        Stmt { kind: StmtKind::ListRemove { list, index }, info }
                     }
                 }
             }
@@ -1232,14 +1200,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[2])?;
                 match stmt.children[1].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Stmt::ListInsertLast { list, value, info },
-                        "random" | "any" => Stmt::ListInsertRandom { list, value, info },
+                        "last" => Stmt { kind: StmtKind::ListInsertLast { list, value }, info },
+                        "random" | "any" => Stmt { kind: StmtKind::ListInsertRandom { list, value }, info },
                         "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                         x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[1])?;
-                        Stmt::ListInsert { list, value, index, info }
+                        Stmt { kind: StmtKind::ListInsert { list, value, index }, info }
                     }
                 }
             }
@@ -1249,14 +1217,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Stmt::ListAssignLast { list, value, info },
-                        "random" | "any" => Stmt::ListAssignRandom { list, value, info },
+                        "last" => Stmt { kind: StmtKind::ListAssignLast { list, value }, info },
+                        "random" | "any" => Stmt { kind: StmtKind::ListAssignRandom { list, value }, info },
                         "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                         x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
-                        Stmt::ListAssign { list, value, index, info }
+                        Stmt { kind: StmtKind::ListAssign { list, value, index }, info }
                     }
                 }
             }
@@ -1279,7 +1247,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                 };
 
-                Stmt::SwitchCostume { costume, info }
+                Stmt { kind: StmtKind::SwitchCostume { costume }, info }
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
@@ -1288,12 +1256,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let value = if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(s, child)?;
                     match opt {
-                        "random" => Expr::Random { a: Box::new(0f64.into()), b: Box::new(360f64.into()), info: BlockInfo::none() },
+                        "random" => Expr { kind: ExprKind::Random { a: Box::new(0f64.into()), b: Box::new(360f64.into()) }, info: BlockInfo::none() },
                         _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
                     }
                 } else { self.parse_expr(child)? };
 
-                Stmt::SetHeading { value, info }
+                Stmt { kind: StmtKind::SetHeading { value }, info }
             }
             "doGotoObject" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
@@ -1303,21 +1271,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let opt = self.grab_option(s, child)?;
                     match opt {
                         "random position" => {
-                            let half_width = Expr::Div { left: Box::new(Expr::StageWidth { info: BlockInfo::none() }), right: Box::new(2f64.into()), info: BlockInfo::none() };
-                            let half_height = Expr::Div { left: Box::new(Expr::StageHeight { info: BlockInfo::none() }), right: Box::new(2f64.into()), info: BlockInfo::none() };
-                            Stmt::SetPos {
-                                x: Some(Expr::Random { a: Box::new(Expr::Neg { value: Box::new(half_width.clone()), info: BlockInfo::none() }), b: Box::new(half_width), info: BlockInfo::none() }),
-                                y: Some(Expr::Random { a: Box::new(Expr::Neg { value: Box::new(half_height.clone()), info: BlockInfo::none() }), b: Box::new(half_height), info: BlockInfo::none() }),
-                                info
-                            }
+                            let half_width = Expr { kind: ExprKind::Div { left: Box::new(Expr { kind: ExprKind::StageWidth, info: BlockInfo::none() }), right: Box::new(2f64.into()) }, info: BlockInfo::none() };
+                            let half_height = Expr { kind: ExprKind::Div { left: Box::new(Expr { kind: ExprKind::StageHeight, info: BlockInfo::none() }), right: Box::new(2f64.into()) }, info: BlockInfo::none() };
+                            Stmt { kind: StmtKind::SetPos {
+                                x: Some(Expr { kind: ExprKind::Random { a: Box::new(Expr { kind: ExprKind::Neg { value: Box::new(half_width.clone()) }, info: BlockInfo::none() }), b: Box::new(half_width) }, info: BlockInfo::none() }),
+                                y: Some(Expr { kind: ExprKind::Random { a: Box::new(Expr { kind: ExprKind::Neg { value: Box::new(half_height.clone()) }, info: BlockInfo::none() }), b: Box::new(half_height) }, info: BlockInfo::none() }),
+                            }, info }
                         }
-                        "mouse-pointer" => Stmt::SetPos { x: Some(Expr::MouseX { info: BlockInfo::none() }), y: Some(Expr::MouseY { info: BlockInfo::none() }), info },
-                        "center" => Stmt::SetPos { x: Some(0f64.into()), y: Some(0f64.into()), info },
+                        "mouse-pointer" => Stmt { kind: StmtKind::SetPos { x: Some(Expr { kind: ExprKind::MouseX, info: BlockInfo::none() }), y: Some(Expr { kind: ExprKind::MouseY, info: BlockInfo::none() }) }, info },
+                        "center" => Stmt { kind: StmtKind::SetPos { x: Some(0f64.into()), y: Some(0f64.into()) }, info },
                         _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
                     }
                 }
                 else {
-                    Stmt::Goto { target: self.parse_expr(child)?, info }
+                    Stmt { kind: StmtKind::Goto { target: self.parse_expr(child)? }, info }
                 }
             }
             "setColor" => {
@@ -1329,11 +1296,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                     None => return Err(Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                 };
-                Stmt::SetPenColor { color, info }
+                Stmt { kind: StmtKind::SetPenColor { color }, info }
             }
             "doSocketMessage" => {
                 let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(stmt, s)?;
-                Stmt::SendNetworkMessage { target, msg_type, values, info }
+                Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }
             }
             "doRun" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
@@ -1342,46 +1309,46 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[1].children.iter() {
                     args.push(self.parse_expr(arg)?);
                 }
-                Stmt::RunClosure { closure, args, info }
+                Stmt { kind: StmtKind::RunClosure { closure, args }, info }
             }
             "nativeRunSyscall" => {
                 let info = self.parse_syscall(stmt, s)?;
-                Stmt::Syscall { name: info.name, args: info.args, info: info.info }
+                Stmt { kind: StmtKind::Syscall { name: info.name, args: info.args }, info: info.info }
             }
-            "write" => binary_op!(self, stmt, s => Stmt::Write : content, font_size),
-            "doBroadcast" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: false } : msg_type),
-            "doBroadcastAndWait" => unary_op!(self, stmt, s => Stmt::SendLocalMessage { target: None, wait: true } : msg_type),
-            "doSocketResponse" => unary_op!(self, stmt, s => Stmt::SendNetworkReply),
-            "changeScale" => unary_op!(self, stmt, s => Stmt::ChangeScalePercent : amount),
-            "setScale" => unary_op!(self, stmt, s => Stmt::SetScalePercent),
-            "doSayFor" => binary_op!(self, stmt, s => Stmt::Say : content, duration),
-            "doThinkFor" => binary_op!(self, stmt, s => Stmt::Think : content, duration),
-            "bubble" => unary_op!(self, stmt, s => Stmt::Say { duration: None } : content),
-            "doThink" => unary_op!(self, stmt, s => Stmt::Think { duration: None } : content),
-            "hide" => noarg_op!(self, stmt, s => Stmt::SetVisible { value: false }),
-            "show" => noarg_op!(self, stmt, s => Stmt::SetVisible { value: true }),
-            "doWaitUntil" => unary_op!(self, stmt, s => Stmt::WaitUntil : condition),
-            "changeSize" => unary_op!(self, stmt, s => Stmt::ChangePenSize : amount),
-            "setSize" => unary_op!(self, stmt, s => Stmt::SetPenSize),
-            "doAddToList" => binary_op!(self, stmt, s => Stmt::ListInsertLast : value, list),
-            "doReport" => unary_op!(self, stmt, s => Stmt::Return),
-            "doStamp" => noarg_op!(self, stmt, s => Stmt::Stamp),
-            "doWait" => unary_op!(self, stmt, s => Stmt::Sleep : seconds),
-            "forward" => unary_op!(self, stmt, s => Stmt::Forward : distance),
-            "turn" => unary_op!(self, stmt, s => Stmt::TurnRight : angle),
-            "turnLeft" => unary_op!(self, stmt, s => Stmt::TurnLeft : angle),
-            "setXPosition" => unary_op!(self, stmt, s => Stmt::SetPos { y: None } : x),
-            "setYPosition" => unary_op!(self, stmt, s => Stmt::SetPos { x: None } : y),
-            "changeXPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dy: None } : dx),
-            "changeYPosition" => unary_op!(self, stmt, s => Stmt::ChangePos { dx: None } : dy),
-            "gotoXY" => binary_op!(self, stmt, s => Stmt::SetPos : x, y),
-            "bounceOffEdge" => noarg_op!(self, stmt, s => Stmt::BounceOffEdge),
-            "down" => noarg_op!(self, stmt, s => Stmt::PenDown),
-            "up" => noarg_op!(self, stmt, s => Stmt::PenUp),
-            "clear" => noarg_op!(self, stmt, s => Stmt::PenClear),
+            "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Stmt { kind: StmtKind::Write { content, font_size }, info })?,
+            "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })?,
+            "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })?,
+            "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SendNetworkReply { value }, info })?,
+            "changeScale" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangeScalePercent { amount, }, info })?,
+            "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetScalePercent { value }, info })?,
+            "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })?,
+            "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })?,
+            "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Say { content, duration: None  }, info })?,
+            "doThink" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Think { content, duration: None  }, info })?,
+            "hide" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: false }, info })?,
+            "show" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: true }, info })?,
+            "doWaitUntil" => self.parse_1_args(stmt, s).map(|(condition, info)| Stmt { kind: StmtKind::WaitUntil { condition, }, info })?,
+            "changeSize" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangePenSize { amount, }, info })?,
+            "setSize" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetPenSize { value }, info })?,
+            "doAddToList" => self.parse_2_args(stmt, s).map(|(value, list, info)| Stmt { kind: StmtKind::ListInsertLast { value, list }, info })?,
+            "doReport" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::Return { value }, info })?,
+            "doStamp" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::Stamp, info })?,
+            "doWait" => self.parse_1_args(stmt, s).map(|(seconds, info)| Stmt { kind: StmtKind::Sleep { seconds, }, info })?,
+            "forward" => self.parse_1_args(stmt, s).map(|(distance, info)| Stmt { kind: StmtKind::Forward { distance, }, info })?,
+            "turn" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnRight { angle, }, info })?,
+            "turnLeft" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnLeft { angle, }, info })?,
+            "setXPosition" => self.parse_1_args(stmt, s).map(|(x, info)| Stmt { kind: StmtKind::SetPos { x: Some(x), y: None }, info })?,
+            "setYPosition" => self.parse_1_args(stmt, s).map(|(y, info)| Stmt { kind: StmtKind::SetPos { y: Some(y), x: None }, info })?,
+            "changeXPosition" => self.parse_1_args(stmt, s).map(|(dx, info)| Stmt { kind: StmtKind::ChangePos { dx: Some(dx), dy: None }, info })?,
+            "changeYPosition" => self.parse_1_args(stmt, s).map(|(dy, info)| Stmt { kind: StmtKind::ChangePos { dy: Some(dy), dx: None }, info })?,
+            "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Stmt { kind: StmtKind::SetPos { x: Some(x), y: Some(y) }, info })?,
+            "bounceOffEdge" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::BounceOffEdge, info })?,
+            "down" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenDown, info })?,
+            "up" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenUp, info })?,
+            "clear" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenClear, info })?,
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
-            "doAsk" => unary_op!(self, stmt, s => Stmt::Ask : prompt),
-            "doResetTimer" => noarg_op!(self, stmt, s => Stmt::ResetTimer),
+            "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Stmt { kind: StmtKind::Ask { prompt, }, info })?,
+            "doResetTimer" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ResetTimer, info })?,
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -1410,9 +1377,28 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     }
     fn cnd_adjust_index(&self, index: Expr, condition: bool, delta: f64) -> Expr {
         match condition {
-            true => Expr::Add { values: VariadicInput::Fixed(vec![index.into(), delta.into()]), info: BlockInfo::none() },
+            true => Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![index.into(), delta.into()]) }, info: BlockInfo::none() },
             false => index,
         }
+    }
+    fn parse_0_args(&mut self, expr: &Xml, s: &str) -> Result<BlockInfo, Error> {
+        self.check_children_get_info(expr, s, 0)
+    }
+    fn parse_1_args(&mut self, expr: &Xml, s: &str) -> Result<(Expr, BlockInfo), Error> {
+        let info = self.check_children_get_info(expr, s, 1)?;
+        let a = self.parse_expr(&expr.children[0])?;
+        Ok((a, info))
+    }
+    fn parse_2_args(&mut self, expr: &Xml, s: &str) -> Result<(Expr, Expr, BlockInfo), Error> {
+        let info = self.check_children_get_info(expr, s, 1)?;
+        let a = self.parse_expr(&expr.children[0])?;
+        let b = self.parse_expr(&expr.children[1])?;
+        Ok((a, b, info))
+    }
+    fn parse_1_varargs(&mut self, expr: &Xml, s: &str) -> Result<(VariadicInput, BlockInfo), Error> {
+        let info = self.check_children_get_info(expr, s, 1)?;
+        let values = self.parse_varargs(&expr.children[0])?;
+        Ok((values, info))
     }
     fn parse_varargs(&mut self, varargs_root: &Xml) -> Result<VariadicInput, Error> {
         Ok(match varargs_root.name.as_str() {
@@ -1448,7 +1434,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             Ok(x) => x,
                             Err(_) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) }),
                         };
-                        Ok(Expr::Variable { var: VariableRef { name, trans_name, location: VarLocation::Local }, info: BlockInfo::none() })
+                        Ok(Expr { kind: ExprKind::Variable { var: VariableRef { name, trans_name, location: VarLocation::Local } }, info: BlockInfo::none() })
                     }
                 }
             }
@@ -1463,8 +1449,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     for item in expr.children.iter() {
                         match item.children.get(0) {
                             None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
-                            Some(x) => match self.parse_expr(x)? {
-                                Expr::Value(v) => values.push(v),
+                            Some(x) => match self.parse_expr(x)?.kind {
+                                ExprKind::Value(v) => values.push(v),
                                 _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
                             }
                         }
@@ -1474,75 +1460,75 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "custom-block" => {
                 let FnCall { function, args, info } = self.parse_fn_call(expr)?;
-                Ok(Expr::CallFn { function, args, info })
+                Ok(Expr { kind: ExprKind::CallFn { function, args }, info })
             }
             "block" => {
                 if let Some(var) = expr.attr("var") {
                     let info = self.check_children_get_info(expr, "var", 0)?;
                     let var = self.reference_var(&var.value)?;
-                    return Ok(Expr::Variable { var, info });
+                    return Ok(Expr { kind: ExprKind::Variable { var }, info });
                 }
                 let s = match expr.attr("s") {
                     None => return Err(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
                     Some(v) => v.value.as_str(),
                 };
                 Ok(match s {
-                    "reportVariadicSum" => variadic_op!(self, expr, s => Expr::Add),
-                    "reportVariadicProduct" => variadic_op!(self, expr, s => Expr::Mul),
-                    "reportVariadicMin" => variadic_op!(self, expr, s => Expr::Min),
-                    "reportVariadicMax" => variadic_op!(self, expr, s => Expr::Max),
+                    "reportVariadicSum" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Add { values }, info })?,
+                    "reportVariadicProduct" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Mul { values }, info })?,
+                    "reportVariadicMin" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Min { values }, info })?,
+                    "reportVariadicMax" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Max { values }, info })?,
 
-                    "reportSum" => mock_binary_op!(self, expr, s => Expr::Add),
-                    "reportProduct" => mock_binary_op!(self, expr, s => Expr::Mul),
-                    "reportMin" => mock_binary_op!(self, expr, s => Expr::Min),
-                    "reportMax" => mock_binary_op!(self, expr, s => Expr::Max),
+                    "reportSum" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![left, right]) }, info })?,
+                    "reportProduct" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Mul { values: VariadicInput::Fixed(vec![left, right]) }, info })?,
+                    "reportMin" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Min { values: VariadicInput::Fixed(vec![left, right]) }, info })?,
+                    "reportMax" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Max { values: VariadicInput::Fixed(vec![left, right]) }, info })?,
 
-                    "reportDifference" => binary_op!(self, expr, s => Expr::Sub),
-                    "reportQuotient" => binary_op!(self, expr, s => Expr::Div),
-                    "reportModulus" => binary_op!(self, expr, s => Expr::Mod),
-                    "reportPower" => binary_op!(self, expr, s => Expr::Pow : base, power),
-                    "reportAtan2" => binary_op!(self, expr, s => Expr::Atan2 : y, x),
+                    "reportDifference" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Sub { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportQuotient" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Div { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportModulus" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Mod { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportPower" => self.parse_2_args(expr, s).map(|(base, power, info)| Expr { kind: ExprKind::Pow { base: Box::new(base), power: Box::new(power) }, info })?,
+                    "reportAtan2" => self.parse_2_args(expr, s).map(|(y, x, info)| Expr { kind: ExprKind::Atan2 { y: Box::new(y), x: Box::new(x) }, info })?,
 
-                    "reportAnd" => binary_op!(self, expr, s => Expr::And),
-                    "reportOr" => binary_op!(self, expr, s => Expr::Or),
+                    "reportAnd" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::And { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportOr" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Or { left: Box::new(left), right: Box::new(right) }, info })?,
 
-                    "reportIsIdentical" => binary_op!(self, expr, s => Expr::Identical),
-                    "reportEquals" => binary_op!(self, expr, s => Expr::Eq),
-                    "reportNotEquals" => binary_op!(self, expr, s => Expr::Neq),
-                    "reportLessThan" => binary_op!(self, expr, s => Expr::Less),
-                    "reportLessThanOrEquals" => binary_op!(self, expr, s => Expr::LessEq),
-                    "reportGreaterThan" => binary_op!(self, expr, s => Expr::Greater),
-                    "reportGreaterThanOrEquals" => binary_op!(self, expr, s => Expr::GreaterEq),
+                    "reportIsIdentical" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Identical { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Eq { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportNotEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Neq { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportLessThan" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Less { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportLessThanOrEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::LessEq { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportGreaterThan" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::Greater { left: Box::new(left), right: Box::new(right) }, info })?,
+                    "reportGreaterThanOrEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::GreaterEq { left: Box::new(left), right: Box::new(right) }, info })?,
 
-                    "reportRandom" => binary_op!(self, expr, s => Expr::Random : a, b),
-                    "reportNumbers" => binary_op!(self, expr, s => Expr::MakeListRange : start, stop),
+                    "reportRandom" => self.parse_2_args(expr, s).map(|(a, b, info)| Expr { kind: ExprKind::Random { a: Box::new(a), b: Box::new(b) }, info })?,
+                    "reportNumbers" => self.parse_2_args(expr, s).map(|(start, stop, info)| Expr { kind: ExprKind::MakeListRange { start: Box::new(start), stop: Box::new(stop) }, info })?,
 
-                    "reportNot" => unary_op!(self, expr, s => Expr::Not),
-                    "reportRound" => unary_op!(self, expr, s => Expr::Round),
+                    "reportNot" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Not { value: Box::new(value) }, info })?,
+                    "reportRound" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Round { value: Box::new(value) }, info })?,
 
-                    "reportListLength" => unary_op!(self, expr, s => Expr::ListLength),
-                    "reportListIsEmpty" => unary_op!(self, expr, s => Expr::ListIsEmpty),
+                    "reportListLength" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::ListLength { value: Box::new(value) }, info })?,
+                    "reportListIsEmpty" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::ListIsEmpty { value: Box::new(value) }, info })?,
 
                     "reportListIndex" => {
-                        let index = binary_op!(self, expr, s => Expr::ListFind : value, list);
+                        let index = self.parse_2_args(expr, s).map(|(value, list, info)| Expr { kind: ExprKind::ListFind { value: Box::new(value), list: Box::new(list) }, info })?;
                         self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0)
                     }
-                    "reportListContainsItem" => binary_op!(self, expr, s => Expr::ListContains : list, value),
+                    "reportListContainsItem" => self.parse_2_args(expr, s).map(|(list, value, info)| Expr { kind: ExprKind::ListContains { list: Box::new(list), value: Box::new(value) }, info })?,
 
                     "reportListItem" => {
                         let info = self.check_children_get_info(expr, s, 2)?;
                         let list = self.parse_expr(&expr.children[1])?.into();
                         match expr.children[0].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
-                                "last" => Expr::ListLastIndex { list, info },
-                                "any" => Expr::ListGetRandom { list, info },
+                                "last" => Expr { kind: ExprKind::ListLastIndex { list }, info },
+                                "any" => Expr { kind: ExprKind::ListGetRandom { list }, info },
                                 "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                                 x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                             None => {
                                 let index = self.parse_expr(&expr.children[0])?;
                                 let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
-                                Expr::ListGet { list, index, info }
+                                Expr { kind: ExprKind::ListGet { list, index }, info }
                             }
                         }
                     }
@@ -1563,20 +1549,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                             None => TextSplitMode::Custom(self.parse_expr(&expr.children[1])?.into()),
                         };
-                        Expr::TextSplit { text, mode, info }
+                        Expr { kind: ExprKind::TextSplit { text, mode }, info }
                     }
 
-                    "reportStringSize" => unary_op!(self, expr, s => Expr::Strlen),
-                    "reportUnicodeAsLetter" => unary_op!(self, expr, s => Expr::UnicodeToChar),
-                    "reportUnicode" => unary_op!(self, expr, s => Expr::CharToUnicode),
+                    "reportStringSize" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Strlen { value: Box::new(value) }, info })?,
+                    "reportUnicodeAsLetter" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::UnicodeToChar { value: Box::new(value) }, info })?,
+                    "reportUnicode" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::CharToUnicode { value: Box::new(value) }, info })?,
 
-                    "reportCDR" => unary_op!(self, expr, s => Expr::ListCdr),
-                    "reportCONS" => binary_op!(self, expr, s => Expr::ListCons : item, list),
+                    "reportCDR" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::ListCdr { value: Box::new(value) }, info })?,
+                    "reportCONS" => self.parse_2_args(expr, s).map(|(item, list, info)| Expr { kind: ExprKind::ListCons { item: Box::new(item), list: Box::new(list) }, info })?,
 
-                    "reportJoinWords" => variadic_op!(self, expr, s => Expr::Strcat),
-                    "reportConcatenatedLists" => variadic_op!(self, expr, s => Expr::MakeListConcat : lists),
-                    "reportNewList" => variadic_op!(self, expr, s => Expr::MakeList),
-                    "reportCrossproduct" => variadic_op!(self, expr, s => Expr::ListCombinations : sources),
+                    "reportJoinWords" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Strcat { values }, info })?,
+                    "reportConcatenatedLists" => self.parse_1_varargs(expr, s).map(|(lists, info)| Expr { kind: ExprKind::MakeListConcat { lists }, info })?,
+                    "reportNewList" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::MakeList { values }, info })?,
+                    "reportCrossproduct" => self.parse_1_varargs(expr, s).map(|(sources, info)| Expr { kind: ExprKind::ListCombinations { sources }, info })?,
 
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
                         Some(v) if v.text == "true" => true.into(),
@@ -1590,27 +1576,27 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         match func {
                             "id" => *value,
 
-                            "neg" => Expr::Neg { value, info },
-                            "abs" => Expr::Abs { value, info },
-                            "sqrt" => Expr::Sqrt { value, info },
-                            "floor" => Expr::Floor { value, info },
-                            "ceiling" => Expr::Ceil { value, info },
+                            "neg" => Expr { kind: ExprKind::Neg { value }, info },
+                            "abs" => Expr { kind: ExprKind::Abs { value }, info },
+                            "sqrt" => Expr { kind: ExprKind::Sqrt { value }, info },
+                            "floor" => Expr { kind: ExprKind::Floor { value }, info },
+                            "ceiling" => Expr { kind: ExprKind::Ceil { value }, info },
 
-                            "sin" => Expr::Sin { value, info },
-                            "cos" => Expr::Cos { value, info },
-                            "tan" => Expr::Tan { value, info },
+                            "sin" => Expr { kind: ExprKind::Sin { value }, info },
+                            "cos" => Expr { kind: ExprKind::Cos { value }, info },
+                            "tan" => Expr { kind: ExprKind::Tan { value }, info },
 
-                            "asin" => Expr::Asin { value, info },
-                            "acos" => Expr::Acos { value, info },
-                            "atan" => Expr::Atan { value, info },
+                            "asin" => Expr { kind: ExprKind::Asin { value }, info },
+                            "acos" => Expr { kind: ExprKind::Acos { value }, info },
+                            "atan" => Expr { kind: ExprKind::Atan { value }, info },
 
-                            "ln" => Expr::Log { value, base: Box::new(Constant::E.into()), info },
-                            "lg" => Expr::Log { value, base: Box::new(2f64.into()), info },
-                            "log" => Expr::Log { value, base: Box::new(10f64.into()), info },
+                            "ln" => Expr { kind: ExprKind::Log { value, base: Box::new(Constant::E.into()) }, info },
+                            "lg" => Expr { kind: ExprKind::Log { value, base: Box::new(2f64.into()) }, info },
+                            "log" => Expr { kind: ExprKind::Log { value, base: Box::new(10f64.into()) }, info },
 
-                            "e^" => Expr::Pow { base: Box::new(Constant::E.into()), power: value, info },
-                            "2^" => Expr::Pow { base: Box::new(2f64.into()), power: value, info },
-                            "10^" => Expr::Pow { base: Box::new(10f64.into()), power: value, info },
+                            "e^" => Expr { kind: ExprKind::Pow { base: Box::new(Constant::E.into()), power: value }, info },
+                            "2^" => Expr { kind: ExprKind::Pow { base: Box::new(2f64.into()), power: value }, info },
+                            "10^" => Expr { kind: ExprKind::Pow { base: Box::new(10f64.into()), power: value }, info },
 
                             _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
@@ -1620,16 +1606,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let func = self.grab_option(s, &expr.children[0])?;
                         let value = Box::new(self.parse_expr(&expr.children[1])?);
                         match func {
-                            "length" => Expr::ListLength { value, info },
-                            "rank" => Expr::ListRank { value, info },
-                            "dimensions" => Expr::ListDims { value, info },
-                            "flatten" => Expr::ListFlatten { value, info },
-                            "columns" => Expr::ListColumns { value, info },
-                            "reverse" => Expr::ListRev { value, info },
+                            "length" => Expr { kind: ExprKind::ListLength { value }, info },
+                            "rank" => Expr { kind: ExprKind::ListRank { value }, info },
+                            "dimensions" => Expr { kind: ExprKind::ListDims { value }, info },
+                            "flatten" => Expr { kind: ExprKind::ListFlatten { value }, info },
+                            "columns" => Expr { kind: ExprKind::ListColumns { value }, info },
+                            "reverse" => Expr { kind: ExprKind::ListRev { value }, info },
 
-                            "lines" => Expr::ListLines { value, info },
-                            "csv" => Expr::ListCsv { value, info },
-                            "json" => Expr::ListJson { value, info },
+                            "lines" => Expr { kind: ExprKind::ListLines { value }, info },
+                            "csv" => Expr { kind: ExprKind::ListCsv { value }, info },
+                            "json" => Expr { kind: ExprKind::ListJson { value }, info },
 
                             _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } }),
                         }
@@ -1638,7 +1624,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let info = self.check_children_get_info(expr, s, 2)?;
                         let value = Box::new(self.parse_expr(&expr.children[0])?);
                         let dims = self.parse_varargs(&expr.children[1])?;
-                        Expr::ListReshape { value, dims, info }
+                        Expr { kind: ExprKind::ListReshape { value, dims }, info }
                     }
 
                     "reportIfElse" => {
@@ -1646,61 +1632,61 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let condition = Box::new(self.parse_expr(&expr.children[0])?);
                         let then = Box::new(self.parse_expr(&expr.children[1])?);
                         let otherwise = Box::new(self.parse_expr(&expr.children[2])?);
-                        Expr::Conditional { condition, then, otherwise, info }
+                        Expr { kind: ExprKind::Conditional { condition, then, otherwise }, info }
                     }
                     "getJSFromRPCStruct" => self.parse_rpc(expr, s)?.into(),
 
-                    "reportStageWidth" => noarg_op!(self, expr, s => Expr::StageWidth),
-                    "reportStageHeight" => noarg_op!(self, expr, s => Expr::StageHeight),
+                    "reportStageWidth" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::StageWidth, info })?,
+                    "reportStageHeight" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::StageHeight, info })?,
 
-                    "reportMouseX" => noarg_op!(self, expr, s => Expr::MouseX),
-                    "reportMouseY" => noarg_op!(self, expr, s => Expr::MouseY),
+                    "reportMouseX" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::MouseX, info })?,
+                    "reportMouseY" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::MouseY, info })?,
 
-                    "reportLatitude" => noarg_op!(self, expr, s => Expr::Latitude),
-                    "reportLongitude" => noarg_op!(self, expr, s => Expr::Longitude),
+                    "reportLatitude" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Latitude, info })?,
+                    "reportLongitude" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Longitude, info })?,
 
-                    "reportPenTrailsAsCostume" => noarg_op!(self, expr, s => Expr::ImageOfDrawings),
+                    "reportPenTrailsAsCostume" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::ImageOfDrawings, info })?,
                     "reportImageOfObject" => {
                         let info = self.check_children_get_info(expr, s, 1)?;
                         let entity = self.grab_entity(s, &expr.children[0], BlockInfo::none())?.into();
-                        Expr::ImageOfEntity { entity, info }
+                        Expr { kind: ExprKind::ImageOfEntity { entity }, info }
                     }
                     "reportTouchingObject" => {
                         let info = self.check_children_get_info(expr, s, 1)?;
                         let child = &expr.children[0];
                         if child.name == "l" && child.get(&["option"]).is_some() {
                             match self.grab_option(s, child)? {
-                                "mouse-pointer" => Expr::IsTouchingMouse { info },
-                                "pen trails" => Expr::IsTouchingDrawings { info },
-                                "edge" => Expr::IsTouchingEdge { info },
+                                "mouse-pointer" => Expr { kind: ExprKind::IsTouchingMouse, info },
+                                "pen trails" => Expr { kind: ExprKind::IsTouchingDrawings, info },
+                                "edge" => Expr { kind: ExprKind::IsTouchingEdge, info },
                                 x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
                             }
                         }
                         else {
                             let entity = self.grab_entity(s, child, BlockInfo::none())?.into();
-                            Expr::IsTouchingEntity { entity, info }
+                            Expr { kind: ExprKind::IsTouchingEntity { entity }, info }
                         }
                     }
 
-                    "reportRPCError" => noarg_op!(self, expr, s => Expr::RpcError),
+                    "reportRPCError" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::RpcError, info })?,
 
-                    "getScale" => noarg_op!(self, expr, s => Expr::Scale),
-                    "reportShown" => noarg_op!(self, expr, s => Expr::IsVisible),
+                    "getScale" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Scale, info })?,
+                    "reportShown" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::IsVisible, info })?,
 
-                    "xPosition" => noarg_op!(self, expr, s => Expr::XPos),
-                    "yPosition" => noarg_op!(self, expr, s => Expr::YPos),
-                    "direction" => noarg_op!(self, expr, s => Expr::Heading),
+                    "xPosition" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::XPos, info })?,
+                    "yPosition" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::YPos, info })?,
+                    "direction" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Heading, info })?,
 
-                    "getPenDown" => noarg_op!(self, expr, s => Expr::PenDown),
+                    "getPenDown" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::PenDown, info })?,
 
-                    "getLastAnswer" => noarg_op!(self, expr, s => Expr::Answer),
+                    "getLastAnswer" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Answer, info })?,
 
-                    "getTimer" => noarg_op!(self, expr, s => Expr::Timer),
+                    "getTimer" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Timer, info })?,
 
-                    "reportMap" => binary_op!(self, expr, s => Expr::Map : f, list),
-                    "reportKeep" => binary_op!(self, expr, s => Expr::Keep : f, list),
-                    "reportFindFirst" => binary_op!(self, expr, s => Expr::FindFirst : f, list),
-                    "reportCombine" => binary_op!(self, expr, s => Expr::Combine : list, f),
+                    "reportMap" => self.parse_2_args(expr, s).map(|(f, list, info)| Expr { kind: ExprKind::Map { f: Box::new(f), list: Box::new(list) }, info })?,
+                    "reportKeep" => self.parse_2_args(expr, s).map(|(f, list, info)| Expr { kind: ExprKind::Keep { f: Box::new(f), list: Box::new(list) }, info })?,
+                    "reportFindFirst" => self.parse_2_args(expr, s).map(|(f, list, info)| Expr { kind: ExprKind::FindFirst { f: Box::new(f), list: Box::new(list) }, info })?,
+                    "reportCombine" => self.parse_2_args(expr, s).map(|(list, f, info)| Expr { kind: ExprKind::Combine { list: Box::new(list), f: Box::new(f) }, info })?,
 
                     "reifyScript" | "reifyReporter" | "reifyPredicate" => {
                         let is_script = s == "reifyScript";
@@ -1730,7 +1716,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             false => {
                                 let _ = self.check_children_get_info(&expr.children[0], s, 1)?;
                                 let value = self.parse_expr(&expr.children[0].children[0])?;
-                                vec![Stmt::Return { value, info: BlockInfo::none() }]
+                                vec![Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() }]
                             }
                         };
                         assert_eq!(locals_len, self.locals.len());
@@ -1748,7 +1734,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             self.autofill_args.clear();
                         }
 
-                        Expr::Closure { params: params.into_defs(), captures, stmts, info }
+                        Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, stmts }, info }
                     }
                     "evaluate" => {
                         let info = self.check_children_get_info(expr, s, 2)?;
@@ -1757,19 +1743,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         for input in expr.children[1].children.iter() {
                             args.push(self.parse_expr(input)?);
                         }
-                        Expr::CallClosure { closure, args, info }
+                        Expr { kind: ExprKind::CallClosure { closure, args }, info }
                     }
 
                     "doSocketRequest" => {
                         let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(expr, s)?;
-                        Expr::NetworkMessageReply { target: Box::new(target), msg_type, values, info }
+                        Expr { kind: ExprKind::NetworkMessageReply { target: Box::new(target), msg_type, values }, info }
                     }
 
                     "nativeCallSyscall" => {
                         let info = self.parse_syscall(expr, s)?;
-                        Expr::Syscall { name: Box::new(info.name), args: info.args, info: info.info }
+                        Expr { kind: ExprKind::Syscall { name: Box::new(info.name), args: info.args }, info: info.info }
                     }
-                    "nativeSyscallError" => noarg_op!(self, expr, s => Expr::SyscallError),
+                    "nativeSyscallError" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::SyscallError, info })?,
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
@@ -1855,8 +1841,8 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                 };
                 let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::FieldNoValue { role: self.role.name.clone(), entity: self.name, name } }),
-                    Some(x) => match dummy_script.parse_expr(x)? {
-                        Expr::Value(v) => v,
+                    Some(x) => match dummy_script.parse_expr(x)?.kind {
+                        ExprKind::Value(v) => v,
                         _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.name) } }),
                     }
                 };
@@ -2108,8 +2094,8 @@ impl<'a> RoleInfo<'a> {
                 };
                 let value = match def.children.get(0) {
                     None => return Err(Error::InvalidProject { error: ProjectError::GlobalNoValue { role, name } }),
-                    Some(x) => match dummy_script.parse_expr(x)? {
-                        Expr::Value(v) => v,
+                    Some(x) => match dummy_script.parse_expr(x)?.kind {
+                        ExprKind::Value(v) => v,
                         _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role, entity: None } }),
                     }
                 };

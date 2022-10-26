@@ -12,9 +12,9 @@ fn test_opt_cmp() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 7);
-    match &stmts[1] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Eq { .. } => (),
+    match &stmts[1].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Eq { .. } => (),
             x => panic!("{:#?}", x),
         }
         x => panic!("{:#?}", x),
@@ -44,20 +44,20 @@ fn test_lambdas_no_captures_no_inputs() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 1);
-            match &stmts[0] {
-                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+            match &stmts[0].kind {
+                StmtKind::Return { value: Expr { kind: ExprKind::Add { .. }, .. } } => (),
                 x => panic!("{:?}", x),
             }
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 2);
@@ -77,20 +77,20 @@ fn test_lambdas_no_captures() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["#1", "#2"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 1);
-            match &stmts[0] {
-                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+            match &stmts[0].kind {
+                StmtKind::Return { value: Expr { kind: ExprKind::Add { .. }, .. } } => (),
                 x => panic!("{:?}", x),
             }
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(stmts.len(), 3);
@@ -110,20 +110,20 @@ fn test_lambdas_adv_1() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
-            match &stmts[0] {
-                Stmt::Return { value: Expr::Add { .. }, .. } => (),
+            match &stmts[0].kind {
+                StmtKind::Return { value: Expr { kind: ExprKind::Add { .. }, .. }, .. } => (),
                 x => panic!("{:?}", x),
             }
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 3);
@@ -143,20 +143,20 @@ fn test_lambdas_adv_2_rep_captures() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
-            match &stmts[0] {
-                Stmt::Return { .. } => (),
+            match &stmts[0].kind {
+                StmtKind::Return { .. } => (),
                 x => panic!("{:?}", x),
             }
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 4);
@@ -176,30 +176,30 @@ fn test_lambdas_adv_3_nested_captures() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["foo"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
-            match &stmts[0] {
-                Stmt::Return { .. } => (),
+            match &stmts[0].kind {
+                StmtKind::Return { .. } => (),
                 x => panic!("{:?}", x),
             }
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
             assert_eq!(stmts.len(), 2);
-            match &stmts[1] {
-                Stmt::Assign { value: Expr::Closure { params, captures, stmts, info: _ }, .. } => {
+            match &stmts[1].kind {
+                StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
                     assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                     assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b", "temp", "brg"]);
                     assert_eq!(stmts.len(), 1);
-                    match &stmts[0] {
-                        Stmt::Return { .. } => (),
+                    match &stmts[0].kind {
+                        StmtKind::Return { .. } => (),
                         x => panic!("{:?}", x),
                     }
                 }
@@ -221,10 +221,10 @@ fn test_run_call_lambdas() {
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 5);
-    match &stmts[1] {
-        Stmt::Assign { value: Expr::CallClosure { closure, args, info: _ }, .. } => {
-            match &**closure {
-                Expr::Closure { params, captures, stmts, info: _ } => {
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args }, .. }, .. } => {
+            match &closure.kind {
+                ExprKind::Closure { params, captures, stmts } => {
                     assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                     assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                     assert_eq!(stmts.len(), 1);
@@ -235,10 +235,10 @@ fn test_run_call_lambdas() {
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[2] {
-        Stmt::Assign { value: Expr::CallClosure { closure, args, info: _ }, .. } => {
-            match &**closure {
-                Expr::Closure { params, captures, stmts, info: _ } => {
+    match &stmts[2].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args }, .. }, .. } => {
+            match &closure.kind {
+                ExprKind::Closure { params, captures, stmts } => {
                     assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["#1", "merp", "#3"]);
                     assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                     assert_eq!(stmts.len(), 1);
@@ -249,8 +249,8 @@ fn test_run_call_lambdas() {
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[3] {
-        Stmt::RunClosure { closure: Expr::Closure { params, captures, stmts, info: _ }, args, info: _ } => {
+    match &stmts[3].kind {
+        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a"]);
             assert_eq!(stmts.len(), 1);
@@ -258,8 +258,8 @@ fn test_run_call_lambdas() {
         }
         x => panic!("{:?}", x),
     }
-    match &stmts[4] {
-        Stmt::RunClosure { closure: Expr::Closure { params, captures, stmts, info: _ }, args, info: _ } => {
+    match &stmts[4].kind {
+        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["val", "rgt"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
@@ -282,9 +282,9 @@ fn test_auto_fill_lambda_args() {
     assert_eq!(stmts.len(), 11);
 
     for (i, expect_left, expect_right) in [(1, "6", "7"), (2, "6", ""), (3, "", "7"), (4, "", "")] {
-        match &stmts[i] {
-            Stmt::Assign { value, .. } => match value {
-                Expr::Add { values, .. } => {
+        match &stmts[i].kind {
+            StmtKind::Assign { value, .. } => match &value.kind {
+                ExprKind::Add { values } => {
                     let (left, right) = match values {
                         VariadicInput::Fixed(x) => {
                             assert_eq!(x.len(), 2);
@@ -292,12 +292,12 @@ fn test_auto_fill_lambda_args() {
                         }
                         x => panic!("{x:?}"),
                     };
-                    match left {
-                        Expr::Value(Value::String(x)) => assert_eq!(x, expect_left),
+                    match &left.kind {
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x, expect_left),
                         x => panic!("{x:?}"),
                     }
-                    match right {
-                        Expr::Value(Value::String(x)) => assert_eq!(x, expect_right),
+                    match &right.kind {
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x, expect_right),
                         x => panic!("{x:?}"),
                     }
                 }
@@ -307,14 +307,14 @@ fn test_auto_fill_lambda_args() {
         }
     }
 
-    match &stmts[5] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[5].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, .. } => {
                 assert_eq!(params.len(), 0);
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -322,12 +322,12 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
+                            match &left.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6"),
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
+                            match &right.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "7"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -340,15 +340,15 @@ fn test_auto_fill_lambda_args() {
         }
         x => panic!("{x:?}"),
     }
-    match &stmts[6] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[6].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, .. } => {
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].name, "%1");
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -356,12 +356,12 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Value(Value::String(x)) => assert_eq!(x, "6"),
+                            match &left.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6"),
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                            match &right.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -374,15 +374,15 @@ fn test_auto_fill_lambda_args() {
         }
         x => panic!("{x:?}"),
     }
-    match &stmts[7] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[7].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, .. } => {
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].name, "%1");
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -390,12 +390,12 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                            match &left.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Value(Value::String(x)) => assert_eq!(x, "7"),
+                            match &right.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "7"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -408,16 +408,16 @@ fn test_auto_fill_lambda_args() {
         }
         x => panic!("{x:?}"),
     }
-    match &stmts[8] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[8].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, .. } => {
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].name, "%1");
                 assert_eq!(params[1].name, "%2");
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -425,12 +425,12 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                            match &left.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                            match &right.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%2"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -443,18 +443,18 @@ fn test_auto_fill_lambda_args() {
         }
         x => panic!("{x:?}"),
     }
-    match &stmts[9] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[9].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, .. } => {
                 assert_eq!(params.len(), 4);
                 assert_eq!(params[0].name, "%1");
                 assert_eq!(params[1].name, "%2");
                 assert_eq!(params[2].name, "%3");
                 assert_eq!(params[3].name, "%4");
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -462,8 +462,8 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Add { values, .. } => {
+                            match &left.kind {
+                                ExprKind::Add { values } => {
                                     let (left, right) = match values {
                                         VariadicInput::Fixed(x) => {
                                             assert_eq!(x.len(), 2);
@@ -471,19 +471,19 @@ fn test_auto_fill_lambda_args() {
                                         }
                                         x => panic!("{x:?}"),
                                     };
-                                    match left {
-                                        Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                    match &left.kind {
+                                        ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
                                         x => panic!("{x:?}"),
                                     }
-                                    match right {
-                                        Expr::Closure { params, stmts, .. } => {
+                                    match &right.kind {
+                                        ExprKind::Closure { params, stmts, .. } => {
                                             assert_eq!(params.len(), 2);
                                             assert_eq!(params[0].name, "%2");
                                             assert_eq!(params[1].name, "%3");
                                             assert_eq!(stmts.len(), 1);
-                                            match &stmts[0] {
-                                                Stmt::Return { value, .. } => match value {
-                                                    Expr::Add { values, .. } => {
+                                            match &stmts[0].kind {
+                                                StmtKind::Return { value } => match &value.kind {
+                                                    ExprKind::Add { values } => {
                                                         let (left, right) = match values {
                                                             VariadicInput::Fixed(x) => {
                                                                 assert_eq!(x.len(), 2);
@@ -491,12 +491,12 @@ fn test_auto_fill_lambda_args() {
                                                             }
                                                             x => panic!("{x:?}"),
                                                         };
-                                                        match left {
-                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                                                        match &left.kind {
+                                                            ExprKind::Variable { var } => assert_eq!(var.name, "%2"),
                                                             x => panic!("{x:?}"),
                                                         }
-                                                        match right {
-                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "%3"),
+                                                        match &right.kind {
+                                                            ExprKind::Variable { var } => assert_eq!(var.name, "%3"),
                                                             x => panic!("{x:?}"),
                                                         }
                                                     }
@@ -510,8 +510,8 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%4"),
+                            match &right.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%4"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -524,16 +524,16 @@ fn test_auto_fill_lambda_args() {
         }
         x => panic!("{x:?}"),
     }
-    match &stmts[10] {
-        Stmt::Assign { value, .. } => match value {
-            Expr::Closure { params, stmts, .. } => {
+    match &stmts[10].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Closure { params, stmts, ..} => {
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].name, "%1");
                 assert_eq!(params[1].name, "%2");
                 assert_eq!(stmts.len(), 1);
-                match &stmts[0] {
-                    Stmt::Return { value, .. } => match value {
-                        Expr::Add { values, .. } => {
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Add { values } => {
                             let (left, right) = match values {
                                 VariadicInput::Fixed(x) => {
                                     assert_eq!(x.len(), 2);
@@ -541,8 +541,8 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             };
-                            match left {
-                                Expr::Add { values, .. } => {
+                            match &left.kind {
+                                ExprKind::Add { values } => {
                                     let (left, right) = match values {
                                         VariadicInput::Fixed(x) => {
                                             assert_eq!(x.len(), 2);
@@ -550,18 +550,18 @@ fn test_auto_fill_lambda_args() {
                                         }
                                         x => panic!("{x:?}"),
                                     };
-                                    match left {
-                                        Expr::Variable { var, .. } => assert_eq!(var.name, "%1"),
+                                    match &left.kind {
+                                        ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
                                         x => panic!("{x:?}"),
                                     }
-                                    match right {
-                                        Expr::Closure { params, stmts, .. } => {
+                                    match &right.kind {
+                                        ExprKind::Closure { params, stmts, .. } => {
                                             assert_eq!(params.len(), 1);
                                             assert_eq!(params[0].name, "#1");
                                             assert_eq!(stmts.len(), 1);
-                                            match &stmts[0] {
-                                                Stmt::Return { value, .. } => match value {
-                                                    Expr::Add { values, .. } => {
+                                            match &stmts[0].kind {
+                                                StmtKind::Return { value } => match &value.kind {
+                                                    ExprKind::Add { values } => {
                                                         let (left, right) = match values {
                                                             VariadicInput::Fixed(x) => {
                                                                 assert_eq!(x.len(), 2);
@@ -569,12 +569,12 @@ fn test_auto_fill_lambda_args() {
                                                             }
                                                             x => panic!("{x:?}"),
                                                         };
-                                                        match left {
-                                                            Expr::Variable { var, .. } => assert_eq!(var.name, "#1"),
+                                                        match &left.kind {
+                                                            ExprKind::Variable { var } => assert_eq!(var.name, "#1"),
                                                             x => panic!("{x:?}"),
                                                         }
-                                                        match right {
-                                                            Expr::Value(Value::String(x)) => assert_eq!(x, ""),
+                                                        match &right.kind {
+                                                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
                                                             x => panic!("{x:?}"),
                                                         }
                                                     }
@@ -588,8 +588,8 @@ fn test_auto_fill_lambda_args() {
                                 }
                                 x => panic!("{x:?}"),
                             }
-                            match right {
-                                Expr::Variable { var, .. } => assert_eq!(var.name, "%2"),
+                            match &right.kind {
+                                ExprKind::Variable { var } => assert_eq!(var.name, "%2"),
                                 x => panic!("{x:?}"),
                             }
                         }
