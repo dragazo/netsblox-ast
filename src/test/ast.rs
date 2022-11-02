@@ -603,3 +603,12 @@ fn test_auto_fill_lambda_args() {
         x => panic!("{x:?}"),
     }
 }
+
+#[test]
+fn test_export_formats() {
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+
+    parser.parse(include_str!("projects/raw-role-export.xml")).unwrap();
+    parser.parse(include_str!("projects/role-export.xml")).unwrap();
+    parser.parse(include_str!("projects/project-export.xml")).unwrap();
+}

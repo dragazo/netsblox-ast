@@ -2217,6 +2217,14 @@ impl Parser {
 
                         (proj_name, roles)
                     }
+                    "role" => {
+                        let role_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let proj_name = role_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+
+                        let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
+
+                        (proj_name, vec![role])
+                    }
                     "project" => {
                         let project_xml = parse_xml_root(&mut xml, local.as_str())?;
                         let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
