@@ -612,3 +612,26 @@ fn test_export_formats() {
     parser.parse(include_str!("projects/role-export.xml")).unwrap();
     parser.parse(include_str!("projects/project-export.xml")).unwrap();
 }
+
+#[test]
+fn test_empty_blocks() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = r#"<block-definition collabId="item_0" s="foo" type="command" category="custom"><header></header><code></code><translations></translations><inputs></inputs></block-definition><block-definition collabId="item_1" s="bar" type="command" category="custom"><header></header><code></code><translations></translations><inputs></inputs><script><block collabId="item_2" s="doDeclareVariables"><list><l>a</l></list></block></script></block-definition>"#,
+        methods = "",
+        scripts = "",
+    );
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    assert_eq!(ast.roles.len(), 1);
+    match ast.roles[0].funcs.as_slice() {
+        [foo, bar] => {
+            assert_eq!(foo.name, "foo");
+            assert_eq!(foo.stmts.len(), 0);
+
+            assert_eq!(bar.name, "bar");
+            assert_eq!(bar.stmts.len(), 1);
+        }
+        x => panic!("{x:?}"),
+    }
+}

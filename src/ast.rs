@@ -216,7 +216,6 @@ pub enum ProjectError {
     CustomBlockWithoutName { role: String, entity: Option<String> },
     CustomBlockWithoutType { role: String, entity: Option<String>, sig: String },
     CustomBlockUnknownType { role: String, entity: Option<String>, sig: String, ty: String },
-    CustomBlockWithoutCode { role: String, entity: Option<String>, sig: String },
 
     ImageWithoutId { role: String },
     ImagesWithSameId { role: String, id: String },
@@ -1962,10 +1961,6 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let (s2, returns) = get_block_info(&entry.value); // unwrap ok because header parser
     assert_eq!(s, s2);
 
-    let code = match block.get(&["script"]) {
-        Some(v) => v,
-        None => return Err(Error::InvalidProject { error: ProjectError::CustomBlockWithoutCode { role: role.name.clone(), entity: entity.map(|v| v.name.clone()), sig: s.into() } }),
-    };
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
         for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
@@ -1974,7 +1969,10 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
         let params = script_info.locals[0].0.clone().into_defs();
-        let stmts = script_info.parse(code)?.stmts;
+        let stmts = match block.get(&["script"]) {
+            Some(script) => script_info.parse(script)?.stmts,
+            None => vec![],
+        };
 
         Ok(Function {
             name: entry.name.clone(),
