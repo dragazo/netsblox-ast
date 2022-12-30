@@ -536,6 +536,9 @@ pub enum StmtKind {
     If { condition: Expr, then: Vec<Stmt> },
     IfElse { condition: Expr, then: Vec<Stmt>, otherwise: Vec<Stmt> },
 
+    TryCatch { code: Vec<Stmt>, var: VariableRef, handler: Vec<Stmt> },
+    Throw { error: Expr },
+
     ListInsert { list: Expr, value: Expr, index: Expr },
     ListInsertLast { list: Expr, value: Expr },
     ListInsertRandom { list: Expr, value: Expr },
@@ -1172,6 +1175,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let otherwise = self.parse(&stmt.children[2])?.stmts;
                 Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }
             }
+            "doTryCatch" => {
+                let info = self.check_children_get_info(stmt, s, 3)?;
+                let code = self.parse(&stmt.children[0])?.stmts;
+                let var = match stmt.children[1].name.as_str() {
+                    "l" => self.decl_local(stmt.children[1].text.clone(), 0f64.into())?.ref_at(VarLocation::Local),
+                    _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
+                };
+                let handler = self.parse(&stmt.children[2])?.stmts;
+                Stmt { kind: StmtKind::TryCatch { code, var, handler }, info }
+            }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
@@ -1322,8 +1335,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetScalePercent { value }, info })?,
             "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })?,
             "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })?,
-            "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Say { content, duration: None  }, info })?,
-            "doThink" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Think { content, duration: None  }, info })?,
+            "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Say { content, duration: None }, info })?,
+            "doThink" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Think { content, duration: None }, info })?,
+            "doThrow" => self.parse_1_args(stmt, s).map(|(error, info)| Stmt { kind: StmtKind::Throw { error }, info })?,
             "hide" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: false }, info })?,
             "show" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: true }, info })?,
             "doWaitUntil" => self.parse_1_args(stmt, s).map(|(condition, info)| Stmt { kind: StmtKind::WaitUntil { condition, }, info })?,
