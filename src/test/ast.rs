@@ -211,6 +211,31 @@ fn test_lambdas_adv_3_nested_captures() {
 }
 
 #[test]
+fn test_lambdas_script_capture() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="80.71428571428572" y="89.73809523809524"><block collabId="item_0" s="doDeclareVariables"><list><l>a</l></list></block><block collabId="item_1" s="doSetVar"><l>a</l><block collabId="item_4" s="reifyScript"><script><block collabId="item_3" s="doReplaceInList"><l>1</l><block collabId="item_5" var="a"/><l>thing</l></block></script><list></list></block></block></script>"##,
+    );
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 2);
+    match &stmts[1].kind {
+        StmtKind::Assign { value: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, .. } => {
+            assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), &[] as &[&str]);
+            assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a"]);
+            assert_eq!(stmts.len(), 1);
+            match &stmts[0].kind {
+                StmtKind::ListAssign { .. } => (),
+                x => panic!("{:?}", x),
+            }
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
 fn test_run_call_lambdas() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",
