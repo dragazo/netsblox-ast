@@ -1,14 +1,12 @@
 [package]
 name = "netsblox-ast"
-version = "0.2.21"
+version = "0.2.22"
 authors = ["Devin Jean <emailcruzjean@yahoo.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dragazo/netsblox-ast"
 documentation = "https://docs.rs/netsblox-ast"
-description = """
-A crate for parsing NetsBlox project files into an AST for use in code generation.
-"""
+description = "A crate for parsing NetsBlox project files into an AST for use in code generation."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

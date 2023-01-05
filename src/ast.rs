@@ -750,8 +750,12 @@ pub enum ExprKind {
     ListContains { list: Box<Expr>, value: Box<Expr> },
 
     ListGet { list: Box<Expr>, index: Box<Expr> },
-    ListLastIndex { list: Box<Expr> },
+    ListGetLast { list: Box<Expr> },
     ListGetRandom { list: Box<Expr> },
+
+    StrGet { string: Box<Expr>, index: Box<Expr> },
+    StrGetLast { string: Box<Expr> },
+    StrGetRandom { string: Box<Expr> },
 
     Strcat { values: VariadicInput },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
@@ -1533,7 +1537,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let list = self.parse_expr(&expr.children[1])?.into();
                         match expr.children[0].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
-                                "last" => Expr { kind: ExprKind::ListLastIndex { list }, info },
+                                "last" => Expr { kind: ExprKind::ListGetLast { list }, info },
                                 "any" => Expr { kind: ExprKind::ListGetRandom { list }, info },
                                 "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
                                 x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
@@ -1542,6 +1546,23 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 let index = self.parse_expr(&expr.children[0])?;
                                 let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Expr { kind: ExprKind::ListGet { list, index }, info }
+                            }
+                        }
+                    }
+                    "reportLetter" => {
+                        let info = self.check_children_get_info(expr, s, 2)?;
+                        let string = self.parse_expr(&expr.children[1])?.into();
+                        match expr.children[0].get(&["option"]) {
+                            Some(opt) => match opt.text.as_str() {
+                                "last" => Expr { kind: ExprKind::StrGetLast { string }, info },
+                                "any" => Expr { kind: ExprKind::StrGetRandom { string }, info },
+                                "" => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
+                                x => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } }),
+                            }
+                            None => {
+                                let index = self.parse_expr(&expr.children[0])?;
+                                let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
+                                Expr { kind: ExprKind::StrGet { string, index }, info }
                             }
                         }
                     }
