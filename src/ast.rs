@@ -7,14 +7,10 @@ use std::iter;
 use std::fmt;
 
 use ritelinked::LinkedHashMap;
-use derive_builder::Builder;
 use serde_json::Value as JsonValue;
 
 use crate::util::Punctuated;
 use crate::rpcs::*;
-
-#[cfg(feature = "serde")]
-use serde::Serialize;
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -360,7 +356,7 @@ impl<'a> SymbolTable<'a> {
 }
 #[test]
 fn test_sym_tab() {
-    let parser = ParserBuilder::default().name_transformer(Rc::new(crate::util::c_ident)).build().unwrap();
+    let parser = Parser { name_transformer: Rc::new(crate::util::c_ident), ..Default::default() };
     let mut sym = SymbolTable::new(&parser);
     assert!(sym.orig_to_def.is_empty());
     assert!(sym.trans_to_orig.is_empty());
@@ -391,7 +387,6 @@ struct FnCall {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct BlockInfo {
     pub comment: Option<String>,
     pub location: Option<String>,
@@ -403,13 +398,11 @@ impl BlockInfo {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Project {
     pub name: String,
     pub roles: Vec<Role>,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Role {
     pub name: String,
     pub notes: String,
@@ -419,7 +412,6 @@ pub struct Role {
     pub entities: Vec<Entity>,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Function {
     pub name: String,
     pub trans_name: String,
@@ -428,7 +420,6 @@ pub struct Function {
     pub stmts: Vec<Stmt>,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Entity {
     pub name: String,
     pub trans_name: String,
@@ -445,7 +436,6 @@ pub struct Entity {
     pub scale: f64,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableDef {
     pub name: String,
     pub trans_name: String,
@@ -460,43 +450,36 @@ impl VariableDef {
     }
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VariableRef {
     pub name: String,
     pub trans_name: String,
     pub location: VarLocation,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FnRef {
     pub name: String,
     pub trans_name: String,
     pub location: FnLocation,
 }
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VarLocation {
     Global, Field, Local,
 }
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum FnLocation {
     Global, Method,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Script {
     pub hat: Option<Hat>,
     pub stmts: Vec<Stmt>,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Hat {
     pub kind: HatKind,
     pub info: BlockInfo,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum HatKind {
     OnFlag,
     OnKey { key: String },
@@ -513,13 +496,11 @@ pub enum HatKind {
     NetworkMessage { msg_type: String, fields: Vec<VariableRef> },
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Stmt {
     pub kind: StmtKind,
     pub info: BlockInfo,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum StmtKind {
     DeclareLocals { vars: Vec<VariableDef> },
     Assign { var: VariableRef, value: Expr },
@@ -616,7 +597,6 @@ impl From<Rpc> for Stmt {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Value {
     Bool(bool),
     Number(f64),
@@ -653,7 +633,6 @@ impl TryFrom<JsonValue> for Value {
     }
 }
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum Constant {
     E, Pi,
 }
@@ -663,7 +642,6 @@ pub enum TextSplitMode {
     Custom(Box<Expr>),
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VariadicInput {
     /// A fixed list of inputs specified inline.
     Fixed(Vec<Expr>),
@@ -671,13 +649,11 @@ pub enum VariadicInput {
     VarArgs(Box<Expr>),
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Expr {
     pub kind: ExprKind,
     pub info: BlockInfo,
 }
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum ExprKind {
     Value(Value),
     Variable { var: VariableRef },
@@ -2184,49 +2160,50 @@ impl<'a> RoleInfo<'a> {
     }
 }
 
-#[derive(Builder)]
-#[cfg_attr(not(std), builder(no_std))]
 pub struct Parser {
     /// If `true`, the emitted syntax tree will be processed by static optimizations.
     /// Defaults to `false`.
-    #[builder(default = "false")]
-    optimize: bool,
+    pub optimize: bool,
 
     /// If `true`, the parser will skip script blocks that lack a hat block.
     /// This is typically desirable since free floating blocks are never automatically executed,
     /// and thus are typically not needed for translation efforts.
     /// Defaults to `true`.
-    #[builder(default = "true")]
-    omit_nonhat_scripts: bool,
+    pub omit_nonhat_scripts: bool,
 
     /// If `true`, the emitted syntax tree will be automatically adjusted to support
     /// convenient translation into languages with zero-based indexing.
     /// For instance, with this enabled, an `item X of _` block will emit `X-1` as the index rather than `X`, and similar for other list-based blocks.
     /// Defaults to `false`.
-    #[builder(default = "false")]
-    adjust_to_zero_index: bool,
+    pub adjust_to_zero_index: bool,
 
     /// All symbol names in the program will be passed through this function,
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
     /// The default operation performs no conversion.
     /// Note that non-default transform strategies may also require a custom [`ParserBuilder::autofill_generator`].
-    #[builder(default = "Rc::new(|v| Ok(v.into()))")]
-    name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
+    pub name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
 
     /// A generator used to produce symbol names for auto-fill closure arguments.
     /// The function receives a number that can be used to differentiate different generated arguments.
     /// It is expected that multiple calls to this function with the same input will produce the same output symbol name.
     /// The default is to produce a string of format `%n` where `n` is the input number.
     /// Note that, after generation, symbol names are still passed through [`ParserBuilder::name_transformer`] as usual.
-    #[builder(default = r#"Rc::new(|v| Ok(format!("%{}", v)))"#)]
-    autofill_generator: Rc<dyn Fn(usize) -> Result<String, ()>>,
+    pub autofill_generator: Rc<dyn Fn(usize) -> Result<String, ()>>,
+}
+impl Default for Parser {
+    fn default() -> Self {
+        Self {
+            optimize: false,
+            omit_nonhat_scripts: true,
+            adjust_to_zero_index: false,
+            name_transformer: Rc::new(|v| Ok(v.into())),
+            autofill_generator: Rc::new(|v| Ok(format!("%{}", v))),
+        }
+    }
 }
 impl Parser {
     fn opt(&self, project: Project) -> Result<Project, Error> {
         Ok(project)
-    }
-    pub fn builder() -> ParserBuilder {
-        ParserBuilder::default()
     }
     pub fn parse(&self, xml: &str) -> Result<Project, Error> {
         let mut xml = xmlparser::Tokenizer::from(xml);
