@@ -1,13 +1,9 @@
 use std::prelude::v1::*;
 
-use std::convert::TryFrom;
 use std::rc::Rc;
-use std::mem;
-use std::iter;
-use std::fmt;
+use std::{mem, iter, fmt};
 
 use ritelinked::LinkedHashMap;
-use serde_json::Value as JsonValue;
 
 use crate::util::Punctuated;
 use crate::rpcs::*;
@@ -16,7 +12,7 @@ use crate::rpcs::*;
 use proptest::prelude::*;
 
 // regex equivalent: r"%'([^']*)'"
-struct ParamIter<'a>(std::iter::Fuse<std::str::CharIndices<'a>>);
+struct ParamIter<'a>(iter::Fuse<std::str::CharIndices<'a>>);
 impl<'a> ParamIter<'a> {
     fn new(src: &'a str) -> Self {
         Self(src.char_indices().fuse())
@@ -44,7 +40,7 @@ fn test_param_iter() {
 }
 
 // regex equivalent: r"%\S*"
-struct ArgIter<'a>(std::iter::Fuse<std::str::CharIndices<'a>>, usize);
+struct ArgIter<'a>(iter::Fuse<std::str::CharIndices<'a>>, usize);
 impl<'a> ArgIter<'a> {
     fn new(src: &'a str) -> Self {
         Self(src.char_indices().fuse(), src.len())
@@ -69,6 +65,49 @@ fn test_arg_iter() {
     assert_eq!(ArgIter::new("hello %world").collect::<Vec<_>>(), vec![(6, 12)]);
     assert_eq!(ArgIter::new("hello %world ").collect::<Vec<_>>(), vec![(6, 12)]);
     assert_eq!(ArgIter::new("hello %world      %gjherg3495830_ ").collect::<Vec<_>>(), vec![(6, 12), (18, 33)]);
+}
+
+struct InlineListIter<'a>(iter::Peekable<iter::Fuse<std::str::Chars<'a>>>);
+impl<'a> InlineListIter<'a> {
+    fn new(s: &'a str) -> Self {
+        Self(s.chars().fuse().peekable())
+    }
+}
+impl<'a> Iterator for InlineListIter<'a> {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut res = String::new();
+        let mut in_quote = false;
+        while let Some(ch) = self.0.next() {
+            if ch == '"' {
+                if !in_quote {
+                    in_quote = true;
+                    continue;
+                }
+
+                if let Some('"') = self.0.peek() {
+                    res.push(self.0.next().unwrap());
+                } else {
+                    in_quote = false;
+                }
+            }
+            else if ch == ',' && !in_quote {
+                return Some(res);
+            } else {
+                res.push(ch);
+            }
+        }
+        if !res.is_empty() { Some(res) } else { None }
+    }
+}
+#[test]
+fn test_inline_list_iter() {
+    assert_eq!(InlineListIter::new(r#""#).collect::<Vec<_>>(), &[] as &[&str]);
+    assert_eq!(InlineListIter::new(r#"1"#).collect::<Vec<_>>(), &["1"]);
+    assert_eq!(InlineListIter::new(r#"1,2"#).collect::<Vec<_>>(), &["1", "2"]);
+    assert_eq!(InlineListIter::new(r#"1,2,test,53"#).collect::<Vec<_>>(), &["1", "2", "test", "53"]);
+    assert_eq!(InlineListIter::new(r#""""test","test""","""test""","""","""""","test""test""#).collect::<Vec<_>>(), &["\"test", "test\"", "\"test\"", "\"", "\"\"", "test\"test"]);
+    assert_eq!(InlineListIter::new(r#",,",",",,",""",",",""",""",""",","","",""#).collect::<Vec<_>>(), &["", "", ",", ",,", "\",", ",\"", "\",\"", ",\",\","]);
 }
 
 fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Iterator<Item = (usize, usize)>{
@@ -204,8 +243,8 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
 pub enum ProjectError {
     NoRoot,
     UnnamedRole,
+    RefMissingId { role: String, entity: String },
     ValueNotEvaluated { role: String, entity: Option<String> },
-    InvalidJson { reason: String },
     NoRoleContent { role: String },
     NoStageDef { role: String },
 
@@ -225,7 +264,6 @@ pub enum ProjectError {
     CostumesWithSameName { role: String, entity: String, name: String },
 
     UnnamedGlobal { role: String },
-    GlobalNoValue { role: String, name: String },
     GlobalsWithSameName { role: String, name: String },
 
     UnnamedField { role: String, entity: String },
@@ -305,7 +343,7 @@ pub enum SymbolError {
 #[derive(Clone)]
 struct SymbolTable<'a> {
     parser: &'a Parser,
-    orig_to_def: LinkedHashMap<String, VariableDef>,
+    orig_to_def: LinkedHashMap<String, VariableDefInit>,
     trans_to_orig: LinkedHashMap<String, String>,
 }
 impl fmt::Debug for SymbolTable<'_> {
@@ -327,24 +365,28 @@ impl<'a> SymbolTable<'a> {
     /// Fails if the name cannot be properly transformed or the transformed name already exists.
     /// On success, returns the previous definition (if one existed).
     /// On failure, the symbol table is not modified, and an error context object is returned.
-    fn define(&mut self, name: String, value: Value) -> Result<Option<VariableDef>, SymbolError> {
+    fn define(&mut self, name: String, value: Value) -> Result<Option<VariableDefInit>, SymbolError> {
         let trans_name = self.transform_name(&name)?;
         if let Some(orig) = self.trans_to_orig.get(&trans_name) {
             let def = self.orig_to_def.get(orig).unwrap();
-            return Err(SymbolError::ConflictingTrans { trans_name, names: (def.name.clone(), name) });
+            return Err(SymbolError::ConflictingTrans { trans_name, names: (def.def.name.clone(), name) });
         }
 
-        let entry = VariableDef { name: name.clone(), trans_name: trans_name.clone(), value };
+        let entry = VariableDefInit { def: VariableDef { name: name.clone(), trans_name: trans_name.clone() }, init: value };
         self.trans_to_orig.insert(trans_name, name.clone());
         Ok(self.orig_to_def.insert(name, entry))
     }
     /// Returns the definition of the given variable if it exists.
-    fn get(&self, name: &str) -> Option<&VariableDef> {
+    fn get(&self, name: &str) -> Option<&VariableDefInit> {
         self.orig_to_def.get(name)
     }
     /// Gets the list of all defined variables.
     /// This is guaranteed to be in order of definition.
     fn into_defs(self) -> Vec<VariableDef> {
+        self.orig_to_def.into_iter().map(|x| x.1.def).collect()
+    }
+    /// Equivalent to [`SymbolTable::into_defs`] but preserves the initialized value.
+    fn into_def_inits(self) -> Vec<VariableDefInit> {
         self.orig_to_def.into_iter().map(|x| x.1).collect()
     }
     fn len(&self) -> usize {
@@ -361,8 +403,8 @@ fn test_sym_tab() {
     assert!(sym.orig_to_def.is_empty());
     assert!(sym.trans_to_orig.is_empty());
     assert!(sym.define("hello world!".into(), 0f64.into()).unwrap().is_none());
-    assert_eq!(sym.orig_to_def["hello world!"].name, "hello world!");
-    assert_eq!(sym.orig_to_def["hello world!"].trans_name, "hello_world");
+    assert_eq!(sym.orig_to_def["hello world!"].def.name, "hello world!");
+    assert_eq!(sym.orig_to_def["hello world!"].def.trans_name, "hello_world");
     assert_eq!(sym.trans_to_orig["hello_world"], "hello world!");
 }
 
@@ -407,7 +449,7 @@ pub struct Role {
     pub name: String,
     pub notes: String,
     pub stage_size: (usize, usize),
-    pub globals: Vec<VariableDef>,
+    pub globals: Vec<VariableDefInit>,
     pub funcs: Vec<Function>,
     pub entities: Vec<Entity>,
 }
@@ -423,8 +465,8 @@ pub struct Function {
 pub struct Entity {
     pub name: String,
     pub trans_name: String,
-    pub fields: Vec<VariableDef>,
-    pub costumes: Vec<VariableDef>,
+    pub fields: Vec<VariableDefInit>,
+    pub costumes: Vec<VariableDefInit>,
     pub funcs: Vec<Function>,
     pub scripts: Vec<Script>,
 
@@ -436,10 +478,14 @@ pub struct Entity {
     pub scale: f64,
 }
 #[derive(Debug, Clone)]
+pub struct VariableDefInit {
+    pub def: VariableDef,
+    pub init: Value,
+}
+#[derive(Debug, Clone)]
 pub struct VariableDef {
     pub name: String,
     pub trans_name: String,
-    pub value: Value,
 }
 impl VariableDef {
     fn ref_at(&self, location: VarLocation) -> VariableRef {
@@ -597,12 +643,16 @@ impl From<Rpc> for Stmt {
 }
 
 #[derive(Debug, Clone)]
+pub struct RefId(pub usize);
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Bool(bool),
     Number(f64),
-    String(String),
-    List(Vec<Value>),
     Constant(Constant),
+    String(String),
+    List(Vec<Value>, Option<RefId>),
+    Ref(RefId),
 }
 
 impl From<f64> for Value { fn from(v: f64) -> Value { Value::Number(v) } }
@@ -610,28 +660,7 @@ impl From<&str> for Value { fn from(v: &str) -> Value { Value::String(v.into()) 
 impl From<bool> for Value { fn from(v: bool) -> Value { Value::Bool(v) } }
 impl From<String> for Value { fn from(v: String) -> Value { Value::String(v) } }
 impl From<Constant> for Value { fn from(v: Constant) -> Value { Value::Constant(v) } }
-impl From<Vec<Value>> for Value { fn from(v: Vec<Value>) -> Value { Value::List(v) } }
 
-impl TryFrom<JsonValue> for Value {
-    type Error = Error;
-    fn try_from(val: JsonValue) -> Result<Value, Self::Error> {
-        Ok(match val {
-            JsonValue::String(v) => Value::String(v),
-            JsonValue::Bool(v) => Value::Bool(v),
-            JsonValue::Array(vals) => {
-                let mut res = Vec::with_capacity(vals.len());
-                for val in vals { res.push(Value::try_from(val)?) }
-                Value::List(res)
-            }
-            JsonValue::Number(v) => match v.as_f64() {
-                Some(v) => Value::Number(v),
-                None => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("failed to convert {} to f64", v) } }),
-            }
-            JsonValue::Object(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("got object: {}", val) } }),
-            JsonValue::Null => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: "got null".into() } }),
-        })
-    }
-}
 #[derive(Debug, Clone, Copy)]
 pub enum Constant {
     E, Pi,
@@ -873,7 +902,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let location = expr.attr("collabId").map(|x| x.value.clone());
         Ok(BlockInfo { comment, location })
     }
-    fn decl_local(&mut self, name: String, value: Value) -> Result<&VariableDef, Error> {
+    fn decl_local(&mut self, name: String, value: Value) -> Result<&VariableDefInit, Error> {
         let locals = &mut self.locals.last_mut().unwrap().0;
         match locals.define(name.clone(), value) {
             Ok(_) => (), // redefining locals is fine
@@ -904,7 +933,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "myself" => Expr { kind: ExprKind::This, info },
             name => match self.role.entities.get(name) {
                 None => return Err(Error::UnknownEntity { role: self.role.name.clone(), entity: self.entity.name.clone(), unknown: name.into() }),
-                Some(entity) => Expr { kind: ExprKind::Entity { name: entity.name.clone(), trans_name: entity.trans_name.clone() }, info },
+                Some(entity) => Expr { kind: ExprKind::Entity { name: entity.def.name.clone(), trans_name: entity.def.trans_name.clone() }, info },
             }
         })
     }
@@ -989,7 +1018,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         comment = Some(clean_newlines(&child.text));
                     }
                     if child.name != "l" { break }
-                    let var = self.decl_local(child.text.clone(), 0f64.into())?.ref_at(VarLocation::Local);
+                    let var = self.decl_local(child.text.clone(), 0f64.into())?.def.ref_at(VarLocation::Local);
                     fields.push(var);
                 }
                 let location = stmt.attr("collabId").map(|x| x.value.clone());
@@ -1088,7 +1117,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let mut vars = vec![];
                 for var in stmt.children[0].children.iter() {
-                    vars.push(self.decl_local(var.text.clone(), 0f64.into())?.clone());
+                    vars.push(self.decl_local(var.text.clone(), 0f64.into())?.def.clone());
                 }
                 Stmt { kind: StmtKind::DeclareLocals { vars }, info }
             }
@@ -1114,7 +1143,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let start = self.parse_expr(&stmt.children[1])?;
                 let stop = self.parse_expr(&stmt.children[2])?;
-                let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(var.to_owned(), 0f64.into())?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
                 Stmt { kind: StmtKind::ForLoop { var, start, stop, stmts }, info }
@@ -1127,7 +1156,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let items = self.parse_expr(&stmt.children[1])?;
-                let var = self.decl_local(var.to_owned(), 0f64.into())?.ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(var.to_owned(), 0f64.into())?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
                 Stmt { kind: StmtKind::ForeachLoop { var, items, stmts }, info }
@@ -1159,7 +1188,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let info = self.check_children_get_info(stmt, s, 3)?;
                 let code = self.parse(&stmt.children[0])?.stmts;
                 let var = match stmt.children[1].name.as_str() {
-                    "l" => self.decl_local(stmt.children[1].text.clone(), 0f64.into())?.ref_at(VarLocation::Local),
+                    "l" => self.decl_local(stmt.children[1].text.clone(), 0f64.into())?.def.ref_at(VarLocation::Local),
                     _ => return Err(Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } }),
                 };
                 let handler = self.parse(&stmt.children[2])?.stmts;
@@ -1348,7 +1377,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn reference_var(&mut self, name: &str) -> Result<VariableRef, Error> {
         for (i, locals) in self.locals.iter().rev().enumerate() {
             if let Some(x) = locals.0.get(name) {
-                let res = x.ref_at(VarLocation::Local);
+                let res = x.def.ref_at(VarLocation::Local);
                 if i != 0 {
                     let (locals, captures) = self.locals.last_mut().unwrap();
                     locals.define(res.name.clone(), 0.0.into()).unwrap();
@@ -1357,13 +1386,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 return Ok(res)
             }
         }
-        if let Some(x) = self.entity.fields.get(name) { return Ok(x.ref_at(VarLocation::Field)) }
-        if let Some(x) = self.role.globals.get(name) { return Ok(x.ref_at(VarLocation::Global)) }
+        if let Some(x) = self.entity.fields.get(name) { return Ok(x.def.ref_at(VarLocation::Field)) }
+        if let Some(x) = self.role.globals.get(name) { return Ok(x.def.ref_at(VarLocation::Global)) }
         Err(Error::UndefinedVariable { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
     }
     fn reference_fn(&self, name: &str) -> Result<FnRef, Error> {
         let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
-        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.fn_ref_at(v.1))) {
+        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.def.fn_ref_at(v.1))) {
             Some(v) => Ok(v),
             None => Err(Error::UndefinedFn { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() })
         }
@@ -1432,24 +1461,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "bool" => parse_bool(&expr.text),
-            "list" => match expr.attr("struct") {
-                Some(v) if v.value == "atomic" => match serde_json::from_str::<JsonValue>(&format!("[{}]", expr.text)) {
-                    Err(_) => return Err(Error::InvalidProject { error: ProjectError::InvalidJson { reason: format!("content was not json: [{}]", expr.text) } }),
-                    Ok(json) => Ok(Value::try_from(json)?.into()),
-                }
-                _ => {
-                    let mut values = Vec::with_capacity(expr.children.len());
-                    for item in expr.children.iter() {
-                        match item.children.get(0) {
-                            None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
-                            Some(x) => match self.parse_expr(x)?.kind {
-                                ExprKind::Value(v) => values.push(v),
-                                _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
+            "list" => {
+                let ref_id = expr.attr("id").and_then(|x| x.value.parse().ok()).map(RefId);
+                let values = match expr.attr("struct").map(|x| x.value.as_str()) {
+                    Some("atomic") => InlineListIter::new(&expr.text).map(Into::into).collect(),
+                    _ => {
+                        let mut values = Vec::with_capacity(expr.children.len());
+                        for item in expr.children.iter() {
+                            match item.children.get(0) {
+                                None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
+                                Some(x) => match self.parse_expr(x)?.kind {
+                                    ExprKind::Value(v) => values.push(v),
+                                    _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
+                                }
                             }
                         }
+                        values
                     }
-                    Ok(values.into())
-                }
+                };
+                Ok(Value::List(values, ref_id).into())
+            }
+            "ref" => match expr.attr("id").and_then(|x| x.value.parse().ok()).map(RefId) {
+                Some(ref_id) => Ok(Value::Ref(ref_id).into()),
+                None => return Err(Error::InvalidProject { error: ProjectError::RefMissingId { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
             }
             "custom-block" => {
                 let FnCall { function, args, info } = self.parse_fn_call(expr)?;
@@ -1706,7 +1740,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         fn define_param(script_info: &ScriptInfo, params: &mut SymbolTable, name: String) -> Result<(), Error> {
                             match params.define(name, 0.0.into()) {
                                 Ok(None) => Ok(()),
-                                Ok(Some(prev)) => Err(Error::InputsWithSameName { role: script_info.role.name.clone(), name: prev.name, entity: Some(script_info.entity.name.clone()) }),
+                                Ok(Some(prev)) => Err(Error::InputsWithSameName { role: script_info.role.name.clone(), name: prev.def.name, entity: Some(script_info.entity.name.clone()) }),
                                 Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::LocalsWithSameTransName { role: script_info.role.name.clone(), entity: script_info.entity.name.clone(), trans_name, names }),
                                 Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(script_info.role.name.clone()), entity: Some(script_info.entity.name.clone()) }),
                             }
@@ -1812,7 +1846,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
 
                 match self.costumes.define(name.into(), content.into()) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), entity: self.name, name: prev.name } }),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), entity: self.name, name: prev.def.name } }),
                     Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.name) }),
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::CostumesWithSameTransName { role: self.role.name.clone(), entity: self.name, trans_name, names }),
                 }
@@ -1862,7 +1896,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             for (name, value) in defs {
                 match self.fields.define(name.clone(), value) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), entity: self.name.clone(), name: prev.name } }),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::FieldsWithSameName { role: self.role.name.clone(), entity: self.name.clone(), name: prev.def.name } }),
                     Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.name.clone()) }),
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::FieldsWithSameTransName { role: self.role.name.clone(), entity: self.name.clone(), trans_name, names }),
                 }
@@ -1891,8 +1925,8 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         Ok(Entity {
             name: self.name,
             trans_name: self.trans_name,
-            fields: self.fields.into_defs(),
-            costumes: self.costumes.into_defs(),
+            fields: self.fields.into_def_inits(),
+            costumes: self.costumes.into_def_inits(),
             funcs,
             scripts,
 
@@ -1909,7 +1943,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
 // returns the signature and returns flag of the block header value
 fn get_block_info(value: &Value) -> (&str, bool) {
     match value {
-        Value::List(vals) => {
+        Value::List(vals, _) => {
             assert_eq!(vals.len(), 2);
             let s = match &vals[0] { Value::String(v) => v, _ => panic!() };
             let returns = match vals[1] { Value::Bool(v) => v, _ => panic!() };
@@ -1959,9 +1993,9 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
     };
 
     let name = block_name_from_def(s);
-    match funcs.define(name, vec![Value::from(s), Value::from(returns)].into()) {
+    match funcs.define(name, Value::List(vec![Value::from(s), Value::from(returns)], None)) {
         Ok(None) => Ok(()),
-        Ok(Some(prev)) => Err(Error::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.name, sigs: (get_block_info(&prev.value).0.into(), s.into()) }),
+        Ok(Some(prev)) => Err(Error::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.def.name, sigs: (get_block_info(&prev.init).0.into(), s.into()) }),
         Err(SymbolError::NameTransformError { name }) => Err(Error::NameTransformError { name, role: Some(role.into()), entity: entity() }),
         Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Error::BlocksWithSameTransName { role: role.into(), entity: entity(), trans_name, names }),
     }
@@ -1969,7 +2003,7 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Error> {
     let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
     let entry = funcs.get(&block_name_from_def(s)).unwrap();
-    let (s2, returns) = get_block_info(&entry.value); // unwrap ok because header parser
+    let (s2, returns) = get_block_info(&entry.init); // unwrap ok because header parser
     assert_eq!(s, s2);
 
     let finalize = |entity_info: &EntityInfo| {
@@ -1986,8 +2020,8 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
         };
 
         Ok(Function {
-            name: entry.name.clone(),
-            trans_name: entry.trans_name.clone(),
+            name: entry.def.name.clone(),
+            trans_name: entry.def.trans_name.clone(),
             params,
             returns,
             stmts,
@@ -2102,7 +2136,7 @@ impl<'a> RoleInfo<'a> {
                     Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
-                    None => return Err(Error::InvalidProject { error: ProjectError::GlobalNoValue { role, name } }),
+                    None => Value::Number(0.0),
                     Some(x) => match dummy_script.parse_expr(x)?.kind {
                         ExprKind::Value(v) => v,
                         _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role, entity: None } }),
@@ -2114,7 +2148,7 @@ impl<'a> RoleInfo<'a> {
             for (name, value) in defs {
                 match self.globals.define(name.clone(), value) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role: self.name.clone(), name: prev.name } }),
+                    Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::GlobalsWithSameName { role: self.name.clone(), name: prev.def.name } }),
                     Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.name.clone()), entity: None }),
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::GlobalsWithSameTransName { role: self.name.clone(), trans_name, names }),
                 }
@@ -2127,8 +2161,8 @@ impl<'a> RoleInfo<'a> {
                 let name = match entity.attr("name") {
                     None => return Err(Error::InvalidProject { error: ProjectError::UnnamedEntity { role } }),
                     Some(x) => match self.entities.define(x.value.clone(), 0f64.into()) {
-                        Ok(None) => self.entities.get(&x.value).unwrap().ref_at(VarLocation::Global),
-                        Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::EntitiesWithSameName { role, name: prev.name } }),
+                        Ok(None) => self.entities.get(&x.value).unwrap().def.ref_at(VarLocation::Global),
+                        Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::EntitiesWithSameName { role, name: prev.def.name } }),
                         Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { role: Some(role), entity: Some(name.clone()), name }),
                         Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Error::EntitiesWithSameTransName { role, trans_name, names }),
                     }
@@ -2153,7 +2187,7 @@ impl<'a> RoleInfo<'a> {
             name: role,
             notes,
             stage_size: (stage_width, stage_height),
-            globals: self.globals.into_defs(),
+            globals: self.globals.into_def_inits(),
             funcs,
             entities,
         })

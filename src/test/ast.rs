@@ -660,3 +660,83 @@ fn test_empty_blocks() {
         x => panic!("{x:?}"),
     }
 }
+
+#[test]
+fn test_ref_inits() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = r#"
+<variable name="test1"><list struct="atomic" id="50">1,5,text,3</list></variable>
+<variable name="test2"><ref id="50"></ref></variable>
+<variable name="test3"><list collabId="" id="51"><item><l>1</l></item><item><l>5</l></item><item><l>text</l></item><item><ref id="50"></ref></item></list></variable>
+<variable name="test4"></variable>
+        "#,
+        fields = "",
+        funcs = "",
+        methods = "",
+        scripts = "",
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let ast = parser.parse(&script).unwrap();
+    assert_eq!(ast.roles.len(), 1);
+
+    match ast.roles[0].globals.as_slice() {
+        [test1, test2, test3, test4] => {
+            assert_eq!(test1.def.name, "test1");
+            assert_eq!(test2.def.name, "test2");
+            assert_eq!(test3.def.name, "test3");
+            assert_eq!(test4.def.name, "test4");
+
+            match &test1.init {
+                Value::List(values, ref_id) => {
+                    assert_eq!(values.len(), 4);
+                    match &values[0] {
+                        Value::String(x) => assert_eq!(x, "1"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[1] {
+                        Value::String(x) => assert_eq!(x, "5"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[2] {
+                        Value::String(x) => assert_eq!(x, "text"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[3] {
+                        Value::String(x) => assert_eq!(x, "3"),
+                        x => panic!("{x:?}"),
+                    }
+                    assert_eq!(ref_id.as_ref().unwrap().0, 50);
+                }
+                x => panic!("{x:?}"),
+            }
+            match &test2.init {
+                Value::Ref(ref_id) => assert_eq!(ref_id.0, 50),
+                x => panic!("{x:?}"),
+            }
+            match &test3.init {
+                Value::List(values, ref_id) => {
+                    assert_eq!(values.len(), 4);
+                    match &values[0] {
+                        Value::String(x) => assert_eq!(x, "1"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[1] {
+                        Value::String(x) => assert_eq!(x, "5"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[2] {
+                        Value::String(x) => assert_eq!(x, "text"),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[3] {
+                        Value::Ref(ref_id) => assert_eq!(ref_id.0, 50),
+                        x => panic!("{x:?}"),
+                    }
+                    assert_eq!(ref_id.as_ref().unwrap().0, 51);
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+}
