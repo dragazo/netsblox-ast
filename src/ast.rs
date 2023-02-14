@@ -308,6 +308,7 @@ pub enum Error {
     BlockOptionNotConst { role: String, entity: String, block_type: String },
     BlockOptionNotSelected { role: String, entity: String, block_type: String },
     UnknownEntity { role: String, entity: String, unknown: String },
+    UnknownEffect { role: String, entity: String, effect: String },
 
     UnknownMessageType { role: String, entity: String, msg_type: String },
     MessageTypeWrongNumberArgs { role: String, entity: String, msg_type: String, block_type: String, got: usize, expected: usize },
@@ -634,6 +635,9 @@ pub enum StmtKind {
     ResetTimer,
 
     Syscall { name: Expr, args: VariadicInput },
+
+    SetEffect { kind: EffectKind, value: Expr },
+    ChangeEffect { kind: EffectKind, delta: Expr },
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
@@ -669,6 +673,11 @@ pub enum Constant {
 pub enum TextSplitMode {
     Letter, Word, Tab, CR, LF, Csv, Json,
     Custom(Box<Expr>),
+}
+#[derive(Debug, Clone)]
+pub enum EffectKind {
+    Color, Saturation, Brightness, Ghost,
+    Fisheye, Whirl, Pixelate, Mosaic, Negative,
 }
 #[derive(Debug, Clone)]
 pub enum VariadicInput {
@@ -725,10 +734,10 @@ pub enum ExprKind {
     /// If both values are integers, the result is an integer, otherwise continuous floats are returned.
     Random { a: Box<Expr>, b: Box<Expr> },
     /// Get a list of all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
-    MakeListRange { start: Box<Expr>, stop: Box<Expr> },
+    Range { start: Box<Expr>, stop: Box<Expr> },
 
     MakeList { values: VariadicInput },
-    MakeListConcat { lists: VariadicInput },
+    ListCat { lists: VariadicInput },
 
     ListLength { value: Box<Expr> },
     ListRank { value: Box<Expr> },
@@ -762,9 +771,9 @@ pub enum ExprKind {
     StrGetLast { string: Box<Expr> },
     StrGetRandom { string: Box<Expr> },
 
-    Strcat { values: VariadicInput },
+    StrCat { values: VariadicInput },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
-    Strlen { value: Box<Expr> },
+    StrLen { value: Box<Expr> },
 
     /// Convert a unicode code point into a 1-character string.
     UnicodeToChar { value: Box<Expr> },
@@ -840,6 +849,8 @@ pub enum ExprKind {
 
     Syscall { name: Box<Expr>, args: VariadicInput },
     SyscallError,
+
+    Effect { kind: EffectKind },
 }
 impl<T: Into<Value>> From<T> for Expr {
     fn from(v: T) -> Expr {
@@ -1033,6 +1044,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let name = self.parse_expr(&stmt.children[0])?;
         let args = self.parse_varargs(&stmt.children[1])?;
         Ok(Syscall { name, args, info })
+    }
+    fn parse_effect(&mut self, effect: &Xml, s: &str) -> Result<EffectKind, Error> {
+        Ok(match self.grab_option(s, effect)? {
+            "color" => EffectKind::Color,
+            "saturation" => EffectKind::Saturation,
+            "brightness" => EffectKind::Brightness,
+            "ghost" => EffectKind::Ghost,
+            "fisheye" => EffectKind::Fisheye,
+            "whirl" => EffectKind::Whirl,
+            "pixelate" => EffectKind::Pixelate,
+            "mosaic" => EffectKind::Mosaic,
+            "negative" => EffectKind::Negative,
+            x => return Err(Error::UnknownEffect { role: self.role.name.clone(), entity: self.entity.name.clone(), effect: x.to_owned() }),
+        })
     }
     fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
         if stmt.children.len() < 2 { return Err(Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } }) }
@@ -1339,6 +1364,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let info = self.parse_syscall(stmt, s)?;
                 Stmt { kind: StmtKind::Syscall { name: info.name, args: info.args }, info: info.info }
             }
+            "setEffect" => {
+                let info = self.check_children_get_info(stmt, s, 2)?;
+                let effect = self.parse_effect(&stmt.children[0], s)?;
+                let value = self.parse_expr(&stmt.children[1])?;
+                Stmt { kind: StmtKind::SetEffect { kind: effect, value }, info }
+            }
+            "changeEffect" => {
+                let info = self.check_children_get_info(stmt, s, 2)?;
+                let effect = self.parse_effect(&stmt.children[0], s)?;
+                let delta = self.parse_expr(&stmt.children[1])?;
+                Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info }
+            }
             "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Stmt { kind: StmtKind::Write { content, font_size }, info })?,
             "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })?,
             "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })?,
@@ -1531,7 +1568,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportGreaterThanOrEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Expr { kind: ExprKind::GreaterEq { left: Box::new(left), right: Box::new(right) }, info })?,
 
                     "reportRandom" => self.parse_2_args(expr, s).map(|(a, b, info)| Expr { kind: ExprKind::Random { a: Box::new(a), b: Box::new(b) }, info })?,
-                    "reportNumbers" => self.parse_2_args(expr, s).map(|(start, stop, info)| Expr { kind: ExprKind::MakeListRange { start: Box::new(start), stop: Box::new(stop) }, info })?,
+                    "reportNumbers" => self.parse_2_args(expr, s).map(|(start, stop, info)| Expr { kind: ExprKind::Range { start: Box::new(start), stop: Box::new(stop) }, info })?,
 
                     "reportNot" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Not { value: Box::new(value) }, info })?,
                     "reportRound" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Round { value: Box::new(value) }, info })?,
@@ -1599,15 +1636,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Expr { kind: ExprKind::TextSplit { text, mode }, info }
                     }
 
-                    "reportStringSize" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::Strlen { value: Box::new(value) }, info })?,
+                    "reportStringSize" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::StrLen { value: Box::new(value) }, info })?,
                     "reportUnicodeAsLetter" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::UnicodeToChar { value: Box::new(value) }, info })?,
                     "reportUnicode" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::CharToUnicode { value: Box::new(value) }, info })?,
 
                     "reportCDR" => self.parse_1_args(expr, s).map(|(value, info)| Expr { kind: ExprKind::ListCdr { value: Box::new(value) }, info })?,
                     "reportCONS" => self.parse_2_args(expr, s).map(|(item, list, info)| Expr { kind: ExprKind::ListCons { item: Box::new(item), list: Box::new(list) }, info })?,
 
-                    "reportJoinWords" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::Strcat { values }, info })?,
-                    "reportConcatenatedLists" => self.parse_1_varargs(expr, s).map(|(lists, info)| Expr { kind: ExprKind::MakeListConcat { lists }, info })?,
+                    "reportJoinWords" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::StrCat { values }, info })?,
+                    "reportConcatenatedLists" => self.parse_1_varargs(expr, s).map(|(lists, info)| Expr { kind: ExprKind::ListCat { lists }, info })?,
                     "reportNewList" => self.parse_1_varargs(expr, s).map(|(values, info)| Expr { kind: ExprKind::MakeList { values }, info })?,
                     "reportCrossproduct" => self.parse_1_varargs(expr, s).map(|(sources, info)| Expr { kind: ExprKind::ListCombinations { sources }, info })?,
 
@@ -1803,6 +1840,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Expr { kind: ExprKind::Syscall { name: Box::new(info.name), args: info.args }, info: info.info }
                     }
                     "nativeSyscallError" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::SyscallError, info })?,
+
+                    "getEffect" => {
+                        let info = self.check_children_get_info(expr, s, 1)?;
+                        let effect = self.parse_effect(&expr.children[0], s)?;
+                        Expr { kind: ExprKind::Effect { kind: effect }, info }
+                    }
 
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
