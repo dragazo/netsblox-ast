@@ -13,7 +13,7 @@ fn main() {
     if input.ends_with(".xml") {
         let mut xml = String::new();
         File::open(input).expect("failed to open file").read_to_string(&mut xml).unwrap();
-        let parser = ParserBuilder::default().optimize(true).build().unwrap();
+        let parser = Parser { optimize: true, ..Default::default() };
         let res = parser.parse(&xml).expect("failed to translate");
         println!("{:?}", res);
     }
