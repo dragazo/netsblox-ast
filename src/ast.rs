@@ -1037,11 +1037,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let service = stmt.children[0].text.clone();
         let rpc = stmt.children[1].text.clone();
 
-        let arg_names = match SERVICE_INFO.get(service.as_str()) {
-            None => return Err(Error::UnknownService { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service }),
-            Some(x) => match x.get(rpc.as_str()) {
-                None => return Err(Error::UnknownRPC { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service, rpc }),
-                Some(&x) => x,
+        let arg_names = match stmt.attr("inputNames").map(|x| x.value.split(';').map(str::trim).filter(|v| !v.is_empty()).collect::<Vec<_>>()) {
+            Some(x) => x,
+            None => match SERVICE_INFO.get(service.as_str()) {
+                None => return Err(Error::UnknownService { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service }),
+                Some(x) => match x.get(rpc.as_str()) {
+                    None => return Err(Error::UnknownRPC { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), service, rpc }),
+                    Some(&x) => x.to_owned(),
+                }
             }
         };
 

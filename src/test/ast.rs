@@ -236,6 +236,44 @@ fn test_lambdas_script_capture() {
 }
 
 #[test]
+fn test_inline_rpc_metadata() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="15.384615384615383" y="15.384615384615383"><block collabId="item_11" s="doRunRPC" inputNames=""><l>TheCatApi</l><l>getCatBreeds</l></block><block collabId="item_14" s="doRunRPC" inputNames="sleepTime"><l>TimeSync</l><l>prepare</l><l></l></block><block collabId="item_17" s="doRunRPC" inputNames="startDate;stopDate;species;latitude;longitude;radius"><l>Wildcam</l><l>search</l><l></l><l></l><l></l><l></l><l></l><l></l></block></script>"##,
+    );
+    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 3);
+
+    match &stmts[0].kind {
+        StmtKind::RunRpc { service, rpc, args } => {
+            assert_eq!(service, "TheCatApi");
+            assert_eq!(rpc, "getCatBreeds");
+            assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &[] as &[&str]);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[1].kind {
+        StmtKind::RunRpc { service, rpc, args } => {
+            assert_eq!(service, "TimeSync");
+            assert_eq!(rpc, "prepare");
+            assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["sleepTime"]);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2].kind {
+        StmtKind::RunRpc { service, rpc, args } => {
+            assert_eq!(service, "Wildcam");
+            assert_eq!(rpc, "search");
+            assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["startDate", "stopDate", "species", "latitude", "longitude", "radius"]);
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
 fn test_run_call_lambdas() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",
