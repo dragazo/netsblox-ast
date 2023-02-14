@@ -242,7 +242,7 @@ fn test_inline_rpc_metadata() {
         funcs = "", methods = "",
         scripts = r##"<script x="15.384615384615383" y="15.384615384615383"><block collabId="item_11" s="doRunRPC" inputNames=""><l>TheCatApi</l><l>getCatBreeds</l></block><block collabId="item_14" s="doRunRPC" inputNames="sleepTime"><l>TimeSync</l><l>prepare</l><l></l></block><block collabId="item_17" s="doRunRPC" inputNames="startDate;stopDate;species;latitude;longitude;radius"><l>Wildcam</l><l>search</l><l></l><l></l><l></l><l></l><l></l><l></l></block></script>"##,
     );
-    let parser = Parser::builder().omit_nonhat_scripts(false).build().unwrap();
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 3);

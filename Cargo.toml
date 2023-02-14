@@ -23,7 +23,7 @@ default = ["std"]
 std = ["no-std-compat/std"]
 
 [dev-dependencies]
-proptest = "1.0.0"
+proptest = "1.1.0"
 
 [dependencies]
 ritelinked = { version = "0.3.2", default-features = false, features = ["ahash-amortized"] }
