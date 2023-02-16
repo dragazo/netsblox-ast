@@ -4,12 +4,18 @@ use std::rc::Rc;
 use std::{mem, iter, fmt};
 
 use ritelinked::LinkedHashMap;
+use base64::engine::Engine as Base64Engine;
+use base64::DecodeError as Base64DecodeError;
 
 use crate::util::Punctuated;
 use crate::rpcs::*;
 
 #[cfg(test)]
 use proptest::prelude::*;
+
+fn base64_decode(content: &str) -> Result<Vec<u8>, Error> {
+    base64::engine::general_purpose::STANDARD.decode(content).map_err(Into::into)
+}
 
 // regex equivalent: r"%'([^']*)'"
 struct ParamIter<'a>(iter::Fuse<std::str::CharIndices<'a>>);
@@ -298,6 +304,8 @@ pub enum Error {
     XmlReadError { error: xmlparser::Error },
     XmlUnescapeError { illegal_sequence: String },
 
+    InvalidBase64 { error: Base64DecodeError },
+
     InvalidProject { error: ProjectError },
     AutofillGenerateError { input: usize },
     NameTransformError { name: String, role: Option<String>, entity: Option<String> },
@@ -332,6 +340,11 @@ pub enum Error {
 impl From<xmlparser::Error> for Error {
     fn from(error: xmlparser::Error) -> Error {
         Error::XmlReadError { error }
+    }
+}
+impl From<Base64DecodeError> for Error {
+    fn from(error: Base64DecodeError) -> Self {
+        Error::InvalidBase64 { error }
     }
 }
 
@@ -638,6 +651,7 @@ pub enum StmtKind {
 
     SetEffect { kind: EffectKind, value: Expr },
     ChangeEffect { kind: EffectKind, delta: Expr },
+    ClearEffects,
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
@@ -655,6 +669,7 @@ pub enum Value {
     Number(f64),
     Constant(Constant),
     String(String),
+    Image(Rc<Vec<u8>>),
     List(Vec<Value>, Option<RefId>),
     Ref(RefId),
 }
@@ -1411,6 +1426,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Stmt { kind: StmtKind::Ask { prompt, }, info })?,
             "doResetTimer" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ResetTimer, info })?,
+            "clearEffects" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ClearEffects, info })?,
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -1886,11 +1902,11 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                 let name = &ident[self.name.len() + 5..];
 
                 let content = match self.role.images.get(ident) {
-                    Some(&x) => x,
+                    Some(x) => x.clone(),
                     None => return Err(Error::InvalidProject { error: ProjectError::CostumeUndefinedRef { role: self.role.name.clone(), entity: self.name, id: ident.into() } }),
                 };
 
-                match self.costumes.define(name.into(), content.into()) {
+                match self.costumes.define(name.into(), Value::Image(content)) {
                     Ok(None) => (),
                     Ok(Some(prev)) => return Err(Error::InvalidProject { error: ProjectError::CostumesWithSameName { role: self.role.name.clone(), entity: self.name, name: prev.def.name } }),
                     Err(SymbolError::NameTransformError { name }) => return Err(Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.name) }),
@@ -2088,7 +2104,7 @@ struct RoleInfo<'a> {
     globals: SymbolTable<'a>,
     entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
-    images: LinkedHashMap<&'a str, &'a str>,
+    images: LinkedHashMap<&'a str, Rc<Vec<u8>>>,
     msg_types: LinkedHashMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
@@ -2159,13 +2175,13 @@ impl<'a> RoleInfo<'a> {
 
             let content = match entry.attr("image") {
                 Some(x) => match x.value.as_str() {
-                    x if x.starts_with("data:image/png;base64,") => &x[22..],
+                    x if x.starts_with("data:image/png;base64,") => base64_decode(&x[22..])?,
                     x => return Err(Error::InvalidProject { error: ProjectError::ImageUnknownFormat { role, id: id.into(), content: x.into() } }),
                 }
                 None => return Err(Error::InvalidProject { error: ProjectError::ImageWithoutContent { role, id: id.into() } }),
             };
 
-            if self.images.insert(id, content).is_some() {
+            if self.images.insert(id, Rc::new(content)).is_some() {
                 return Err(Error::InvalidProject { error: ProjectError::ImagesWithSameId { role, id: id.into() } });
             }
         }
