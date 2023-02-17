@@ -597,7 +597,8 @@ pub enum StmtKind {
     Sleep { seconds: Expr },
     WaitUntil { condition: Expr },
 
-    SwitchCostume { costume: Option<Expr> },
+    SetCostume { costume: Option<Expr> },
+    NextCostume,
 
     Forward { distance: Expr },
     ChangePos { dx: Option<Expr>, dy: Option<Expr> },
@@ -866,6 +867,10 @@ pub enum ExprKind {
     SyscallError,
 
     Effect { kind: EffectKind },
+
+    CostumeList,
+    Costume,
+    CostumeNumber,
 }
 impl<T: Into<Value>> From<T> for Expr {
     fn from(v: T) -> Expr {
@@ -1294,24 +1299,21 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doSwitchToCostume" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
+                let val = &stmt.children[0];
 
-                let costume = {
-                    let val = &stmt.children[0];
-                    if val.name == "l" && val.children.is_empty() && val.text.is_empty() {
-                        None
+                if val.name == "l" && val.get(&["option"]).is_some() {
+                    match self.grab_option(s, val)? {
+                        "Turtle" => Stmt { kind: StmtKind::SetCostume { costume: None }, info },
+                        x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("{s} with project costume ({x}) currently not supported") }),
                     }
-                    else if val.name == "l" && val.get(&["option"]).is_some() {
-                        match self.grab_option(s, val)? {
-                            "Turtle" => None,
-                            x => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("{} with project costume ({}) currently not supported", s, x) }),
-                        }
+                } else if val.name == "l" {
+                    match val.text.as_str() {
+                        "" => Stmt { kind: StmtKind::SetCostume { costume: None }, info },
+                        x => Stmt { kind: StmtKind::SetCostume { costume: Some(x.into()) }, info },
                     }
-                    else {
-                        Some(self.parse_expr(val)?)
-                    }
-                };
-
-                Stmt { kind: StmtKind::SwitchCostume { costume }, info }
+                } else {
+                    Stmt { kind: StmtKind::SetCostume { costume: Some(self.parse_expr(val)?) }, info }
+                }
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
@@ -1427,6 +1429,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Stmt { kind: StmtKind::Ask { prompt, }, info })?,
             "doResetTimer" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ResetTimer, info })?,
             "clearEffects" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ClearEffects, info })?,
+            "doWearNextCostume" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::NextCostume, info })?,
             _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
         })
     }
@@ -1845,24 +1848,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         }
                         Expr { kind: ExprKind::CallClosure { closure, args }, info }
                     }
-
                     "doSocketRequest" => {
                         let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(expr, s)?;
                         Expr { kind: ExprKind::NetworkMessageReply { target: Box::new(target), msg_type, values }, info }
                     }
-
                     "nativeCallSyscall" => {
                         let info = self.parse_syscall(expr, s)?;
                         Expr { kind: ExprKind::Syscall { name: Box::new(info.name), args: info.args }, info: info.info }
                     }
                     "nativeSyscallError" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::SyscallError, info })?,
-
                     "getEffect" => {
                         let info = self.check_children_get_info(expr, s, 1)?;
                         let effect = self.parse_effect(&expr.children[0], s)?;
                         Expr { kind: ExprKind::Effect { kind: effect }, info }
                     }
-
+                    "reportGet" => {
+                        let info = self.check_children_get_info(expr, s, 1)?;
+                        match self.grab_option(s, &expr.children[0])? {
+                            "costumes" => Expr { kind: ExprKind::CostumeList, info },
+                            "costume" => Expr { kind: ExprKind::Costume, info },
+                            m => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("the {s} block with option {m} is currently not supported") }),
+                        }
+                    }
+                    "getCostumeIdx" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::CostumeNumber, info })?,
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),
                 })
             }
