@@ -486,7 +486,7 @@ pub struct Entity {
 
     pub active_costume: Option<usize>,
     pub visible: bool,
-    pub color: (u8, u8, u8),
+    pub color: (u8, u8, u8, u8),
     pub pos: (f64, f64),
     pub heading: f64,
     pub scale: f64,
@@ -616,7 +616,7 @@ pub enum StmtKind {
     PenClear,
     Stamp,
     Write { content: Expr, font_size: Expr },
-    SetPenColor { color: (u8, u8, u8) },
+    SetPenColor { color: (u8, u8, u8, u8) },
 
     Say { content: Expr, duration: Option<Expr> },
     Think { content: Expr, duration: Option<Expr> },
@@ -880,12 +880,12 @@ impl From<Rpc> for Expr {
     }
 }
 
-fn parse_color(value: &str) -> Option<(u8, u8, u8)> {
-    let rgb: Vec<_> = value.split(',').take(3).map(|v| v.parse::<f64>().ok()).flatten().collect();
-    if rgb.len() == 3 && rgb.iter().all(|&v| (0.0..256.0).contains(&v)) {
-        Some((rgb[0] as u8, rgb[1] as u8, rgb[2] as u8))
-    } else {
-        None
+fn parse_color(value: &str) -> Option<(u8, u8, u8, u8)> {
+    let vals: Vec<_> = value.split(',').map(|v| v.parse::<f64>().ok()).flatten().collect();
+    match vals.as_slice() {
+        [r, g, b] => Some((*r as u8, *g as u8, *b as u8, 255)),
+        [r, g, b, a] => Some((*r as u8, *g as u8, *b as u8, (*a * 255.0) as u8)),
+        _ => None,
     }
 }
 
@@ -1928,13 +1928,13 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             Some(idx) if idx >= 1 && idx <= self.costumes.len() => Some(idx - 1),
             _ => None,
         };
-        let color = entity.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0));
+        let color = entity.attr("color").map(|v| parse_color(&v.value)).flatten().unwrap_or((0, 0, 0, 255));
         let visible = !entity.attr("hidden").and_then(|s| s.value.parse::<bool>().ok()).unwrap_or(false);
 
         let float_attr = |attr: &str| entity.attr(attr).map(|v| v.value.parse::<f64>().ok().filter(|v| v.is_finite())).flatten();
         let pos = (float_attr("x").unwrap_or(0.0), float_attr("y").unwrap_or(0.0));
         let heading = float_attr("heading").unwrap_or(0.0);
-        let scale = float_attr("scale").unwrap_or(0.0);
+        let scale = float_attr("scale").unwrap_or(1.0);
 
         if let Some(fields) = entity.get(&["variables"]) {
             let mut dummy_script = ScriptInfo::new(&self);
