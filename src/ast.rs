@@ -566,6 +566,9 @@ pub enum StmtKind {
     Assign { var: VariableRef, value: Expr },
     AddAssign { var: VariableRef, value: Expr },
 
+    ShowVar { var: VariableRef },
+    HideVar { var: VariableRef },
+
     Warp { stmts: Vec<Stmt> },
 
     InfLoop { stmts: Vec<Stmt> },
@@ -1179,6 +1182,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 match s {
                     "doSetVar" => Stmt { kind: StmtKind::Assign { var, value }, info },
                     "doChangeVar" => Stmt { kind: StmtKind::AddAssign { var, value }, info },
+                    _ => unreachable!(),
+                }
+            }
+            "doShowVar" | "doHideVar" => {
+                let info = self.check_children_get_info(stmt, s, 1)?;
+                let var = match stmt.children[0].name.as_str() {
+                    "l" => self.reference_var(&stmt.children[0].text)?,
+                    _ => return Err(Error::DerefAssignment { role: self.role.name.clone(), entity: self.entity.name.clone() }),
+                };
+                match s {
+                    "doShowVar" => Stmt { kind: StmtKind::ShowVar { var }, info },
+                    "doHideVar" => Stmt { kind: StmtKind::HideVar { var }, info },
                     _ => unreachable!(),
                 }
             }
