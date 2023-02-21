@@ -623,8 +623,8 @@ pub enum StmtKind {
     Think { content: Expr, duration: Option<Expr> },
 
     SetVisible { value: bool },
-    ChangeScalePercent { amount: Expr },
-    SetScalePercent { value: Expr },
+    ChangeSize { amount: Expr },
+    SetSize { value: Expr },
 
     ChangePenSize { amount: Expr },
     SetPenSize { value: Expr },
@@ -831,7 +831,7 @@ pub enum ExprKind {
 
     PenDown,
 
-    Scale,
+    Size,
     IsVisible,
 
     This,
@@ -1397,8 +1397,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })?,
             "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })?,
             "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SendNetworkReply { value }, info })?,
-            "changeScale" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangeScalePercent { amount, }, info })?,
-            "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetScalePercent { value }, info })?,
+            "changeScale" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangeSize { amount, }, info })?,
+            "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetSize { value }, info })?,
             "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })?,
             "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })?,
             "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Say { content, duration: None }, info })?,
@@ -1773,7 +1773,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "reportRPCError" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::RpcError, info })?,
 
-                    "getScale" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Scale, info })?,
+                    "getScale" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::Size, info })?,
                     "reportShown" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::IsVisible, info })?,
 
                     "xPosition" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::XPos, info })?,
