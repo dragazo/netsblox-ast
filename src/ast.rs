@@ -604,14 +604,22 @@ pub enum StmtKind {
     NextCostume,
 
     Forward { distance: Expr },
-    ChangePos { dx: Option<Expr>, dy: Option<Expr> },
-    SetPos { x: Option<Expr>, y: Option<Expr> },
+    SetX { value: Expr },
+    ChangeX { delta: Expr },
+    SetY { value: Expr },
+    ChangeY { delta: Expr },
+    GotoXY { x: Expr, y: Expr },
+    GotoMouse,
+    GotoRandom,
     /// Similar to `SetPos` except that the target can be either a list of `[x, y]` coordinates or a entity.
     Goto { target: Expr },
+    PointTowards { target: Expr },
+    PointTowardsXY { x: Expr, y: Expr },
 
     TurnRight { angle: Expr },
     TurnLeft { angle: Expr },
     SetHeading { value: Expr },
+    SetHeadingRandom,
 
     BounceOffEdge,
 
@@ -1332,40 +1340,48 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
-
                 let child = &stmt.children[0];
-                let value = if child.name == "l" && child.get(&["option"]).is_some() {
-                    let opt = self.grab_option(s, child)?;
-                    match opt {
-                        "random" => Expr { kind: ExprKind::Random { a: Box::new(0f64.into()), b: Box::new(360f64.into()) }, info: BlockInfo::none() },
-                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
-                    }
-                } else { self.parse_expr(child)? };
 
-                Stmt { kind: StmtKind::SetHeading { value }, info }
-            }
-            "doGotoObject" => {
-                let info = self.check_children_get_info(stmt, s, 1)?;
-
-                let child = &stmt.children[0];
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(s, child)?;
                     match opt {
-                        "random position" => {
-                            let half_width = Expr { kind: ExprKind::Div { left: Box::new(Expr { kind: ExprKind::StageWidth, info: BlockInfo::none() }), right: Box::new(2f64.into()) }, info: BlockInfo::none() };
-                            let half_height = Expr { kind: ExprKind::Div { left: Box::new(Expr { kind: ExprKind::StageHeight, info: BlockInfo::none() }), right: Box::new(2f64.into()) }, info: BlockInfo::none() };
-                            Stmt { kind: StmtKind::SetPos {
-                                x: Some(Expr { kind: ExprKind::Random { a: Box::new(Expr { kind: ExprKind::Neg { value: Box::new(half_width.clone()) }, info: BlockInfo::none() }), b: Box::new(half_width) }, info: BlockInfo::none() }),
-                                y: Some(Expr { kind: ExprKind::Random { a: Box::new(Expr { kind: ExprKind::Neg { value: Box::new(half_height.clone()) }, info: BlockInfo::none() }), b: Box::new(half_height) }, info: BlockInfo::none() }),
-                            }, info }
-                        }
-                        "mouse-pointer" => Stmt { kind: StmtKind::SetPos { x: Some(Expr { kind: ExprKind::MouseX, info: BlockInfo::none() }), y: Some(Expr { kind: ExprKind::MouseY, info: BlockInfo::none() }) }, info },
-                        "center" => Stmt { kind: StmtKind::SetPos { x: Some(0f64.into()), y: Some(0f64.into()) }, info },
+                        "random" => Stmt { kind: StmtKind::SetHeadingRandom, info },
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
+                    }
+                } else {
+                    let value = self.parse_expr(child)?;
+                    Stmt { kind: StmtKind::SetHeading { value }, info }
+                }
+            }
+            "doGotoObject" => {
+                let info = self.check_children_get_info(stmt, s, 1)?;
+                let child = &stmt.children[0];
+
+                if child.name == "l" && child.get(&["option"]).is_some() {
+                    let opt = self.grab_option(s, child)?;
+                    match opt {
+                        "random position" => Stmt { kind: StmtKind::GotoRandom, info },
+                        "mouse-pointer" => Stmt { kind: StmtKind::GotoMouse, info },
+                        "center" => Stmt { kind: StmtKind::GotoXY { x: 0f64.into(), y: 0f64.into() }, info },
                         _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
                     }
                 }
                 else {
                     Stmt { kind: StmtKind::Goto { target: self.parse_expr(child)? }, info }
+                }
+            }
+            "doFaceTowards" => {
+                let info = self.check_children_get_info(stmt, s, 1)?;
+                let child = &stmt.children[0];
+
+                if child.name == "l" && child.get(&["option"]).is_some() {
+                    let opt = self.grab_option(s, child)?;
+                    match opt {
+                        "center" => Stmt { kind: StmtKind::PointTowardsXY { x: 0.0.into(), y: 0.0.into() }, info },
+                        _ => return Err(Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } }),
+                    }
+                } else {
+                    Stmt { kind: StmtKind::PointTowards { target: self.parse_expr(child)? }, info }
                 }
             }
             "setColor" => {
@@ -1431,11 +1447,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "forward" => self.parse_1_args(stmt, s).map(|(distance, info)| Stmt { kind: StmtKind::Forward { distance, }, info })?,
             "turn" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnRight { angle, }, info })?,
             "turnLeft" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnLeft { angle, }, info })?,
-            "setXPosition" => self.parse_1_args(stmt, s).map(|(x, info)| Stmt { kind: StmtKind::SetPos { x: Some(x), y: None }, info })?,
-            "setYPosition" => self.parse_1_args(stmt, s).map(|(y, info)| Stmt { kind: StmtKind::SetPos { y: Some(y), x: None }, info })?,
-            "changeXPosition" => self.parse_1_args(stmt, s).map(|(dx, info)| Stmt { kind: StmtKind::ChangePos { dx: Some(dx), dy: None }, info })?,
-            "changeYPosition" => self.parse_1_args(stmt, s).map(|(dy, info)| Stmt { kind: StmtKind::ChangePos { dy: Some(dy), dx: None }, info })?,
-            "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Stmt { kind: StmtKind::SetPos { x: Some(x), y: Some(y) }, info })?,
+            "setXPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetX { value }, info })?,
+            "setYPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetY { value }, info })?,
+            "changeXPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeX { delta }, info })?,
+            "changeYPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeY { delta }, info })?,
+            "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Stmt { kind: StmtKind::GotoXY { x, y }, info })?,
             "bounceOffEdge" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::BounceOffEdge, info })?,
             "down" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenDown, info })?,
             "up" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenUp, info })?,
