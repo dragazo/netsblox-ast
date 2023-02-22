@@ -317,6 +317,7 @@ pub enum Error {
     BlockOptionNotSelected { role: String, entity: String, block_type: String },
     UnknownEntity { role: String, entity: String, unknown: String },
     UnknownEffect { role: String, entity: String, effect: String },
+    UnknownPenAttr { role: String, entity: String, attr: String },
 
     UnknownMessageType { role: String, entity: String, msg_type: String },
     MessageTypeWrongNumberArgs { role: String, entity: String, msg_type: String, block_type: String, got: usize, expected: usize },
@@ -623,8 +624,7 @@ pub enum StmtKind {
 
     BounceOffEdge,
 
-    PenDown,
-    PenUp,
+    SetPenDown { value: bool },
     PenClear,
     Stamp,
     Write { content: Expr, font_size: Expr },
@@ -634,10 +634,10 @@ pub enum StmtKind {
     Think { content: Expr, duration: Option<Expr> },
 
     SetVisible { value: bool },
-    ChangeSize { amount: Expr },
+    ChangeSize { delta: Expr },
     SetSize { value: Expr },
 
-    ChangePenSize { amount: Expr },
+    ChangePenSize { delta: Expr },
     SetPenSize { value: Expr },
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
@@ -664,6 +664,9 @@ pub enum StmtKind {
     SetEffect { kind: EffectKind, value: Expr },
     ChangeEffect { kind: EffectKind, delta: Expr },
     ClearEffects,
+
+    SetPenAttr { attr: PenAttribute, value: Expr },
+    ChangePenAttr { attr: PenAttribute, delta: Expr },
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
@@ -705,6 +708,10 @@ pub enum TextSplitMode {
 pub enum EffectKind {
     Color, Saturation, Brightness, Ghost,
     Fisheye, Whirl, Pixelate, Mosaic, Negative,
+}
+#[derive(Debug, Clone)]
+pub enum PenAttribute {
+    Size, Hue, Saturation, Brightness, Transparency,
 }
 #[derive(Debug, Clone)]
 pub enum VariadicInput {
@@ -878,6 +885,7 @@ pub enum ExprKind {
     SyscallError,
 
     Effect { kind: EffectKind },
+    PenAttr { attr: PenAttribute },
 
     CostumeList,
     Costume,
@@ -1088,6 +1096,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "mosaic" => EffectKind::Mosaic,
             "negative" => EffectKind::Negative,
             x => return Err(Error::UnknownEffect { role: self.role.name.clone(), entity: self.entity.name.clone(), effect: x.to_owned() }),
+        })
+    }
+    fn parse_pen_attr(&mut self, attr: &Xml, s: &str) -> Result<PenAttribute, Error> {
+        Ok(match self.grab_option(s, attr)? {
+            "size" => PenAttribute::Size,
+            "hue" => PenAttribute::Hue,
+            "saturation" => PenAttribute::Saturation,
+            "brightness" => PenAttribute::Brightness,
+            "transparency" => PenAttribute::Transparency,
+            x => return Err(Error::UnknownPenAttr { role: self.role.name.clone(), entity: self.entity.name.clone(), attr: x.to_owned() }),
         })
     }
     fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Rpc, Error> {
@@ -1424,11 +1442,23 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let delta = self.parse_expr(&stmt.children[1])?;
                 Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info }
             }
+            "setPenHSVA" => {
+                let info = self.check_children_get_info(stmt, s, 2)?;
+                let attr = self.parse_pen_attr(&stmt.children[0], s)?;
+                let value = self.parse_expr(&stmt.children[1])?;
+                Stmt { kind: StmtKind::SetPenAttr { attr, value }, info }
+            }
+            "changePenHSVA" => {
+                let info = self.check_children_get_info(stmt, s, 2)?;
+                let attr = self.parse_pen_attr(&stmt.children[0], s)?;
+                let delta = self.parse_expr(&stmt.children[1])?;
+                Stmt { kind: StmtKind::ChangePenAttr { attr, delta }, info }
+            }
             "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Stmt { kind: StmtKind::Write { content, font_size }, info })?,
             "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })?,
             "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })?,
             "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SendNetworkReply { value }, info })?,
-            "changeScale" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangeSize { amount, }, info })?,
+            "changeScale" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeSize { delta, }, info })?,
             "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetSize { value }, info })?,
             "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })?,
             "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })?,
@@ -1438,7 +1468,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "hide" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: false }, info })?,
             "show" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: true }, info })?,
             "doWaitUntil" => self.parse_1_args(stmt, s).map(|(condition, info)| Stmt { kind: StmtKind::WaitUntil { condition, }, info })?,
-            "changeSize" => self.parse_1_args(stmt, s).map(|(amount, info)| Stmt { kind: StmtKind::ChangePenSize { amount, }, info })?,
+            "changeSize" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangePenSize { delta, }, info })?,
             "setSize" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetPenSize { value }, info })?,
             "doAddToList" => self.parse_2_args(stmt, s).map(|(value, list, info)| Stmt { kind: StmtKind::ListInsertLast { value, list }, info })?,
             "doReport" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::Return { value }, info })?,
@@ -1453,8 +1483,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "changeYPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeY { delta }, info })?,
             "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Stmt { kind: StmtKind::GotoXY { x, y }, info })?,
             "bounceOffEdge" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::BounceOffEdge, info })?,
-            "down" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenDown, info })?,
-            "up" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenUp, info })?,
+            "down" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetPenDown { value: true }, info })?,
+            "up" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetPenDown { value: false }, info })?,
             "clear" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenClear, info })?,
             "doRunRPC" => self.parse_rpc(stmt, s)?.into(),
             "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Stmt { kind: StmtKind::Ask { prompt, }, info })?,
@@ -1892,6 +1922,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let info = self.check_children_get_info(expr, s, 1)?;
                         let effect = self.parse_effect(&expr.children[0], s)?;
                         Expr { kind: ExprKind::Effect { kind: effect }, info }
+                    }
+                    "getPenAttribute" => {
+                        let info = self.check_children_get_info(expr, s, 1)?;
+                        let attr = self.parse_pen_attr(&expr.children[0], s)?;
+                        Expr { kind: ExprKind::PenAttr { attr }, info }
                     }
                     "reportGet" => {
                         let info = self.check_children_get_info(expr, s, 1)?;
