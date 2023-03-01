@@ -276,7 +276,6 @@ pub enum ProjectError {
     FieldNoValue { role: String, entity: String, name: String },
     FieldsWithSameName { role: String, entity: String, name: String },
 
-    ListItemNoValue { role: String, entity: String },
     BoolNoValue { role: String, entity: String },
     BoolUnknownValue { role: String, entity: String, value: String },
     UnnamedEntity { role: String },
@@ -642,7 +641,7 @@ pub enum StmtKind {
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
     RunFn { function: FnRef, args: Vec<Expr> },
-    RunClosure { closure: Expr, args: Vec<Expr> },
+    RunClosure { new_entity: Option<Expr>, closure: Expr, args: Vec<Expr> },
 
     /// Sends a message to local entities (not over the network).
     /// If `target` is `None`, this should broadcast to all entities.
@@ -866,7 +865,7 @@ pub enum ExprKind {
     RpcError,
 
     Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt> },
-    CallClosure { closure: Box<Expr>, args: Vec<Expr> },
+    CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
     TextSplit { text: Box<Expr>, mode: TextSplitMode },
 
@@ -974,12 +973,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         if res == "" { return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }) }
         Ok(res)
     }
-    fn grab_entity(&mut self, s: &str, child: &Xml, info: BlockInfo) -> Result<Expr, Error> {
+    fn grab_entity(&mut self, child: &Xml, info: BlockInfo) -> Result<Expr, Error> {
         Ok(match child.text.as_str() {
-            "" => match child.children.is_empty() {
-                true => return Err(Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() }),
-                false => self.parse_expr(child)?,
-            },
+            "" => self.parse_expr(child)?,
             "myself" => Expr { kind: ExprKind::This, info },
             name => match self.role.entities.get(name) {
                 None => return Err(Error::UnknownEntity { role: self.role.name.clone(), entity: self.entity.name.clone(), unknown: name.into() }),
@@ -1424,7 +1420,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[1].children.iter() {
                     args.push(self.parse_expr(arg)?);
                 }
-                Stmt { kind: StmtKind::RunClosure { closure, args }, info }
+                Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info }
+            }
+            "doTellTo" => {
+                let info = self.check_children_get_info(stmt, s, 3)?;
+                let entity = self.grab_entity(&stmt.children[0], BlockInfo::none())?;
+                let closure = self.parse_expr(&stmt.children[1])?;
+                let mut args = Vec::with_capacity(stmt.children[2].children.len());
+                for arg in stmt.children[2].children.iter() {
+                    args.push(self.parse_expr(arg)?);
+                }
+                Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info }
             }
             "nativeRunSyscall" => {
                 let info = self.parse_syscall(stmt, s)?;
@@ -1589,7 +1595,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let mut values = Vec::with_capacity(expr.children.len());
                         for item in expr.children.iter() {
                             match item.children.get(0) {
-                                None => return Err(Error::InvalidProject { error: ProjectError::ListItemNoValue { role: self.role.name.clone(), entity: self.entity.name.clone() } }),
+                                None => values.push(String::new().into()),
                                 Some(x) => match self.parse_expr(x)?.kind {
                                     ExprKind::Value(v) => values.push(v),
                                     _ => return Err(Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } }),
@@ -1812,7 +1818,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportPenTrailsAsCostume" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::ImageOfDrawings, info })?,
                     "reportImageOfObject" => {
                         let info = self.check_children_get_info(expr, s, 1)?;
-                        let entity = self.grab_entity(s, &expr.children[0], BlockInfo::none())?.into();
+                        let entity = self.grab_entity(&expr.children[0], BlockInfo::none())?.into();
                         Expr { kind: ExprKind::ImageOfEntity { entity }, info }
                     }
                     "reportTouchingObject" => {
@@ -1827,7 +1833,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                         }
                         else {
-                            let entity = self.grab_entity(s, child, BlockInfo::none())?.into();
+                            let entity = self.grab_entity(child, BlockInfo::none())?.into();
                             Expr { kind: ExprKind::IsTouchingEntity { entity }, info }
                         }
                     }
@@ -1907,7 +1913,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         for input in expr.children[1].children.iter() {
                             args.push(self.parse_expr(input)?);
                         }
-                        Expr { kind: ExprKind::CallClosure { closure, args }, info }
+                        Expr { kind: ExprKind::CallClosure { new_entity: None, closure, args }, info }
+                    }
+                    "reportAskFor" => {
+                        let info = self.check_children_get_info(expr, s, 3)?;
+                        let entity = Box::new(self.grab_entity(&expr.children[0], BlockInfo::none())?);
+                        let closure = Box::new(self.parse_expr(&expr.children[1])?);
+                        let mut args = Vec::with_capacity(expr.children[2].children.len());
+                        for input in expr.children[2].children.iter() {
+                            args.push(self.parse_expr(input)?);
+                        }
+                        Expr { kind: ExprKind::CallClosure { new_entity: Some(entity), closure, args }, info }
                     }
                     "doSocketRequest" => {
                         let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(expr, s)?;
@@ -1935,6 +1951,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "costume" => Expr { kind: ExprKind::Costume, info },
                             m => return Err(Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("the {s} block with option {m} is currently not supported") }),
                         }
+                    }
+                    "reportObject" => {
+                        let info = self.check_children_get_info(expr, s, 1)?;
+                        self.grab_entity(&expr.children[0], info)?
                     }
                     "getCostumeIdx" => self.parse_0_args(expr, s).map(|info| Expr { kind: ExprKind::CostumeNumber, info })?,
                     _ => return Err(Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() }),

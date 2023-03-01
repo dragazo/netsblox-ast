@@ -285,7 +285,7 @@ fn test_run_call_lambdas() {
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
     assert_eq!(stmts.len(), 5);
     match &stmts[1].kind {
-        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args }, .. }, .. } => {
+        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args, .. }, .. }, .. } => {
             match &closure.kind {
                 ExprKind::Closure { params, captures, stmts } => {
                     assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
@@ -299,7 +299,7 @@ fn test_run_call_lambdas() {
         x => panic!("{:?}", x),
     }
     match &stmts[2].kind {
-        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args }, .. }, .. } => {
+        StmtKind::Assign { value: Expr { kind: ExprKind::CallClosure { closure, args, .. }, .. }, .. } => {
             match &closure.kind {
                 ExprKind::Closure { params, captures, stmts } => {
                     assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["#1", "merp", "#3"]);
@@ -313,7 +313,7 @@ fn test_run_call_lambdas() {
         x => panic!("{:?}", x),
     }
     match &stmts[3].kind {
-        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args } => {
+        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a"]);
             assert_eq!(stmts.len(), 1);
@@ -322,7 +322,7 @@ fn test_run_call_lambdas() {
         x => panic!("{:?}", x),
     }
     match &stmts[4].kind {
-        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args } => {
+        StmtKind::RunClosure { closure: Expr { kind: ExprKind::Closure { params, captures, stmts }, .. }, args, .. } => {
             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["val", "rgt"]);
             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
             assert_eq!(stmts.len(), 1);
