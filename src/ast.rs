@@ -1668,7 +1668,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     None => return Err(Box::new(Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
                     Some(v) => v.value.as_str(),
                 };
-                println!("    >> inside {s}");
                 match s {
                     "reportVariadicSum" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new(Expr { kind: ExprKind::Add { values }, info })),
                     "reportVariadicProduct" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new(Expr { kind: ExprKind::Mul { values }, info })),
