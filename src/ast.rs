@@ -582,7 +582,7 @@ pub enum FnLocation {
 }
 #[derive(Debug, Clone)]
 pub struct Script {
-    pub hat: Option<Hat>,
+    pub hat: Option<Box<Hat>>,
     pub stmts: Vec<Stmt>,
 }
 #[derive(Debug, Clone)]
@@ -1061,7 +1061,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok(Script { hat, stmts })
     }
     #[inline(never)]
-    fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Hat>, Box<Error>> {
+    fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Box<Hat>>, Box<Error>> {
         let s = match stmt.attr("s") {
             None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
             Some(v) => v.value.as_str(),
@@ -1069,29 +1069,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok(Some(match s {
             "receiveGo" => {
                 let info = self.check_children_get_info(stmt, s, 0)?;
-                Hat { kind: HatKind::OnFlag, info }
+                Box::new_with(|| Hat { kind: HatKind::OnFlag, info })
             }
             "receiveCondition" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
-                Hat { kind: HatKind::When { condition }, info }
+                Box::new_with(|| Hat { kind: HatKind::When { condition }, info })
             }
             "receiveKey" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let key = self.grab_option(s, &stmt.children[0])?;
-                Hat { kind: HatKind::OnKey { key: key.into() }, info }
+                Box::new_with(|| Hat { kind: HatKind::OnKey { key: key.into() }, info })
             }
             "receiveInteraction" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 match self.grab_option(s, &stmt.children[0])? {
-                    "pressed" => Hat { kind: HatKind::MouseDown, info },
-                    "clicked" => Hat { kind: HatKind::MouseUp, info },
-                    "mouse-entered" => Hat { kind: HatKind::MouseEnter, info },
-                    "mouse-departed" => Hat { kind: HatKind::MouseLeave, info },
-                    "scrolled-up" => Hat { kind: HatKind::ScrollUp, info },
-                    "scrolled-down" => Hat { kind: HatKind::ScrollDown, info },
-                    "dropped" => Hat { kind: HatKind::Dropped, info },
-                    "stopped" => Hat { kind: HatKind::Stopped, info },
+                    "pressed" => Box::new_with(|| Hat { kind: HatKind::MouseDown, info }),
+                    "clicked" => Box::new_with(|| Hat { kind: HatKind::MouseUp, info }),
+                    "mouse-entered" => Box::new_with(|| Hat { kind: HatKind::MouseEnter, info }),
+                    "mouse-departed" => Box::new_with(|| Hat { kind: HatKind::MouseLeave, info }),
+                    "scrolled-up" => Box::new_with(|| Hat { kind: HatKind::ScrollUp, info }),
+                    "scrolled-down" => Box::new_with(|| Hat { kind: HatKind::ScrollDown, info }),
+                    "dropped" => Box::new_with(|| Hat { kind: HatKind::Dropped, info }),
+                    "stopped" => Box::new_with(|| Hat { kind: HatKind::Stopped, info }),
                     x => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
                 }
             }
@@ -1103,7 +1103,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "" => return Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
                     x => x.to_owned(),
                 };
-                Hat { kind: HatKind::LocalMessage { msg_type }, info }
+                Box::new_with(|| Hat { kind: HatKind::LocalMessage { msg_type }, info })
             }
             "receiveSocketMessage" => {
                 if stmt.children.is_empty() { return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: 1, got: 0 } })) }
@@ -1125,7 +1125,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     fields.push(var);
                 }
                 let location = stmt.attr("collabId").map(|x| x.value.clone());
-                Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info: BlockInfo { comment, location } }
+                Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info: BlockInfo { comment, location } })
             }
             x if x.starts_with("receive") => return Err(Box::new_with(|| Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() })),
             _ => return Ok(None),
