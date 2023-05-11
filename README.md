@@ -18,7 +18,7 @@ You'll also need `dot` from `graphviz`.
 sudo apt install graphviz
 ```
 
-To generate the call graph, run the following command:
+To generate the call graph, run the following commands:
 
 ```bash
 RUSTFLAGS="-C embed-bitcode" cargo +nightly call-stack --bin netsblox_ast --target x86_64-unknown-linux-gnu >cg.dot

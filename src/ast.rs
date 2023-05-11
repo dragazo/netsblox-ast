@@ -1050,7 +1050,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let mut stmts = vec![];
         for stmt in stmts_xml {
             match stmt.name.as_str() {
-                "block" => stmts.push(self.parse_block(stmt)?),
+                "block" => stmts.push(*self.parse_block(stmt)?),
                 "custom-block" => {
                     let FnCall { function, args, info } = self.parse_fn_call(stmt)?;
                     stmts.push(Stmt { kind: StmtKind::RunFn { function, args }, info });
@@ -1243,7 +1243,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let location = stmt.attr("collabId").map(|x| x.value.clone());
         Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info: BlockInfo { comment, location } })
     }
-    fn parse_block(&mut self, stmt: &Xml) -> Result<Stmt, Box<Error>> {
+    fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
         let s = match stmt.attr("s") {
             None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
             Some(v) => v.value.as_str(),
@@ -1255,7 +1255,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for var in stmt.children[0].children.iter() {
                     vars.push(self.decl_local(var.text.clone(), 0f64.into())?.def.clone());
                 }
-                Ok(Stmt { kind: StmtKind::DeclareLocals { vars }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::DeclareLocals { vars }, info }))
             }
             "doSetVar" | "doChangeVar" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
@@ -1265,8 +1265,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let value = self.parse_expr(&stmt.children[1])?;
                 match s {
-                    "doSetVar" => Ok(Stmt { kind: StmtKind::Assign { var, value }, info }),
-                    "doChangeVar" => Ok(Stmt { kind: StmtKind::AddAssign { var, value }, info }),
+                    "doSetVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Assign { var, value }, info })),
+                    "doChangeVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::AddAssign { var, value }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1277,8 +1277,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error::DerefAssignment { role: self.role.name.clone(), entity: self.entity.name.clone() })),
                 };
                 match s {
-                    "doShowVar" => Ok(Stmt { kind: StmtKind::ShowVar { var }, info }),
-                    "doHideVar" => Ok(Stmt { kind: StmtKind::HideVar { var }, info }),
+                    "doShowVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ShowVar { var }, info })),
+                    "doHideVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::HideVar { var }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1294,7 +1294,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into())?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                Ok(Stmt { kind: StmtKind::ForLoop { var, start, stop, stmts }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForLoop { var, start, stop, stmts }, info }))
             }
             "doForEach" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
@@ -1307,30 +1307,30 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into())?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                Ok(Stmt { kind: StmtKind::ForeachLoop { var, items, stmts }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForeachLoop { var, items, stmts }, info }))
             }
             "doRepeat" | "doUntil" | "doIf" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let expr = self.parse_expr(&stmt.children[0])?;
                 let stmts = self.parse(&stmt.children[1])?.stmts;
                 match s {
-                    "doRepeat" => Ok(Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info }),
-                    "doUntil" => Ok(Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info }),
-                    "doIf" => Ok(Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info }),
+                    "doRepeat" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info })),
+                    "doUntil" => Ok(Box::new_with(|| Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info })),
+                    "doIf" => Ok(Box::new_with(|| Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info })),
                     _ => unreachable!(),
                 }
             }
             "doForever" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Stmt { kind: StmtKind::InfLoop { stmts }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::InfLoop { stmts }, info }))
             }
             "doIfElse" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
                 let condition = self.parse_expr(&stmt.children[0])?;
                 let then = self.parse(&stmt.children[1])?.stmts;
                 let otherwise = self.parse(&stmt.children[2])?.stmts;
-                Ok(Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }))
             }
             "doTryCatch" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
@@ -1340,26 +1340,26 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::NonConstantUpvar { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } })),
                 };
                 let handler = self.parse(&stmt.children[2])?.stmts;
-                Ok(Stmt { kind: StmtKind::TryCatch { code, var, handler }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::TryCatch { code, var, handler }, info }))
             }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Stmt { kind: StmtKind::Warp { stmts }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::Warp { stmts }, info }))
             }
             "doDeleteFromList" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Stmt { kind: StmtKind::ListRemoveLast { list }, info }),
-                        "all" => Ok(Stmt { kind: StmtKind::ListRemoveAll { list }, info }),
+                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemoveLast { list }, info })),
+                        "all" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemoveAll { list }, info })),
                         "" => Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
                         x => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
-                        Ok(Stmt { kind: StmtKind::ListRemove { list, index }, info })
+                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemove { list, index }, info }))
                     }
                 }
             }
@@ -1369,14 +1369,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[2])?;
                 match stmt.children[1].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Stmt { kind: StmtKind::ListInsertLast { list, value }, info }),
-                        "random" | "any" => Ok(Stmt { kind: StmtKind::ListInsertRandom { list, value }, info }),
+                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsertLast { list, value }, info })),
+                        "random" | "any" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsertRandom { list, value }, info })),
                         "" => Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
                         x => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[1])?;
-                        Ok(Stmt { kind: StmtKind::ListInsert { list, value, index }, info })
+                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsert { list, value, index }, info }))
                     }
                 }
             }
@@ -1386,14 +1386,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[1])?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Stmt { kind: StmtKind::ListAssignLast { list, value }, info }),
-                        "random" | "any" => Ok(Stmt { kind: StmtKind::ListAssignRandom { list, value }, info }),
+                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssignLast { list, value }, info })),
+                        "random" | "any" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssignRandom { list, value }, info })),
                         "" => Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
                         x => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0])?;
-                        Ok(Stmt { kind: StmtKind::ListAssign { list, value, index }, info })
+                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssign { list, value, index }, info }))
                     }
                 }
             }
@@ -1403,16 +1403,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 if val.name == "l" && val.get(&["option"]).is_some() {
                     match self.grab_option(s, val)? {
-                        "Turtle" => Ok(Stmt { kind: StmtKind::SetCostume { costume: None }, info }),
+                        "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: None }, info })),
                         x => Err(Box::new_with(|| Error::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("{s} with project costume ({x}) currently not supported") })),
                     }
                 } else if val.name == "l" {
                     match val.text.as_str() {
-                        "" => Ok(Stmt { kind: StmtKind::SetCostume { costume: None }, info }),
-                        x => Ok(Stmt { kind: StmtKind::SetCostume { costume: Some(Box::new_with(|| x.into())) }, info }),
+                        "" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: None }, info })),
+                        x => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Some(Box::new_with(|| x.into())) }, info })),
                     }
                 } else {
-                    Ok(Stmt { kind: StmtKind::SetCostume { costume: Some(self.parse_expr(val)?) }, info })
+                    let costume = self.parse_expr(val)?;
+                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Some(costume) }, info }))
                 }
             }
             "setHeading" => {
@@ -1422,12 +1423,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(s, child)?;
                     match opt {
-                        "random" => Ok(Stmt { kind: StmtKind::SetHeadingRandom, info }),
+                        "random" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetHeadingRandom, info })),
                         _ => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } })),
                     }
                 } else {
                     let value = self.parse_expr(child)?;
-                    Ok(Stmt { kind: StmtKind::SetHeading { value }, info })
+                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetHeading { value }, info }))
                 }
             }
             "doGotoObject" => {
@@ -1437,13 +1438,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(s, child)?;
                     match opt {
-                        "random position" => Ok(Stmt { kind: StmtKind::GotoRandom, info }),
-                        "mouse-pointer" => Ok(Stmt { kind: StmtKind::GotoMouse, info }),
-                        "center" => Ok(Stmt { kind: StmtKind::GotoXY { x: Box::new_with(|| 0f64.into()), y: Box::new_with(|| 0f64.into()) }, info }),
+                        "random position" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoRandom, info })),
+                        "mouse-pointer" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoMouse, info })),
+                        "center" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoXY { x: Box::new_with(|| 0f64.into()), y: Box::new_with(|| 0f64.into()) }, info })),
                         _ => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } })),                    }
                 }
                 else {
-                    Ok(Stmt { kind: StmtKind::Goto { target: self.parse_expr(child)? }, info })
+                    let target = self.parse_expr(child)?;
+                    Ok(Box::new_with(|| Stmt { kind: StmtKind::Goto { target }, info }))
                 }
             }
             "doFaceTowards" => {
@@ -1453,18 +1455,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(s, child)?;
                     match opt {
-                        "center" => Ok(Stmt { kind: StmtKind::PointTowardsXY { x: Box::new_with(|| 0.0.into()), y: Box::new_with(|| 0.0.into()) }, info }),
+                        "center" => Ok(Box::new_with(|| Stmt { kind: StmtKind::PointTowardsXY { x: Box::new_with(|| 0.0.into()), y: Box::new_with(|| 0.0.into()) }, info })),
                         _ => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: opt.into() } })),
                     }
                 } else {
-                    Ok(Stmt { kind: StmtKind::PointTowards { target: self.parse_expr(child)? }, info })
+                    let target = self.parse_expr(child)?;
+                    Ok(Box::new_with(|| Stmt { kind: StmtKind::PointTowards { target }, info }))
                 }
             }
             "setColor" => {
                 let info = self.check_children_get_info(stmt, s, 1)?;
                 match stmt.get(&["color"]) {
                     Some(color) => match parse_color(&color.text) {
-                        Some(color) => Ok(Stmt { kind: StmtKind::SetPenColor { color }, info }),
+                        Some(color) => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetPenColor { color }, info })),
                         None => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::FailedToParseColor { role: self.role.name.clone(), entity: self.entity.name.clone(), color: color.text.clone() } })),
                     }
                     None => Err(Box::new_with(|| Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
@@ -1472,7 +1475,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doSocketMessage" => {
                 let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(stmt, s)?;
-                Ok(Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }))
             }
             "doRun" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
@@ -1481,7 +1484,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[1].children.iter() {
                     args.push(*self.parse_expr(arg)?);
                 }
-                Ok(Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info }))
             }
             "doTellTo" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
@@ -1491,73 +1494,76 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[2].children.iter() {
                     args.push(*self.parse_expr(arg)?);
                 }
-                Ok(Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info }))
             }
             "nativeRunSyscall" => {
                 let info = self.parse_syscall(stmt, s)?;
-                Ok(Stmt { kind: StmtKind::Syscall { name: info.name, args: info.args }, info: info.info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::Syscall { name: info.name, args: info.args }, info: info.info }))
             }
             "setEffect" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let effect = self.parse_effect(&stmt.children[0], s)?;
                 let value = self.parse_expr(&stmt.children[1])?;
-                Ok(Stmt { kind: StmtKind::SetEffect { kind: effect, value }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::SetEffect { kind: effect, value }, info }))
             }
             "changeEffect" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let effect = self.parse_effect(&stmt.children[0], s)?;
                 let delta = self.parse_expr(&stmt.children[1])?;
-                Ok(Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info }))
             }
             "setPenHSVA" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let attr = self.parse_pen_attr(&stmt.children[0], s)?;
                 let value = self.parse_expr(&stmt.children[1])?;
-                Ok(Stmt { kind: StmtKind::SetPenAttr { attr, value }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::SetPenAttr { attr, value }, info }))
             }
             "changePenHSVA" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let attr = self.parse_pen_attr(&stmt.children[0], s)?;
                 let delta = self.parse_expr(&stmt.children[1])?;
-                Ok(Stmt { kind: StmtKind::ChangePenAttr { attr, delta }, info })
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ChangePenAttr { attr, delta }, info }))
             }
-            "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Stmt { kind: StmtKind::Write { content, font_size }, info }),
-            "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info }),
-            "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info }),
-            "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SendNetworkReply { value }, info }),
-            "changeScale" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeSize { delta, }, info }),
-            "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetSize { value }, info }),
-            "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info }),
-            "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info }),
-            "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Say { content, duration: None }, info }),
-            "doThink" => self.parse_1_args(stmt, s).map(|(content, info)| Stmt { kind: StmtKind::Think { content, duration: None }, info }),
-            "doThrow" => self.parse_1_args(stmt, s).map(|(error, info)| Stmt { kind: StmtKind::Throw { error }, info }),
-            "hide" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: false }, info }),
-            "show" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetVisible { value: true }, info }),
-            "doWaitUntil" => self.parse_1_args(stmt, s).map(|(condition, info)| Stmt { kind: StmtKind::WaitUntil { condition, }, info }),
-            "changeSize" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangePenSize { delta, }, info }),
-            "setSize" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetPenSize { value }, info }),
-            "doAddToList" => self.parse_2_args(stmt, s).map(|(value, list, info)| Stmt { kind: StmtKind::ListInsertLast { value, list }, info }),
-            "doReport" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::Return { value }, info }),
-            "doStamp" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::Stamp, info }),
-            "doWait" => self.parse_1_args(stmt, s).map(|(seconds, info)| Stmt { kind: StmtKind::Sleep { seconds, }, info }),
-            "forward" => self.parse_1_args(stmt, s).map(|(distance, info)| Stmt { kind: StmtKind::Forward { distance, }, info }),
-            "turn" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnRight { angle, }, info }),
-            "turnLeft" => self.parse_1_args(stmt, s).map(|(angle, info)| Stmt { kind: StmtKind::TurnLeft { angle, }, info }),
-            "setXPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetX { value }, info }),
-            "setYPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Stmt { kind: StmtKind::SetY { value }, info }),
-            "changeXPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeX { delta }, info }),
-            "changeYPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Stmt { kind: StmtKind::ChangeY { delta }, info }),
-            "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Stmt { kind: StmtKind::GotoXY { x, y }, info }),
-            "bounceOffEdge" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::BounceOffEdge, info }),
-            "down" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetPenDown { value: true }, info }),
-            "up" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::SetPenDown { value: false }, info }),
-            "clear" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::PenClear, info }),
-            "doRunRPC" => Ok(self.parse_rpc(stmt, s)?.into()),
-            "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Stmt { kind: StmtKind::Ask { prompt, }, info }),
-            "doResetTimer" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ResetTimer, info }),
-            "clearEffects" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::ClearEffects, info }),
-            "doWearNextCostume" => self.parse_0_args(stmt, s).map(|info| Stmt { kind: StmtKind::NextCostume, info }),
+            "doRunRPC" => {
+                let rpc = self.parse_rpc(stmt, s)?;
+                Ok(Box::new_with(|| rpc.into()))
+            }
+            "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Box::new_with(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
+            "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
+            "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })),
+            "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SendNetworkReply { value }, info })),
+            "changeScale" => self.parse_1_args(stmt, s).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeSize { delta, }, info })),
+            "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetSize { value }, info })),
+            "doSayFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Box::new_with(|| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })),
+            "doThinkFor" => self.parse_2_args(stmt, s).map(|(content, duration, info)| Box::new_with(|| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })),
+            "bubble" => self.parse_1_args(stmt, s).map(|(content, info)| Box::new_with(|| Stmt { kind: StmtKind::Say { content, duration: None }, info })),
+            "doThink" => self.parse_1_args(stmt, s).map(|(content, info)| Box::new_with(|| Stmt { kind: StmtKind::Think { content, duration: None }, info })),
+            "doThrow" => self.parse_1_args(stmt, s).map(|(error, info)| Box::new_with(|| Stmt { kind: StmtKind::Throw { error }, info })),
+            "hide" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: false }, info })),
+            "show" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: true }, info })),
+            "doWaitUntil" => self.parse_1_args(stmt, s).map(|(condition, info)| Box::new_with(|| Stmt { kind: StmtKind::WaitUntil { condition, }, info })),
+            "changeSize" => self.parse_1_args(stmt, s).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangePenSize { delta, }, info })),
+            "setSize" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetPenSize { value }, info })),
+            "doAddToList" => self.parse_2_args(stmt, s).map(|(value, list, info)| Box::new_with(|| Stmt { kind: StmtKind::ListInsertLast { value, list }, info })),
+            "doReport" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::Return { value }, info })),
+            "doStamp" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::Stamp, info })),
+            "doWait" => self.parse_1_args(stmt, s).map(|(seconds, info)| Box::new_with(|| Stmt { kind: StmtKind::Sleep { seconds, }, info })),
+            "forward" => self.parse_1_args(stmt, s).map(|(distance, info)| Box::new_with(|| Stmt { kind: StmtKind::Forward { distance, }, info })),
+            "turn" => self.parse_1_args(stmt, s).map(|(angle, info)| Box::new_with(|| Stmt { kind: StmtKind::TurnRight { angle, }, info })),
+            "turnLeft" => self.parse_1_args(stmt, s).map(|(angle, info)| Box::new_with(|| Stmt { kind: StmtKind::TurnLeft { angle, }, info })),
+            "setXPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetX { value }, info })),
+            "setYPosition" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetY { value }, info })),
+            "changeXPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeX { delta }, info })),
+            "changeYPosition" => self.parse_1_args(stmt, s).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeY { delta }, info })),
+            "gotoXY" => self.parse_2_args(stmt, s).map(|(x, y, info)| Box::new_with(|| Stmt { kind: StmtKind::GotoXY { x, y }, info })),
+            "bounceOffEdge" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::BounceOffEdge, info })),
+            "down" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetPenDown { value: true }, info })),
+            "up" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetPenDown { value: false }, info })),
+            "clear" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::PenClear, info })),
+            "doAsk" => self.parse_1_args(stmt, s).map(|(prompt, info)| Box::new_with(|| Stmt { kind: StmtKind::Ask { prompt, }, info })),
+            "doResetTimer" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ResetTimer, info })),
+            "clearEffects" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ClearEffects, info })),
+            "doWearNextCostume" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::NextCostume, info })),
             _ => Err(Box::new_with(|| Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() })),
         }
     }

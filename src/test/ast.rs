@@ -853,5 +853,5 @@ fn test_stack_size_usage() {
     }
 
     assert_compiles!(src: "projects/stack-size-1.xml", stack_size: 16 * 1024); // this is min stack size on linux
-    assert_compiles!(src: "projects/stack-size-2.xml", stack_size: 70 * 1024);
+    assert_compiles!(src: "projects/stack-size-2.xml", stack_size: 67 * 1024);
 }
