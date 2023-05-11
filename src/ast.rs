@@ -1571,22 +1571,26 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn parse_0_args(&mut self, expr: &Xml, s: &str) -> Result<BlockInfo, Box<Error>> {
         self.check_children_get_info(expr, s, 0)
     }
+    #[inline(always)]
     fn parse_1_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, BlockInfo), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let a = self.parse_expr(&expr.children[0])?;
         Ok((a, info))
     }
+    #[inline(always)]
     fn parse_2_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, Box<Expr>, BlockInfo), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let a = self.parse_expr(&expr.children[0])?;
         let b = self.parse_expr(&expr.children[1])?;
         Ok((a, b, info))
     }
+    #[inline(always)]
     fn parse_1_varargs(&mut self, expr: &Xml, s: &str) -> Result<(VariadicInput, BlockInfo), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let values = self.parse_varargs(&expr.children[0])?;
         Ok((values, info))
     }
+    #[inline(always)]
     fn parse_varargs(&mut self, varargs_root: &Xml) -> Result<VariadicInput, Box<Error>> {
         Ok(match varargs_root.name.as_str() {
             "list" => {

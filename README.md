@@ -18,9 +18,15 @@ You'll also need `dot` from `graphviz`.
 sudo apt install graphviz
 ```
 
-To generate the call graph, run the following commands.
+To generate the call graph, run the following command:
 
 ```bash
 RUSTFLAGS="-C embed-bitcode" cargo +nightly call-stack --bin netsblox_ast --target x86_64-unknown-linux-gnu >cg.dot
-dot -Tsvg cg.dot > cg.svg
+gawk 'match($0, /label="(.*)\\nmax >?= ([0-9]+)\\nlocal = ([0-9]+)"/, m) { print m[3] " " m[1] }' cg.dot | sort -n
+```
+
+Optionally you can generate a visual graph, but this is likely VERY cluttered:
+
+```bash
+dot -Tsvg cg.dot >cg.svg
 ```
