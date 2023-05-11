@@ -21,6 +21,6 @@ sudo apt install graphviz
 To generate the call graph, run the following commands.
 
 ```bash
-RUSTFLAGS="-C embed-bitcode=yes" cargo +nightly call-stack --bin netsblox_ast --target x86_64-unknown-linux-gnu >cg.dot
+RUSTFLAGS="-C embed-bitcode" cargo +nightly call-stack --bin netsblox_ast --target x86_64-unknown-linux-gnu >cg.dot
 dot -Tsvg cg.dot > cg.svg
 ```

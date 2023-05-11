@@ -852,5 +852,6 @@ fn test_stack_size_usage() {
         }
     }
 
-    assert_compiles!(src: "projects/stack-size-1.xml", stack_size: 32 * 1024);
+    assert_compiles!(src: "projects/stack-size-1.xml", stack_size: 27 * 1024);
+    assert_compiles!(src: "projects/stack-size-2.xml", stack_size: 78 * 1024);
 }
