@@ -1243,6 +1243,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let location = stmt.attr("collabId").map(|x| x.value.clone());
         Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info: BlockInfo { comment, location } })
     }
+    #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
         let s = match stmt.attr("s") {
             None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
@@ -1599,7 +1600,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             false => index,
         }
     }
-    #[inline(never)]
+    #[inline(always)]
     fn parse_0_args(&mut self, expr: &Xml, s: &str) -> Result<BlockInfo, Box<Error>> {
         self.check_children_get_info(expr, s, 0)
     }
@@ -1643,6 +1644,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             _ => Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), entity: self.entity.name.clone(), value: val.into() } }))
         }
     }
+    #[inline(never)]
     fn parse_expr(&mut self, expr: &Xml) -> Result<Box<Expr>, Box<Error>> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
