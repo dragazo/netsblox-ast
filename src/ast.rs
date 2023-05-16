@@ -500,20 +500,20 @@ fn test_sym_tab() {
 struct Syscall {
     name: Box<Expr>,
     args: VariadicInput,
-    info: BlockInfo,
+    info: Box<BlockInfo>,
 }
 #[derive(Debug)]
 struct Rpc {
     service: String,
     rpc: String,
     args: Vec<(String, Expr)>,
-    info: BlockInfo,
+    info: Box<BlockInfo>,
 }
 #[derive(Debug)]
 struct FnCall {
     function: FnRef,
     args: Vec<Expr>,
-    info: BlockInfo,
+    info: Box<BlockInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -522,8 +522,8 @@ pub struct BlockInfo {
     pub location: Option<String>,
 }
 impl BlockInfo {
-    fn none() -> Self {
-        BlockInfo { comment: None, location: None }
+    fn none() -> Box<Self> {
+        Box::new_with(|| BlockInfo { comment: None, location: None })
     }
 }
 
@@ -611,7 +611,7 @@ pub struct Script {
 #[derive(Debug, Clone)]
 pub struct Hat {
     pub kind: HatKind,
-    pub info: BlockInfo,
+    pub info: Box<BlockInfo>,
 }
 #[derive(Debug, Clone)]
 pub enum HatKind {
@@ -632,7 +632,7 @@ pub enum HatKind {
 #[derive(Debug, Clone)]
 pub struct Stmt {
     pub kind: StmtKind,
-    pub info: BlockInfo,
+    pub info: Box<BlockInfo>,
 }
 #[derive(Debug, Clone)]
 pub enum StmtKind {
@@ -796,7 +796,7 @@ pub enum VariadicInput {
 #[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
-    pub info: BlockInfo,
+    pub info: Box<BlockInfo>,
 }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
@@ -990,7 +990,7 @@ struct NetworkMessage {
     target: Box<Expr>,
     msg_type: String,
     values: Vec<(String, Expr)>,
-    info: BlockInfo,
+    info: Box<BlockInfo>,
 }
 
 struct ScriptInfo<'a, 'b, 'c> {
@@ -1015,7 +1015,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     #[inline(never)]
-    fn check_children_get_info(&self, expr: &Xml, s: &str, req: usize) -> Result<BlockInfo, Box<Error>> {
+    fn check_children_get_info(&self, expr: &Xml, s: &str, req: usize) -> Result<Box<BlockInfo>, Box<Error>> {
         if expr.children.len() < req {
             return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: req, got: expr.children.len() } }));
         }
@@ -1024,7 +1024,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => None,
         };
         let location = expr.attr("collabId").map(|x| x.value.clone());
-        Ok(BlockInfo { comment, location })
+        Ok(Box::new_with(|| BlockInfo { comment, location }))
     }
     #[inline(never)]
     fn decl_local(&mut self, name: String, value: Value) -> Result<&VariableDefInit, Box<Error>> {
@@ -1051,7 +1051,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok(res)
     }
     #[inline(never)]
-    fn grab_entity(&mut self, child: &Xml, info: BlockInfo) -> Result<Box<Expr>, Box<Error>> {
+    fn grab_entity(&mut self, child: &Xml, info: Box<BlockInfo>) -> Result<Box<Expr>, Box<Error>> {
         Ok(match child.text.as_str() {
             "" => self.parse_expr(child)?,
             "myself" => Box::new_with(|| Expr { kind: ExprKind::This, info }),
@@ -1151,7 +1151,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     fields.push(var);
                 }
                 let location = stmt.attr("collabId").map(|x| x.value.clone());
-                Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info: BlockInfo { comment, location } })
+                let info = Box::new_with(|| BlockInfo { comment, location });
+                Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
             x if x.starts_with("receive") => return Err(Box::new_with(|| Error::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() })),
             _ => return Ok(None),
@@ -1267,7 +1268,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let comment = comment.map(|x| x.to_owned());
         let location = stmt.attr("collabId").map(|x| x.value.clone());
-        Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info: BlockInfo { comment, location } }))
+        let info = Box::new_with(|| BlockInfo { comment, location });
+        Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info }))
     }
     #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
@@ -1630,24 +1632,24 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     #[inline(always)]
-    fn parse_0_args(&mut self, expr: &Xml, s: &str) -> Result<BlockInfo, Box<Error>> {
+    fn parse_0_args(&mut self, expr: &Xml, s: &str) -> Result<Box<BlockInfo>, Box<Error>> {
         self.check_children_get_info(expr, s, 0)
     }
     #[inline(always)]
-    fn parse_1_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, BlockInfo), Box<Error>> {
+    fn parse_1_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, Box<BlockInfo>), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let a = self.parse_expr(&expr.children[0])?;
         Ok((a, info))
     }
     #[inline(always)]
-    fn parse_2_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, Box<Expr>, BlockInfo), Box<Error>> {
+    fn parse_2_args(&mut self, expr: &Xml, s: &str) -> Result<(Box<Expr>, Box<Expr>, Box<BlockInfo>), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let a = self.parse_expr(&expr.children[0])?;
         let b = self.parse_expr(&expr.children[1])?;
         Ok((a, b, info))
     }
     #[inline(always)]
-    fn parse_1_varargs(&mut self, expr: &Xml, s: &str) -> Result<(VariadicInput, BlockInfo), Box<Error>> {
+    fn parse_1_varargs(&mut self, expr: &Xml, s: &str) -> Result<(VariadicInput, Box<BlockInfo>), Box<Error>> {
         let info = self.check_children_get_info(expr, s, 1)?;
         let values = self.parse_varargs(&expr.children[0])?;
         Ok((values, info))
