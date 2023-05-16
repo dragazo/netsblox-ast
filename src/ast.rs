@@ -234,7 +234,7 @@ impl Xml {
         self.attrs.iter().find(|a| a.name == name)
     }
 }
-fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Xml, Box<Error>> {
+fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Box<Xml>, Box<Error>> {
     let mut attrs = vec![];
     let mut text = String::new();
     let mut children = vec![];
@@ -244,7 +244,7 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
             Ok(e) => match e {
                 xmlparser::Token::Attribute { local, value, .. } => attrs.push(XmlAttr { name: xml_unescape(local.as_str())?, value: xml_unescape(value.as_str())? }),
                 xmlparser::Token::Text { text: t } => text += &xml_unescape(t.as_str())?,
-                xmlparser::Token::ElementStart { local, .. } => children.push(parse_xml_root(xml, local.as_str())?),
+                xmlparser::Token::ElementStart { local, .. } => children.push(*parse_xml_root(xml, local.as_str())?),
                 xmlparser::Token::ElementEnd { end, .. } => match end {
                     xmlparser::ElementEnd::Close(_, _) => break,
                     xmlparser::ElementEnd::Empty => break,
@@ -254,7 +254,7 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
             }
         }
     }
-    Ok(Xml { name: root_name.to_owned(), attrs, children, text: clean_newlines(&text) })
+    Ok(Box::new_with(|| Xml { name: root_name.to_owned(), attrs, children, text: clean_newlines(&text) }))
 }
 
 #[derive(Debug)]
@@ -2526,7 +2526,7 @@ impl Parser {
                             name: "role".into(),
                             text: "".into(),
                             attrs: vec![XmlAttr { name: "name".into(), value: proj_name.clone() }],
-                            children: vec![project_xml]
+                            children: vec![*project_xml]
                         };
                         let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
 
