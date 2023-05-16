@@ -1073,10 +1073,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let mut stmts = vec![];
         for stmt in stmts_xml {
             match stmt.name.as_str() {
-                "block" => stmts.push(*self.parse_block(stmt)?),
+                "block" => stmts.push_boxed(self.parse_block(stmt)?),
                 "custom-block" => {
-                    let FnCall { function, args, info } = *self.parse_fn_call(stmt)?;
-                    stmts.push(Stmt { kind: StmtKind::RunFn { function, args }, info });
+                    let res = self.parse_fn_call(stmt)?;
+                    stmts.push_with(|| {
+                        let FnCall { function, args, info } = *res;
+                        Stmt { kind: StmtKind::RunFn { function, args }, info }
+                    });
                 }
                 x => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } })),
             }
@@ -1211,7 +1214,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let mut args = Vec::with_capacity(arg_names.len());
         for (&arg_name, child) in arg_names.iter().zip(&stmt.children[2 .. 2 + arg_names.len()]) {
             let val = self.parse_expr(child)?;
-            args.push((arg_name.to_owned(), *val));
+            args.push_with(|| (arg_name.to_owned(), *val));
         }
         Ok(Box::new_with(|| Rpc { service, rpc, args, info }))
     }
@@ -1229,7 +1232,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let mut args = Vec::with_capacity(argc);
         for expr in stmt.children[..argc].iter() {
-            args.push(*self.parse_expr(expr)?);
+            args.push_boxed(self.parse_expr(expr)?);
         }
 
         Ok(Box::new_with(|| FnCall { function, args, info }))
@@ -1509,7 +1512,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let closure = self.parse_expr(&stmt.children[0])?;
                 let mut args = Vec::with_capacity(stmt.children[1].children.len());
                 for arg in stmt.children[1].children.iter() {
-                    args.push(*self.parse_expr(arg)?);
+                    args.push_boxed(self.parse_expr(arg)?);
                 }
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info }))
             }
@@ -1519,7 +1522,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let closure = self.parse_expr(&stmt.children[1])?;
                 let mut args = Vec::with_capacity(stmt.children[2].children.len());
                 for arg in stmt.children[2].children.iter() {
-                    args.push(*self.parse_expr(arg)?);
+                    args.push_boxed(self.parse_expr(arg)?);
                 }
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info }))
             }
@@ -1655,7 +1658,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "list" => {
                 let mut res = vec![];
                 for item in varargs_root.children.iter() {
-                    res.push(*self.parse_expr(item)?);
+                    res.push_boxed(self.parse_expr(item)?);
                 }
                 VariadicInput::Fixed(res)
             }
@@ -2021,7 +2024,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let closure = self.parse_expr(&expr.children[0])?;
                         let mut args = Vec::with_capacity(expr.children[1].children.len());
                         for input in expr.children[1].children.iter() {
-                            args.push(*self.parse_expr(input)?);
+                            args.push_boxed(self.parse_expr(input)?);
                         }
                         Ok(Box::new_with(|| Expr { kind: ExprKind::CallClosure { new_entity: None, closure, args }, info }))
                     }
@@ -2031,7 +2034,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let closure = self.parse_expr(&expr.children[1])?;
                         let mut args = Vec::with_capacity(expr.children[2].children.len());
                         for input in expr.children[2].children.iter() {
-                            args.push(*self.parse_expr(input)?);
+                            args.push_boxed(self.parse_expr(input)?);
                         }
                         Ok(Box::new_with(|| Expr { kind: ExprKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
                     }
