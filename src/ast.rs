@@ -1052,7 +1052,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             match stmt.name.as_str() {
                 "block" => stmts.push(*self.parse_block(stmt)?),
                 "custom-block" => {
-                    let FnCall { function, args, info } = self.parse_fn_call(stmt)?;
+                    let FnCall { function, args, info } = *self.parse_fn_call(stmt)?;
                     stmts.push(Stmt { kind: StmtKind::RunFn { function, args }, info });
                 }
                 x => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } })),
@@ -1132,11 +1132,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }))
     }
     #[inline(never)]
-    fn parse_syscall(&mut self, stmt: &Xml, block_type: &str) -> Result<Syscall, Box<Error>> {
+    fn parse_syscall(&mut self, stmt: &Xml, block_type: &str) -> Result<Box<Syscall>, Box<Error>> {
         let info = self.check_children_get_info(stmt, block_type, 2)?;
         let name = self.parse_expr(&stmt.children[0])?;
         let args = self.parse_varargs(&stmt.children[1])?;
-        Ok(Syscall { name, args, info })
+        Ok(Box::new_with(|| Syscall { name, args, info }))
     }
     #[inline(never)]
     fn parse_effect(&mut self, effect: &Xml, s: &str) -> Result<EffectKind, Box<Error>> {
@@ -1165,7 +1165,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         })
     }
     #[inline(never)]
-    fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Rpc, Box<Error>> {
+    fn parse_rpc(&mut self, stmt: &Xml, block_type: &str) -> Result<Box<Rpc>, Box<Error>> {
         if stmt.children.len() < 2 { return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into(), needed: 2, got: stmt.children.len() } })) }
         for i in 0..=1 { if stmt.children[i].name != "l" { return Err(Box::new_with(|| Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() })) } }
         for i in 0..=1 { if stmt.children[i].name.is_empty() { return Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: block_type.into() })) } }
@@ -1190,10 +1190,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             let val = self.parse_expr(child)?;
             args.push((arg_name.to_owned(), *val));
         }
-        Ok(Rpc { service, rpc, args, info })
+        Ok(Box::new_with(|| Rpc { service, rpc, args, info }))
     }
     #[inline(never)]
-    fn parse_fn_call(&mut self, stmt: &Xml) -> Result<FnCall, Box<Error>> {
+    fn parse_fn_call(&mut self, stmt: &Xml) -> Result<Box<FnCall>, Box<Error>> {
         let s = match stmt.attr("s") {
             Some(v) => v.value.as_str(),
             None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
@@ -1209,10 +1209,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             args.push(*self.parse_expr(expr)?);
         }
 
-        Ok(FnCall { function, args, info })
+        Ok(Box::new_with(|| FnCall { function, args, info }))
     }
     #[inline(never)]
-    fn parse_send_message_common(&mut self, stmt: &Xml, s: &str) -> Result<NetworkMessage, Box<Error>> {
+    fn parse_send_message_common(&mut self, stmt: &Xml, s: &str) -> Result<Box<NetworkMessage>, Box<Error>> {
         let msg_type = match stmt.children.get(0) {
             Some(value) if value.name != "comment" => value.text.as_str(),
             _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockMissingOption { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() } })),
@@ -1241,7 +1241,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let comment = comment.map(|x| x.to_owned());
         let location = stmt.attr("collabId").map(|x| x.value.clone());
-        Ok(NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info: BlockInfo { comment, location } })
+        Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info: BlockInfo { comment, location } }))
     }
     #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
@@ -1475,8 +1475,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 }
             }
             "doSocketMessage" => {
-                let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(stmt, s)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }))
+                let res = self.parse_send_message_common(stmt, s)?;
+                Ok(Box::new_with(|| {
+                    let NetworkMessage { target, msg_type, values, info } = *res;
+                    Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }
+                }))
             }
             "doRun" => {
                 let info = self.check_children_get_info(stmt, s, 2)?;
@@ -1527,7 +1530,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doRunRPC" => {
                 let rpc = self.parse_rpc(stmt, s)?;
-                Ok(Box::new_with(|| rpc.into()))
+                Ok(Box::new_with(|| (*rpc).into()))
             }
             "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Box::new_with(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
             "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
@@ -1690,8 +1693,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::RefMissingId { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
             }
             "custom-block" => {
-                let FnCall { function, args, info } = self.parse_fn_call(expr)?;
-                Ok(Box::new_with(|| Expr { kind: ExprKind::CallFn { function, args }, info }))
+                let res = self.parse_fn_call(expr)?;
+                Ok(Box::new_with(|| {
+                    let FnCall { function, args, info } = *res;
+                    Expr { kind: ExprKind::CallFn { function, args }, info }
+                }))
             }
             "block" => {
                 if let Some(var) = expr.attr("var") {
@@ -1884,7 +1890,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                     "getJSFromRPCStruct" => {
                         let rpc = self.parse_rpc(expr, s)?;
-                        Ok(Box::new_with(|| rpc.into()))
+                        Ok(Box::new_with(|| (*rpc).into()))
                     }
 
                     "reportStageWidth" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
@@ -2007,12 +2013,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Ok(Box::new_with(|| Expr { kind: ExprKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
                     }
                     "doSocketRequest" => {
-                        let NetworkMessage { target, msg_type, values, info } = self.parse_send_message_common(expr, s)?;
-                        Ok(Box::new_with(|| Expr { kind: ExprKind::NetworkMessageReply { target, msg_type, values }, info }))
+                        let res = self.parse_send_message_common(expr, s)?;
+                        Ok(Box::new_with(|| {
+                            let NetworkMessage { target, msg_type, values, info } = *res;
+                            Expr { kind: ExprKind::NetworkMessageReply { target, msg_type, values }, info }
+                        }))
                     }
                     "nativeCallSyscall" => {
-                        let Syscall { name, args, info } = self.parse_syscall(expr, s)?;
-                        Ok(Box::new_with(|| Expr { kind: ExprKind::Syscall { name, args }, info }))
+                        let res = self.parse_syscall(expr, s)?;
+                        Ok(Box::new_with(|| {
+                            let Syscall { name, args, info } = *res;
+                            Expr { kind: ExprKind::Syscall { name, args }, info }
+                        }))
                     }
                     "nativeSyscallError" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::SyscallError, info })),
                     "getEffect" => {
