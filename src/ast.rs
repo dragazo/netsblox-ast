@@ -16,13 +16,28 @@ fn base64_decode(content: &str) -> Result<Vec<u8>, Box<Error>> {
     base64::engine::general_purpose::STANDARD.decode(content).map_err(|e| Box::new_with(|| e.into()))
 }
 
-trait NewWith<T> {
+trait BoxExt<T> {
     fn new_with<F: FnOnce() -> T>(f: F) -> Self;
 }
-impl<T> NewWith<T> for Box<T> {
+impl<T> BoxExt<T> for Box<T> {
     #[inline(never)]
     fn new_with<F: FnOnce() -> T>(f: F) -> Self {
         Box::new(f())
+    }
+}
+
+trait VecExt<T> {
+    fn push_boxed(&mut self, value: Box<T>);
+    fn push_with<F: FnOnce() -> T>(&mut self, f: F);
+}
+impl<T> VecExt<T> for Vec<T> {
+    #[inline(never)]
+    fn push_boxed(&mut self, value: Box<T>) {
+        self.push(*value);
+    }
+    #[inline(never)]
+    fn push_with<F: FnOnce() -> T>(&mut self, f: F) {
+        self.push(f());
     }
 }
 
@@ -160,6 +175,7 @@ fn xml_escape(input: &str) -> String {
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
 // note: modified to suite our needs
+#[inline(never)]
 fn xml_unescape(input: &str) -> Result<String, Box<Error>> {
     let mut result = String::with_capacity(input.len());
 
@@ -234,27 +250,33 @@ impl Xml {
         self.attrs.iter().find(|a| a.name == name)
     }
 }
-fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Box<Xml>, Box<Error>> {
-    let mut attrs = vec![];
-    let mut text = String::new();
-    let mut children = vec![];
-    while let Some(e) = xml.next() {
-        match e {
-            Err(e) => return Err(Box::new_with(|| e.into())),
-            Ok(e) => match e {
-                xmlparser::Token::Attribute { local, value, .. } => attrs.push(XmlAttr { name: xml_unescape(local.as_str())?, value: xml_unescape(value.as_str())? }),
-                xmlparser::Token::Text { text: t } => text += &xml_unescape(t.as_str())?,
-                xmlparser::Token::ElementStart { local, .. } => children.push(*parse_xml_root(xml, local.as_str())?),
-                xmlparser::Token::ElementEnd { end, .. } => match end {
-                    xmlparser::ElementEnd::Close(_, _) => break,
-                    xmlparser::ElementEnd::Empty => break,
-                    xmlparser::ElementEnd::Open => (),
+fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Xml, Box<Error>> {
+    let mut stack = vec![Xml { name: root_name.into(), text: String::new(), attrs: vec![], children: vec![] }];
+    loop {
+        match xml.next() {
+            Some(e) => match e {
+                Err(e) => return Err(Box::new_with(|| e.into())),
+                Ok(e) => match e {
+                    xmlparser::Token::Attribute { local, value, .. } => stack.last_mut().unwrap().attrs.push(XmlAttr { name: xml_unescape(local.as_str())?, value: xml_unescape(value.as_str())? }),
+                    xmlparser::Token::Text { text: t } => stack.last_mut().unwrap().text.push_str(&xml_unescape(t.as_str())?),
+                    xmlparser::Token::ElementStart { local, .. } => stack.push(Xml { name: local.as_str().into(), text: String::new(), attrs: vec![], children: vec![] }),
+                    xmlparser::Token::ElementEnd { end, .. } => match end {
+                        xmlparser::ElementEnd::Close(_, _) | xmlparser::ElementEnd::Empty => {
+                            let mut res = stack.pop().unwrap();
+                            res.text = clean_newlines(&res.text);
+                            match stack.last_mut() {
+                                Some(parent) => parent.children.push(res),
+                                None => return Ok(res),
+                            }
+                        }
+                        xmlparser::ElementEnd::Open => (),
+                    }
+                    _ => (),
                 }
-                _ => (),
             }
+            None => return Err(Box::new_with(|| Error::XmlUnexpectedEof)),
         }
     }
-    Ok(Box::new_with(|| Xml { name: root_name.to_owned(), attrs, children, text: clean_newlines(&text) }))
 }
 
 #[derive(Debug)]
@@ -314,6 +336,7 @@ pub enum ProjectError {
 pub enum Error {
     XmlReadError { error: xmlparser::Error },
     XmlUnescapeError { illegal_sequence: String },
+    XmlUnexpectedEof,
 
     InvalidBase64 { error: Base64DecodeError },
 
@@ -2526,7 +2549,7 @@ impl Parser {
                             name: "role".into(),
                             text: "".into(),
                             attrs: vec![XmlAttr { name: "name".into(), value: proj_name.clone() }],
-                            children: vec![*project_xml]
+                            children: vec![project_xml]
                         };
                         let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
 
