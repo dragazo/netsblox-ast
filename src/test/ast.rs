@@ -46,7 +46,7 @@ fn test_lambdas_no_captures_no_inputs() {
     assert_eq!(stmts.len(), 3);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(stmts.len(), 1);
@@ -64,7 +64,7 @@ fn test_lambdas_no_captures_no_inputs() {
     }
     match &stmts[2].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(stmts.len(), 2);
@@ -88,7 +88,7 @@ fn test_lambdas_no_captures() {
     assert_eq!(stmts.len(), 3);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["#1", "#2"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(stmts.len(), 1);
@@ -106,7 +106,7 @@ fn test_lambdas_no_captures() {
     }
     match &stmts[2].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(stmts.len(), 3);
@@ -130,7 +130,7 @@ fn test_lambdas_adv_1() {
     assert_eq!(stmts.len(), 3);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
                 assert_eq!(stmts.len(), 1);
@@ -148,7 +148,7 @@ fn test_lambdas_adv_1() {
     }
     match &stmts[2].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
                 assert_eq!(stmts.len(), 3);
@@ -172,7 +172,7 @@ fn test_lambdas_adv_2_rep_captures() {
     assert_eq!(stmts.len(), 3);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
                 assert_eq!(stmts.len(), 1);
@@ -187,7 +187,7 @@ fn test_lambdas_adv_2_rep_captures() {
     }
     match &stmts[2].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
                 assert_eq!(stmts.len(), 4);
@@ -211,7 +211,7 @@ fn test_lambdas_adv_3_nested_captures() {
     assert_eq!(stmts.len(), 3);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["foo"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a", "b"]);
                 assert_eq!(stmts.len(), 1);
@@ -226,13 +226,13 @@ fn test_lambdas_adv_3_nested_captures() {
     }
     match &stmts[2].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["ght", "brg"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b"]);
                 assert_eq!(stmts.len(), 2);
                 match &stmts[1].kind {
                     StmtKind::Assign { value, .. } => match &**value {
-                        Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+                        Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                             assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), Vec::<&str>::new());
                             assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["b", "temp", "brg"]);
                             assert_eq!(stmts.len(), 1);
@@ -265,7 +265,7 @@ fn test_lambdas_script_capture() {
     assert_eq!(stmts.len(), 2);
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &**value {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), &[] as &[&str]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<&str>>(), vec!["a"]);
                 assert_eq!(stmts.len(), 1);
@@ -333,7 +333,7 @@ fn test_run_call_lambdas() {
         StmtKind::Assign { value, .. } => match &**value {
             Expr { kind: ExprKind::CallClosure { closure, args, .. }, .. } => {
                 match &closure.kind {
-                    ExprKind::Closure { params, captures, stmts } => {
+                    ExprKind::Closure { kind: _, params, captures, stmts } => {
                         assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                         assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                         assert_eq!(stmts.len(), 1);
@@ -350,7 +350,7 @@ fn test_run_call_lambdas() {
         StmtKind::Assign { value, .. } => match &**value {
             Expr { kind: ExprKind::CallClosure { closure, args, .. }, .. } => {
                 match &closure.kind {
-                    ExprKind::Closure { params, captures, stmts } => {
+                    ExprKind::Closure { kind: _, params, captures, stmts } => {
                         assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["#1", "merp", "#3"]);
                         assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                         assert_eq!(stmts.len(), 1);
@@ -365,7 +365,7 @@ fn test_run_call_lambdas() {
     }
     match &stmts[3].kind {
         StmtKind::RunClosure { closure, args, .. } => match &**closure {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a"]);
                 assert_eq!(stmts.len(), 1);
@@ -377,7 +377,7 @@ fn test_run_call_lambdas() {
     }
     match &stmts[4].kind {
         StmtKind::RunClosure { closure, args, .. } => match &**closure {
-            Expr { kind: ExprKind::Closure { params, captures, stmts }, .. } => {
+            Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["val", "rgt"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
                 assert_eq!(stmts.len(), 1);

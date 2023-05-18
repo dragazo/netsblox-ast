@@ -794,6 +794,10 @@ pub enum PenAttribute {
     Size, Hue, Saturation, Brightness, Transparency,
 }
 #[derive(Debug, Clone)]
+pub enum ClosureKind {
+    Command, Reporter, Predicate,
+}
+#[derive(Debug, Clone)]
 pub enum VariadicInput {
     /// A fixed list of inputs specified inline.
     Fixed(Vec<Expr>),
@@ -945,7 +949,7 @@ pub enum ExprKind {
 
     RpcError,
 
-    Closure { params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt> },
+    Closure { kind: ClosureKind, params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt> },
     CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
     TextSplit { text: Box<Expr>, mode: TextSplitMode },
@@ -1701,6 +1705,59 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     #[inline(never)]
+    fn parse_closure(&mut self, s: &str, expr: &Xml, kind: ClosureKind, inline_script: bool) -> Result<Box<Expr>, Box<Error>> {
+        let (info, script) = match inline_script {
+            false => (self.check_children_get_info(expr, s, 2)?, &expr.children[0]),
+            true => (BlockInfo::none(), expr),
+        };
+
+        let mut params = SymbolTable::new(self.parser);
+        fn define_param(script_info: &ScriptInfo, params: &mut SymbolTable, name: String) -> Result<(), Box<Error>> {
+            match params.define(name, 0.0.into()) {
+                Ok(None) => Ok(()),
+                Ok(Some(prev)) => Err(Box::new_with(|| Error::InputsWithSameName { role: script_info.role.name.clone(), name: prev.def.name, entity: Some(script_info.entity.name.clone()) })),
+                Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| Error::LocalsWithSameTransName { role: script_info.role.name.clone(), entity: script_info.entity.name.clone(), trans_name, names })),
+                Err(SymbolError::NameTransformError { name }) => Err(Box::new_with(|| Error::NameTransformError { name, role: Some(script_info.role.name.clone()), entity: Some(script_info.entity.name.clone()) })),
+            }
+        }
+        if !inline_script {
+            for input in expr.children[1].children.iter() {
+                define_param(self, &mut params, input.text.clone())?;
+            }
+        }
+
+        let prev_in_autofill_mode = self.in_autofill_mode;
+        let prev_autofill_args_len = self.autofill_args.len();
+        self.in_autofill_mode = params.is_empty();
+
+        self.locals.push((params.clone(), Default::default()));
+        let locals_len = self.locals.len();
+        let stmts = match kind {
+            ClosureKind::Command => self.parse(script)?.stmts,
+            ClosureKind::Reporter | ClosureKind::Predicate => {
+                let _ = self.check_children_get_info(script, s, 1)?;
+                let value = self.parse_expr(&script.children[0])?;
+                vec![Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() }]
+            }
+        };
+        assert_eq!(locals_len, self.locals.len());
+        let (_, captures) = self.locals.pop().unwrap();
+        for var in captures.iter() {
+            self.reference_var(&var.name).unwrap();
+        }
+
+        for autofill_arg in &self.autofill_args[prev_autofill_args_len..] {
+            define_param(self, &mut params, autofill_arg.clone())?;
+        }
+
+        self.in_autofill_mode = prev_in_autofill_mode;
+        if !self.in_autofill_mode {
+            self.autofill_args.clear();
+        }
+
+        Ok(Box::new_with(|| Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, kind, stmts }, info }))
+    }
+    #[inline(never)]
     fn parse_expr(&mut self, expr: &Xml) -> Result<Box<Expr>, Box<Error>> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
@@ -1752,6 +1809,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Expr { kind: ExprKind::CallFn { function, args }, info }
                 }))
             }
+            "script" => self.parse_closure("script", expr, ClosureKind::Command, true),
             "block" => {
                 if let Some(var) = expr.attr("var") {
                     let info = self.check_children_get_info(expr, "var", 0)?;
@@ -1999,54 +2057,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportFindFirst" => self.parse_2_args(expr, s).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::FindFirst { f, list }, info })),
                     "reportCombine" => self.parse_2_args(expr, s).map(|(list, f, info)| Box::new_with(|| Expr { kind: ExprKind::Combine { list, f }, info })),
 
-                    "reifyScript" | "reifyReporter" | "reifyPredicate" => {
-                        let is_script = s == "reifyScript";
-                        let info = self.check_children_get_info(expr, s, 2)?;
+                    "reifyScript" => self.parse_closure(s, expr, ClosureKind::Command, false),
+                    "reifyReporter" => self.parse_closure(s, expr, ClosureKind::Reporter, false),
+                    "reifyPredicate" => self.parse_closure(s, expr, ClosureKind::Predicate, false),
 
-                        let mut params = SymbolTable::new(self.parser);
-                        fn define_param(script_info: &ScriptInfo, params: &mut SymbolTable, name: String) -> Result<(), Box<Error>> {
-                            match params.define(name, 0.0.into()) {
-                                Ok(None) => Ok(()),
-                                Ok(Some(prev)) => Err(Box::new_with(|| Error::InputsWithSameName { role: script_info.role.name.clone(), name: prev.def.name, entity: Some(script_info.entity.name.clone()) })),
-                                Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| Error::LocalsWithSameTransName { role: script_info.role.name.clone(), entity: script_info.entity.name.clone(), trans_name, names })),
-                                Err(SymbolError::NameTransformError { name }) => Err(Box::new_with(|| Error::NameTransformError { name, role: Some(script_info.role.name.clone()), entity: Some(script_info.entity.name.clone()) })),
-                            }
-                        }
-                        for input in expr.children[1].children.iter() {
-                            define_param(self, &mut params, input.text.clone())?;
-                        }
-
-                        let prev_in_autofill_mode = self.in_autofill_mode;
-                        let prev_autofill_args_len = self.autofill_args.len();
-                        self.in_autofill_mode = params.is_empty();
-
-                        self.locals.push((params.clone(), Default::default()));
-                        let locals_len = self.locals.len();
-                        let stmts = match is_script {
-                            true => self.parse(&expr.children[0])?.stmts,
-                            false => {
-                                let _ = self.check_children_get_info(&expr.children[0], s, 1)?;
-                                let value = self.parse_expr(&expr.children[0].children[0])?;
-                                vec![Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() }]
-                            }
-                        };
-                        assert_eq!(locals_len, self.locals.len());
-                        let (_, captures) = self.locals.pop().unwrap();
-                        for var in captures.iter() {
-                            self.reference_var(&var.name).unwrap();
-                        }
-
-                        for autofill_arg in &self.autofill_args[prev_autofill_args_len..] {
-                            define_param(self, &mut params, autofill_arg.clone())?;
-                        }
-
-                        self.in_autofill_mode = prev_in_autofill_mode;
-                        if !self.in_autofill_mode {
-                            self.autofill_args.clear();
-                        }
-
-                        Ok(Box::new_with(|| Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, stmts }, info }))
-                    }
                     "evaluate" => {
                         let info = self.check_children_get_info(expr, s, 2)?;
                         let closure = self.parse_expr(&expr.children[0])?;
