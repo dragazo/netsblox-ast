@@ -156,6 +156,10 @@ fn clean_newlines(s: &str) -> String {
     Punctuated(s.lines(), "\n").to_string()
 }
 
+fn get_location(block: &Xml) -> Option<String> {
+    block.attr("collabId").map(|x| x.value.clone()).filter(|x| !x.is_empty())
+}
+
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
 #[cfg(test)]
 fn xml_escape(input: &str) -> String {
@@ -626,7 +630,7 @@ pub enum HatKind {
     Dropped,
     Stopped,
     When { condition: Box<Expr> },
-    LocalMessage { msg_type: String },
+    LocalMessage { msg_type: Option<String> },
     NetworkMessage { msg_type: String, fields: Vec<VariableRef> },
 }
 #[derive(Debug, Clone)]
@@ -716,6 +720,7 @@ pub enum StmtKind {
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
     RunFn { function: FnRef, args: Vec<Expr> },
     RunClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
+    ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
 
     /// Sends a message to local entities (not over the network).
     /// If `target` is `None`, this should broadcast to all entities.
@@ -731,6 +736,8 @@ pub enum StmtKind {
     Ask { prompt: Box<Expr> },
 
     ResetTimer,
+
+    Pause,
 
     Syscall { name: Box<Expr>, args: VariadicInput },
 
@@ -944,6 +951,7 @@ pub enum ExprKind {
     TextSplit { text: Box<Expr>, mode: TextSplitMode },
 
     Answer,
+    Message,
 
     Timer,
 
@@ -1023,7 +1031,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         };
-        let location = expr.attr("collabId").map(|x| x.value.clone());
+        let location = get_location(expr);
         Ok(Box::new_with(|| BlockInfo { comment, location }))
     }
     #[inline(never)]
@@ -1126,8 +1134,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let child = &stmt.children[0];
                 if child.name != "l" { return Err(Box::new_with(|| Error::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })) }
                 let msg_type = match child.text.as_str() {
-                    "" => return Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
-                    x => x.to_owned(),
+                    "" => match child.get(&["option"]) {
+                        Some(opt) => match opt.text.as_str() {
+                            "any message" => None,
+                            x => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                        }
+                        None => return Err(Box::new_with(|| Error::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
+                    }
+                    x => Some(x.to_owned()),
                 };
                 Box::new_with(|| Hat { kind: HatKind::LocalMessage { msg_type }, info })
             }
@@ -1150,7 +1164,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let var = self.decl_local(child.text.clone(), 0f64.into())?.def.ref_at(VarLocation::Local);
                     fields.push(var);
                 }
-                let location = stmt.attr("collabId").map(|x| x.value.clone());
+                let location = get_location(stmt);
                 let info = Box::new_with(|| BlockInfo { comment, location });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
@@ -1267,7 +1281,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let comment = comment.map(|x| x.to_owned());
-        let location = stmt.attr("collabId").map(|x| x.value.clone());
+        let location = get_location(stmt);
         let info = Box::new_with(|| BlockInfo { comment, location });
         Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info }))
     }
@@ -1509,14 +1523,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }
                 }))
             }
-            "doRun" => {
+            "doRun" | "fork" => {
+                let is_run = s == "doRun";
                 let info = self.check_children_get_info(stmt, s, 2)?;
                 let closure = self.parse_expr(&stmt.children[0])?;
                 let mut args = Vec::with_capacity(stmt.children[1].children.len());
                 for arg in stmt.children[1].children.iter() {
                     args.push_boxed(self.parse_expr(arg)?);
                 }
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info }))
+                match is_run {
+                    true => Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info })),
+                    false => Ok(Box::new_with(|| Stmt { kind: StmtKind::ForkClosure { closure, args }, info })),
+                }
             }
             "doTellTo" => {
                 let info = self.check_children_get_info(stmt, s, 3)?;
@@ -1560,9 +1578,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let rpc = self.parse_rpc(stmt, s)?;
                 Ok(Box::new_with(|| (*rpc).into()))
             }
-            "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Box::new_with(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
+            "doSend" => {
+                let info = self.check_children_get_info(stmt, s, 2)?;
+                let msg_type = self.parse_expr(&stmt.children[0])?;
+                let target = Some(self.grab_entity(&stmt.children[1], BlockInfo::none())?);
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target, wait: false }, info }))
+            }
             "doBroadcast" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
             "doBroadcastAndWait" => self.parse_1_args(stmt, s).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })),
+            "doPauseAll" => self.parse_0_args(stmt, s).map(|info| Box::new_with(|| Stmt { kind: StmtKind::Pause, info })),
+            "write" => self.parse_2_args(stmt, s).map(|(content, font_size, info)| Box::new_with(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
             "doSocketResponse" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SendNetworkReply { value }, info })),
             "changeScale" => self.parse_1_args(stmt, s).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeSize { delta, }, info })),
             "setScale" => self.parse_1_args(stmt, s).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetSize { value }, info })),
@@ -1965,6 +1990,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "getPenDown" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::PenDown, info })),
 
                     "getLastAnswer" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Answer, info })),
+                    "getLastMessage" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Message, info })),
 
                     "getTimer" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Timer, info })),
 
