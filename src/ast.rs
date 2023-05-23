@@ -288,6 +288,7 @@ pub enum ProjectError {
     NoRoot,
     UnnamedRole,
     RefMissingId { role: String, entity: String },
+    ListItemMissingContent { role: String, entity: Option<String> },
     ValueNotEvaluated { role: String, entity: Option<String> },
     NoRoleContent { role: String },
     NoStageDef { role: String },
@@ -1824,12 +1825,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => {
                         let mut values = Vec::with_capacity(expr.children.len());
                         for item in expr.children.iter() {
-                            match item.children.get(0) {
-                                None => values.push(String::new().into()),
-                                Some(x) => match self.parse_expr(x)?.kind {
-                                    ExprKind::Value(v) => values.push(v),
-                                    _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
+                            let target = match item.name.as_str() {
+                                "item" => match item.children.get(0) {
+                                    Some(x) => x,
+                                    None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::ListItemMissingContent { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
                                 }
+                                _ => item,
+                            };
+                            match self.parse_expr(target)?.kind {
+                                ExprKind::Value(v) => values.push(v),
+                                _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::ValueNotEvaluated { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
                             }
                         }
                         values
