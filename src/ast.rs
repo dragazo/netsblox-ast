@@ -1262,9 +1262,27 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let name = block_name_from_ref(s);
-        let argc = ArgIter::new(s).count();
-        let function = self.reference_fn(&name)?;
+        let (function, function_meta) = self.reference_fn(&name)?;
+        let block_info = get_block_info(&function_meta);
+        let argc = block_info.params.len();
+        debug_assert_eq!(ArgIter::new(s).count(), argc);
         let info = self.check_children_get_info(stmt, s, argc)?;
+
+        for upvar in block_info.upvars.iter() {
+            let i = match block_info.params.iter().position(|x| x == upvar) {
+                Some(x) => x,
+                None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
+            };
+            let upvar_target = match stmt.children.get(i) {
+                Some(x) if x.name == "l" && !x.text.is_empty() => x.text.as_str(),
+                _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
+            };
+            match self.locals.last_mut().unwrap().0.define(upvar_target.into(), Value::from(0.0f64)) {
+                Ok(_) => (), // redefinitions of upvar vars are ok
+                Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names })),
+                Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) })),
+            }
+        }
 
         let mut args = Vec::with_capacity(argc);
         for expr in stmt.children[..argc].iter() {
@@ -1668,10 +1686,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Err(Box::new_with(|| Error::UndefinedVariable { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() }))
     }
     #[inline(never)]
-    fn reference_fn(&self, name: &str) -> Result<FnRef, Box<Error>> {
+    fn reference_fn(&self, name: &str) -> Result<(FnRef, Value), Box<Error>> {
         let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
-        match locs.iter().find_map(|v| v.0.get(name).map(|x| x.def.fn_ref_at(v.1))) {
-            Some(v) => Ok(v),
+        match locs.iter().find_map(|v| v.0.get(name).map(|x| (x.def.fn_ref_at(v.1), x.init.clone()))) {
+            Some(x) => Ok(x),
             None => Err(Box::new_with(|| Error::UndefinedFn { role: self.role.name.clone(), entity: self.entity.name.clone(), name: name.into() }))
         }
     }
@@ -2284,14 +2302,23 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
     }
 }
 
+struct BlockHeaderInfo<'a> {
+    s: &'a str,
+    returns: bool,
+    params: Vec<String>,
+    upvars: Vec<String>,
+}
+
 // returns the signature and returns flag of the block header value
-fn get_block_info(value: &Value) -> (&str, bool) {
+fn get_block_info(value: &Value) -> BlockHeaderInfo {
     match value {
         Value::List(vals, _) => {
-            assert_eq!(vals.len(), 2);
-            let s = match &vals[0] { Value::String(v) => v, _ => panic!() };
-            let returns = match vals[1] { Value::Bool(v) => v, _ => panic!() };
-            (s, returns)
+            assert_eq!(vals.len(), 4);
+            let s = match &vals[0] { Value::String(v) => v.as_str(), _ => panic!() };
+            let returns = match &vals[1] { Value::Bool(v) => *v, _ => panic!() };
+            let params = match &vals[2] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
+            let upvars = match &vals[3] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
+            BlockHeaderInfo { s, returns, params, upvars }
         }
         _ => panic!(), // header parser would never do this
     }
@@ -2335,11 +2362,33 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
         }
         None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockWithoutType { role: role.into(), entity: entity(), sig: s.into() } })),
     };
+    let params: Vec<_> = ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()).collect();
+    let upvars = match block.get(&["inputs"]) {
+        Some(inputs) => {
+            let mut res = vec![];
+            if params.len() != inputs.children.len() {
+                return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.into(), entity: entity(), sig: s.into() } }));
+            }
+            for (param, input) in iter::zip(&params, &inputs.children) {
+                let t = match input.attr("type") {
+                    Some(x) if !x.value.is_empty() => x.value.as_str(),
+                    _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.into(), entity: entity(), sig: s.into() } })),
+                };
+                match t {
+                    "%upvar" => res.push(Value::String(param.clone())),
+                    _ => (),
+                }
+            }
+            res
+        }
+        None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockWithoutInputsMeta { role: role.into(), entity: entity(), sig: s.into() } })),
+    };
+    let params = params.into_iter().map(Value::String).collect();
 
     let name = block_name_from_def(s);
-    match funcs.define(name, Value::List(vec![Value::from(s), Value::from(returns)], None)) {
+    match funcs.define(name, Value::List(vec![Value::from(s), Value::from(returns), Value::List(params, None), Value::List(upvars, None)], None)) {
         Ok(None) => Ok(()),
-        Ok(Some(prev)) => Err(Box::new_with(|| Error::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.def.name, sigs: (get_block_info(&prev.init).0.into(), s.into()) })),
+        Ok(Some(prev)) => Err(Box::new_with(|| Error::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.def.name, sigs: (get_block_info(&prev.init).s.into(), s.into()) })),
         Err(SymbolError::NameTransformError { name }) => Err(Box::new_with(|| Error::NameTransformError { name, role: Some(role.into()), entity: entity() })),
         Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| Error::BlocksWithSameTransName { role: role.into(), entity: entity(), trans_name, names })),
     }
@@ -2347,41 +2396,32 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Box<Error>> {
     let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
     let entry = funcs.get(&block_name_from_def(s)).unwrap();
-    let (s2, returns) = get_block_info(&entry.init); // unwrap ok because header parser
+    let BlockHeaderInfo { s: s2, returns, params, upvars } = get_block_info(&entry.init);
     assert_eq!(s, s2);
 
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
-        for param in ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()) {
+        for param in params {
             script_info.decl_local(param, 0f64.into())?;
         }
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
         let params = script_info.locals[0].0.clone().into_defs();
+
         let stmts = match block.get(&["script"]) {
             Some(script) => script_info.parse(script)?.stmts,
             None => vec![],
         };
 
-        let upvars = match block.get(&["inputs"]) {
-            Some(inputs) => {
-                let mut res = vec![];
-                if params.len() != inputs.children.len() {
-                    return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } }));
-                }
-                for (param, input) in iter::zip(&params, &inputs.children) {
-                    let t = match input.attr("type") {
-                        Some(x) if !x.value.is_empty() => x.value.as_str(),
-                        _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
-                    };
-                    match t {
-                        "%upvar" => res.push(param.ref_at(VarLocation::Local)),
-                        _ => (),
-                    }
-                }
-                res
+        let upvars = {
+            let mut res = vec![];
+            for upvar in upvars.iter() {
+                match params.iter().find(|x| x.name == *upvar) {
+                    Some(x) => res.push(x.ref_at(VarLocation::Local)),
+                    None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
+                };
             }
-            None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockWithoutInputsMeta { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
+            res
         };
 
         Ok(Function {

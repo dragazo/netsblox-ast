@@ -858,6 +858,19 @@ fn test_upvars() {
 }
 
 #[test]
+fn test_upvars_var_defs() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "",
+        fields = "",
+        funcs = r#"<block-definition collabId="item_0" s="f %&apos;g&apos; %&apos;h&apos; %&apos;j&apos;" type="command" category="custom"><header></header><code></code><translations></translations><inputs><input type="%upvar"></input><input type="%cs"></input><input type="%upvar"></input></inputs></block-definition><block-definition collabId="item_6" s="foo" type="command" category="custom"><header></header><code></code><translations></translations><inputs></inputs><script><custom-block collabId="item_7" s="f %upvar %cs %upvar"><l>x</l><script><block collabId="item_9" s="bubble"><block collabId="item_10" s="reportNewList"><list><block collabId="item_11" var="x"/><block collabId="item_12" var="y"/></list></block></block></script><l>y</l></custom-block></script></block-definition>"#,
+        methods = "",
+        scripts = "",
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let _ = parser.parse(&script).unwrap();
+}
+
+#[test]
 #[allow(unreachable_code)]
 fn test_stack_size_usage() {
     #[cfg(not(target_pointer_width = "64"))]
