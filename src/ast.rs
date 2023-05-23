@@ -288,7 +288,6 @@ pub enum ProjectError {
     NoRoot,
     UnnamedRole,
     RefMissingId { role: String, entity: String },
-    ListItemMissingContent { role: String, entity: Option<String> },
     ValueNotEvaluated { role: String, entity: Option<String> },
     NoRoleContent { role: String },
     NoStageDef { role: String },
@@ -1828,7 +1827,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             let target = match item.name.as_str() {
                                 "item" => match item.children.get(0) {
                                     Some(x) => x,
-                                    None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::ListItemMissingContent { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
+                                    None => {
+                                        values.push(Value::String(item.text.clone()));
+                                        continue;
+                                    }
                                 }
                                 _ => item,
                             };
