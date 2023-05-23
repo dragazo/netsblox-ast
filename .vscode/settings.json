@@ -25,6 +25,7 @@
         "Crossproduct",
         "Peekable",
         "Syscall",
+        "upvars",
         "varargs"
     ]
 }

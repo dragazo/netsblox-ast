@@ -294,6 +294,8 @@ pub enum ProjectError {
 
     CustomBlockWithoutName { role: String, entity: Option<String> },
     CustomBlockWithoutType { role: String, entity: Option<String>, sig: String },
+    CustomBlockWithoutInputsMeta { role: String, entity: Option<String>, sig: String },
+    CustomBlockInputsMetaCorrupted { role: String, entity: Option<String>, sig: String },
     CustomBlockUnknownType { role: String, entity: Option<String>, sig: String, ty: String },
 
     ImageWithoutId { role: String },
@@ -550,6 +552,7 @@ pub struct Function {
     pub name: String,
     pub trans_name: String,
     pub params: Vec<VariableDef>,
+    pub upvars: Vec<VariableRef>, // refer into params
     pub returns: bool,
     pub stmts: Vec<Stmt>,
 }
@@ -2360,9 +2363,31 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
             None => vec![],
         };
 
+        let upvars = match block.get(&["inputs"]) {
+            Some(inputs) => {
+                let mut res = vec![];
+                if params.len() != inputs.children.len() {
+                    return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } }));
+                }
+                for (param, input) in iter::zip(&params, &inputs.children) {
+                    let t = match input.attr("type") {
+                        Some(x) if !x.value.is_empty() => x.value.as_str(),
+                        _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
+                    };
+                    match t {
+                        "%upvar" => res.push(param.ref_at(VarLocation::Local)),
+                        _ => (),
+                    }
+                }
+                res
+            }
+            None => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockWithoutInputsMeta { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
+        };
+
         Ok(Function {
             name: entry.def.name.clone(),
             trans_name: entry.def.trans_name.clone(),
+            upvars,
             params,
             returns,
             stmts,

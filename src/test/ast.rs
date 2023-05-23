@@ -748,9 +748,11 @@ fn test_empty_blocks() {
         [foo, bar] => {
             assert_eq!(foo.name, "foo");
             assert_eq!(foo.stmts.len(), 0);
+            assert_eq!(foo.upvars.len(), 0);
 
             assert_eq!(bar.name, "bar");
             assert_eq!(bar.stmts.len(), 1);
+            assert_eq!(bar.upvars.len(), 0);
         }
         x => panic!("{x:?}"),
     }
@@ -834,6 +836,25 @@ fn test_ref_inits() {
         }
         x => panic!("{x:?}"),
     }
+}
+
+#[test]
+fn test_upvars() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "",
+        fields = "",
+        funcs = r#"<block-definition collabId="item_0_5" s="my for loop %&apos;i&apos; %&apos;action&apos;" type="command" category="custom"><header></header><code></code><translations></translations><inputs><input type="%upvar"></input><input type="%cs"></input></inputs></block-definition>"#,
+        methods = "",
+        scripts = "",
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let ast = parser.parse(&script).unwrap();
+    assert_eq!(ast.roles.len(), 1);
+    let role = &ast.roles[0];
+    assert_eq!(role.funcs.len(), 1);
+    let func = &role.funcs[0];
+    assert_eq!(func.upvars.len(), 1);
+    assert_eq!(func.upvars[0].name, "i");
 }
 
 #[test]
