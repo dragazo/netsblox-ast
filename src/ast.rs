@@ -1277,11 +1277,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Some(x) if x.name == "l" && !x.text.is_empty() => x.text.as_str(),
                 _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
             };
-            match self.locals.last_mut().unwrap().0.define(upvar_target.into(), Value::from(0.0f64)) {
-                Ok(_) => (), // redefinitions of upvar vars are ok
-                Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error::LocalsWithSameTransName { role: self.role.name.clone(), entity: self.entity.name.clone(), trans_name, names })),
-                Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error::NameTransformError { name, role: Some(self.role.name.clone()), entity: Some(self.entity.name.clone()) })),
-            }
+            self.decl_local(upvar_target.into(), Value::from(0.0f64))?;
         }
 
         let mut args = Vec::with_capacity(argc);
