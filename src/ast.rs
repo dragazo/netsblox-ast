@@ -519,6 +519,7 @@ struct Rpc {
 struct FnCall {
     function: FnRef,
     args: Vec<Expr>,
+    upvars: Vec<VariableRef>,
     info: Box<BlockInfo>,
 }
 
@@ -722,7 +723,7 @@ pub enum StmtKind {
     SetPenSize { value: Box<Expr> },
 
     RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
-    RunFn { function: FnRef, args: Vec<Expr> },
+    CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef> },
     RunClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
     ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
 
@@ -922,7 +923,7 @@ pub enum ExprKind {
     Atan { value: Box<Expr> },
 
     CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
-    CallFn { function: FnRef, args: Vec<Expr> },
+    CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef>, },
 
     StageWidth,
     StageHeight,
@@ -1102,8 +1103,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 "custom-block" => {
                     let res = self.parse_fn_call(stmt)?;
                     stmts.push_with(|| {
-                        let FnCall { function, args, info } = *res;
-                        Stmt { kind: StmtKind::RunFn { function, args }, info }
+                        let FnCall { function, args, upvars, info } = *res;
+                        Stmt { kind: StmtKind::CallFn { function, args, upvars }, info }
                     });
                 }
                 x => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } })),
@@ -1268,6 +1269,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         debug_assert_eq!(ArgIter::new(s).count(), argc);
         let info = self.check_children_get_info(stmt, s, argc)?;
 
+        let mut upvars = vec![];
         for upvar in block_info.upvars.iter() {
             let i = match block_info.params.iter().position(|x| x == upvar) {
                 Some(x) => x,
@@ -1277,7 +1279,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Some(x) if x.name == "l" && !x.text.is_empty() => x.text.as_str(),
                 _ => return Err(Box::new_with(|| Error::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
             };
-            self.decl_local(upvar_target.into(), Value::from(0.0f64))?;
+            let def = self.decl_local(upvar_target.into(), Value::from(0.0f64))?;
+            upvars.push(def.def.ref_at(VarLocation::Local));
         }
 
         let mut args = Vec::with_capacity(argc);
@@ -1285,7 +1288,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             args.push_boxed(self.parse_expr(expr)?);
         }
 
-        Ok(Box::new_with(|| FnCall { function, args, info }))
+        Ok(Box::new_with(|| FnCall { function, args, upvars, info }))
     }
     #[inline(never)]
     fn parse_send_message_common(&mut self, stmt: &Xml, s: &str) -> Result<Box<NetworkMessage>, Box<Error>> {
@@ -1841,8 +1844,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "custom-block" => {
                 let res = self.parse_fn_call(expr)?;
                 Ok(Box::new_with(|| {
-                    let FnCall { function, args, info } = *res;
-                    Expr { kind: ExprKind::CallFn { function, args }, info }
+                    let FnCall { function, args, upvars, info } = *res;
+                    Expr { kind: ExprKind::CallFn { function, args, upvars }, info }
                 }))
             }
             "script" => self.parse_closure("script", expr, ClosureKind::Command, true),
