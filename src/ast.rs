@@ -369,15 +369,15 @@ pub enum ProjectError {
     CostumesWithSameName { name: String },
 
     BoolNoValue,
-    BoolUnknownValue { value: String },
+    BoolUnknownValue { got: String },
 
     ColorUnknownValue { color: String },
 
     CustomBlockWithoutName,
-    CustomBlockWithoutType { name: String },
-    CustomBlockWithoutInputsMeta { name: String },
-    CustomBlockInputsMetaCorrupted { name: String },
-    CustomBlockUnknownType { name: String },
+    CustomBlockWithoutInputsMeta,
+    CustomBlockInputsMetaCorrupted,
+    CustomBlockWithoutType,
+    CustomBlockUnknownType { ty: String },
 
     MessageTypeMissingName,
     MessageTypeMissingFields { msg_type: String },
@@ -1126,48 +1126,64 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let mut stmts = vec![];
         for stmt in stmts_xml {
+            let collab_id = get_collab_id(stmt);
+            let location = LocationRef {
+                role: Some(&self.role.name),
+                entity: Some(&self.entity.name),
+                collab_id: collab_id.as_deref(),
+                block_type: Some(&stmt.name),
+            };
             match stmt.name.as_str() {
                 "block" => stmts.push_boxed(self.parse_block(stmt)?),
                 "custom-block" => {
-                    let res = self.parse_fn_call(stmt)?;
+                    let res = self.parse_fn_call(stmt, &location)?;
                     stmts.push_with(|| {
                         let FnCall { function, args, upvars, info } = *res;
                         Stmt { kind: StmtKind::CallFn { function, args, upvars }, info }
                     });
                 }
-                x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnknownBlockMetaType { role: self.role.name.clone(), entity: self.entity.name.clone(), meta_type: x.to_owned() } })),
+                _ => return Err(Box::new_with(|| Error { kind: ProjectError::BlockUnknownType.into(), location: location.to_owned() })),
             }
         }
         Ok(Script { hat, stmts })
     }
     #[inline(never)]
     fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Box<Hat>>, Box<Error>> {
+        let collab_id = get_collab_id(stmt);
+        let mut location = LocationRef {
+            role: Some(&self.role.name),
+            entity: Some(&self.entity.name),
+            collab_id: collab_id.as_deref(),
+            block_type: None,
+        };
         let s = match stmt.attr("s") {
-            None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
+            None => return Err(Box::new_with(|| Error { kind: ProjectError::BlockWithoutType.into(), location: location.to_owned() })),
             Some(v) => v.value.as_str(),
         };
+        location.block_type = Some(s);
+
         Ok(Some(match s {
             "receiveGo" => {
-                let info = self.check_children_get_info(stmt, s, 0)?;
+                let info = self.check_children_get_info(stmt, 0, &location)?;
                 Box::new_with(|| Hat { kind: HatKind::OnFlag, info })
             }
             "receiveOnClone" => {
-                let info = self.check_children_get_info(stmt, s, 0)?;
+                let info = self.check_children_get_info(stmt, 0, &location)?;
                 Box::new_with(|| Hat { kind: HatKind::OnClone, info })
             }
             "receiveCondition" => {
-                let info = self.check_children_get_info(stmt, s, 1)?;
-                let condition = self.parse_expr(&stmt.children[0])?;
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                let condition = self.parse_expr(&stmt.children[0], &location)?;
                 Box::new_with(|| Hat { kind: HatKind::When { condition }, info })
             }
             "receiveKey" => {
-                let info = self.check_children_get_info(stmt, s, 1)?;
-                let key = self.grab_option(s, &stmt.children[0])?;
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                let key = self.grab_option(&stmt.children[0], &location)?;
                 Box::new_with(|| Hat { kind: HatKind::OnKey { key: key.into() }, info })
             }
             "receiveInteraction" => {
-                let info = self.check_children_get_info(stmt, s, 1)?;
-                match self.grab_option(s, &stmt.children[0])? {
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                match self.grab_option(&stmt.children[0], &location)? {
                     "pressed" => Box::new_with(|| Hat { kind: HatKind::MouseDown, info }),
                     "clicked" => Box::new_with(|| Hat { kind: HatKind::MouseUp, info }),
                     "mouse-entered" => Box::new_with(|| Hat { kind: HatKind::MouseEnter, info }),
@@ -1176,31 +1192,31 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "scrolled-down" => Box::new_with(|| Hat { kind: HatKind::ScrollDown, info }),
                     "dropped" => Box::new_with(|| Hat { kind: HatKind::Dropped, info }),
                     "stopped" => Box::new_with(|| Hat { kind: HatKind::Stopped, info }),
-                    x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { ty: s.into(), got: x.into() } })),
+                    x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                 }
             }
             "receiveMessage" => {
-                let info = self.check_children_get_info(stmt, s, 1)?;
+                let info = self.check_children_get_info(stmt, 1, &location)?;
                 let child = &stmt.children[0];
-                if child.name != "l" { return Err(Box::new_with(|| ErrorKind::BlockOptionNotConst { block_type: s.into() })) }
+                if child.name != "l" { return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotConst.into(), location: location.to_owned() })) }
                 let msg_type = match child.text.as_str() {
                     "" => match child.get(&["option"]) {
                         Some(opt) => match opt.text.as_str() {
                             "any message" => None,
-                            x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                            x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                         }
-                        None => return Err(Box::new_with(|| ErrorKind::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
+                        None => return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                     }
                     x => Some(x.to_owned()),
                 };
                 Box::new_with(|| Hat { kind: HatKind::LocalMessage { msg_type }, info })
             }
             "receiveSocketMessage" => {
-                if stmt.children.is_empty() { return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockChildCount { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), needed: 1, got: 0 } })) }
-                if stmt.children[0].name != "l" { return Err(Box::new_with(|| ErrorKind::BlockOptionNotConst { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })) }
+                if stmt.children.is_empty() { return Err(Box::new_with(|| Error { kind: ProjectError::BlockChildCount { needed: 1, got: 0 }.into(), location: location.to_owned() })) }
+                if stmt.children[0].name != "l" { return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotConst.into(), location: location.to_owned() })) }
 
                 let msg_type = match stmt.children[0].text.as_str() {
-                    "" => return Err(Box::new_with(|| ErrorKind::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
+                    "" => return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                     x => x.to_owned(),
                 };
 
@@ -1211,14 +1227,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         comment = Some(clean_newlines(&child.text));
                     }
                     if child.name != "l" { break }
-                    let var = self.decl_local(child.text.clone(), 0f64.into())?.def.ref_at(VarLocation::Local);
+                    let var = self.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
                     fields.push(var);
                 }
                 let location = get_collab_id(stmt);
                 let info = Box::new_with(|| BlockInfo { comment, location });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
-            x if x.starts_with("receive") => return Err(Box::new_with(|| ErrorKind::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() })),
+            x if x.starts_with("receive") => return Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
             _ => return Ok(None),
         }))
     }
@@ -1285,36 +1301,42 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok(Box::new_with(|| Rpc { service, rpc, args, info }))
     }
     #[inline(never)]
-    fn parse_fn_call(&mut self, stmt: &Xml) -> Result<Box<FnCall>, Box<Error>> {
+    fn parse_fn_call(&mut self, stmt: &Xml, location: &LocationRef) -> Result<Box<FnCall>, Box<Error>> {
         let s = match stmt.attr("s") {
             Some(v) => v.value.as_str(),
-            None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockWithoutName { role: self.role.name.clone(), entity: Some(self.entity.name.clone()) } })),
+            None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutName.into(), location: location.to_owned() })),
+        };
+        let location = LocationRef {
+            role: location.role,
+            entity: location.entity,
+            collab_id: location.collab_id,
+            block_type: Some(s),
         };
 
         let name = block_name_from_ref(s);
-        let (function, function_meta) = self.reference_fn(&name)?;
+        let (function, function_meta) = self.reference_fn(&name, &location)?;
         let block_info = get_block_info(&function_meta);
         let argc = block_info.params.len();
         debug_assert_eq!(ArgIter::new(s).count(), argc);
-        let info = self.check_children_get_info(stmt, s, argc)?;
+        let info = self.check_children_get_info(stmt, argc, &location)?;
 
         let mut upvars = vec![];
         for upvar in block_info.upvars.iter() {
             let i = match block_info.params.iter().position(|x| x == upvar) {
                 Some(x) => x,
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
             };
             let upvar_target = match stmt.children.get(i) {
                 Some(x) if x.name == "l" && !x.text.is_empty() => x.text.as_str(),
-                _ => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: self.role.name.clone(), entity: Some(self.entity.name.clone()), sig: s.into() } })),
+                _ => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
             };
-            let def = self.decl_local(upvar_target.into(), Value::from(0.0f64))?;
+            let def = self.decl_local(upvar_target.into(), Value::from(0.0f64), &location)?;
             upvars.push(def.def.ref_at(VarLocation::Local));
         }
 
         let mut args = Vec::with_capacity(argc);
         for expr in stmt.children[..argc].iter() {
-            args.push_boxed(self.parse_expr(expr)?);
+            args.push_boxed(self.parse_expr(expr, &location)?);
         }
 
         Ok(Box::new_with(|| FnCall { function, args, upvars, info }))
@@ -1780,7 +1802,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         match val {
             "true" => Ok(Box::new_with(|| true.into())),
             "false" => Ok(Box::new_with(|| false.into())),
-            _ => Err(Box::new_with(|| Error { kind: ProjectError::BoolUnknownValue { value: val.into() }.into(), location: location.to_owned() })),
+            _ => Err(Box::new_with(|| Error { kind: ProjectError::BoolUnknownValue { got: val.into() }.into(), location: location.to_owned() })),
         }
     }
     #[inline(never)]
@@ -1791,7 +1813,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let mut params = SymbolTable::new(self.parser);
-        fn define_param(script_info: &ScriptInfo, params: &mut SymbolTable, name: String, location: &LocationRef) -> Result<(), Box<Error>> {
+        fn define_param(params: &mut SymbolTable, name: String, location: &LocationRef) -> Result<(), Box<Error>> {
             match params.define(name, 0.0.into()) {
                 Ok(None) => Ok(()),
                 Ok(Some(prev)) => Err(Box::new_with(|| Error { kind: CompileError::InputsWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
@@ -1801,7 +1823,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
         if !inline_script {
             for input in expr.children[1].children.iter() {
-                define_param(self, &mut params, input.text.clone(), location)?;
+                define_param(&mut params, input.text.clone(), location)?;
             }
         }
 
@@ -1826,7 +1848,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
 
         for autofill_arg in &self.autofill_args[prev_autofill_args_len..] {
-            define_param(self, &mut params, autofill_arg.clone(), location)?;
+            define_param(&mut params, autofill_arg.clone(), location)?;
         }
 
         self.in_autofill_mode = prev_in_autofill_mode;
@@ -1898,106 +1920,108 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "ref" => match expr.attr("id").and_then(|x| x.value.parse().ok()).map(RefId) {
                 Some(ref_id) => Ok(Box::new_with(|| Value::Ref(ref_id).into())),
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::RefMissingId { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::RefMissingId.into(), location: location.to_owned() })),
             }
             "custom-block" => {
-                let res = self.parse_fn_call(expr)?;
+                let res = self.parse_fn_call(expr, &location)?;
                 Ok(Box::new_with(|| {
                     let FnCall { function, args, upvars, info } = *res;
                     Expr { kind: ExprKind::CallFn { function, args, upvars }, info }
                 }))
             }
-            "script" => self.parse_closure("script", expr, ClosureKind::Command, true),
+            "script" => self.parse_closure(expr, ClosureKind::Command, true, &location),
             "block" => {
                 if let Some(var) = expr.attr("var") {
-                    let info = self.check_children_get_info(expr, "var", 0)?;
-                    let var = self.reference_var(&var.value)?;
+                    let info = self.check_children_get_info(expr, 0, &location)?;
+                    let var = self.reference_var(&var.value, &location)?;
                     return Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var }, info }));
                 }
                 let s = match expr.attr("s") {
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockWithoutType { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::BlockWithoutType.into(), location: location.to_owned() })),
                     Some(v) => v.value.as_str(),
                 };
+                location.block_type = Some(s);
+
                 match s {
-                    "reportVariadicSum" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values }, info })),
-                    "reportVariadicProduct" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values }, info })),
-                    "reportVariadicMin" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values }, info })),
-                    "reportVariadicMax" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values }, info })),
+                    "reportVariadicSum" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values }, info })),
+                    "reportVariadicProduct" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values }, info })),
+                    "reportVariadicMin" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values }, info })),
+                    "reportVariadicMax" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values }, info })),
 
-                    "reportSum" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportProduct" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportMin" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportMax" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
+                    "reportSum" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
+                    "reportProduct" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
+                    "reportMin" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
+                    "reportMax" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
 
-                    "reportDifference" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Sub { left, right }, info })),
-                    "reportQuotient" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Div { left, right }, info })),
-                    "reportModulus" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mod { left, right }, info })),
-                    "reportPower" => self.parse_2_args(expr, s).map(|(base, power, info)| Box::new_with(|| Expr { kind: ExprKind::Pow { base, power }, info })),
-                    "reportAtan2" => self.parse_2_args(expr, s).map(|(y, x, info)| Box::new_with(|| Expr { kind: ExprKind::Atan2 { y, x }, info })),
+                    "reportDifference" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Sub { left, right }, info })),
+                    "reportQuotient" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Div { left, right }, info })),
+                    "reportModulus" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mod { left, right }, info })),
+                    "reportPower" => self.parse_2_args(expr, &location).map(|(base, power, info)| Box::new_with(|| Expr { kind: ExprKind::Pow { base, power }, info })),
+                    "reportAtan2" => self.parse_2_args(expr, &location).map(|(y, x, info)| Box::new_with(|| Expr { kind: ExprKind::Atan2 { y, x }, info })),
 
-                    "reportAnd" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::And { left, right }, info })),
-                    "reportOr" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Or { left, right }, info })),
+                    "reportAnd" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::And { left, right }, info })),
+                    "reportOr" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Or { left, right }, info })),
 
-                    "reportIsIdentical" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Identical { left, right }, info })),
-                    "reportEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Eq { left, right }, info })),
-                    "reportNotEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Neq { left, right }, info })),
-                    "reportLessThan" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Less { left, right }, info })),
-                    "reportLessThanOrEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::LessEq { left, right }, info })),
-                    "reportGreaterThan" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Greater { left, right }, info })),
-                    "reportGreaterThanOrEquals" => self.parse_2_args(expr, s).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::GreaterEq { left, right }, info })),
+                    "reportIsIdentical" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Identical { left, right }, info })),
+                    "reportEquals" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Eq { left, right }, info })),
+                    "reportNotEquals" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Neq { left, right }, info })),
+                    "reportLessThan" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Less { left, right }, info })),
+                    "reportLessThanOrEquals" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::LessEq { left, right }, info })),
+                    "reportGreaterThan" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Greater { left, right }, info })),
+                    "reportGreaterThanOrEquals" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::GreaterEq { left, right }, info })),
 
-                    "reportRandom" => self.parse_2_args(expr, s).map(|(a, b, info)| Box::new_with(|| Expr { kind: ExprKind::Random { a, b }, info })),
-                    "reportNumbers" => self.parse_2_args(expr, s).map(|(start, stop, info)| Box::new_with(|| Expr { kind: ExprKind::Range { start, stop }, info })),
+                    "reportRandom" => self.parse_2_args(expr, &location).map(|(a, b, info)| Box::new_with(|| Expr { kind: ExprKind::Random { a, b }, info })),
+                    "reportNumbers" => self.parse_2_args(expr, &location).map(|(start, stop, info)| Box::new_with(|| Expr { kind: ExprKind::Range { start, stop }, info })),
 
-                    "reportNot" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Not { value }, info })),
-                    "reportRound" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Round { value }, info })),
+                    "reportNot" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Not { value }, info })),
+                    "reportRound" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Round { value }, info })),
 
-                    "reportListLength" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
-                    "reportListIsEmpty" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListIsEmpty { value }, info })),
+                    "reportListLength" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
+                    "reportListIsEmpty" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListIsEmpty { value }, info })),
 
                     "reportListIndex" => {
-                        let index = self.parse_2_args(expr, s).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info }))?;
+                        let index = self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info }))?;
                         Ok(self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0))
                     }
-                    "reportListContainsItem" => self.parse_2_args(expr, s).map(|(list, value, info)| Box::new_with(|| Expr { kind: ExprKind::ListContains { list, value }, info })),
+                    "reportListContainsItem" => self.parse_2_args(expr, &location).map(|(list, value, info)| Box::new_with(|| Expr { kind: ExprKind::ListContains { list, value }, info })),
 
                     "reportListItem" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let list = self.parse_expr(&expr.children[1])?.into();
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let list = self.parse_expr(&expr.children[1], &location)?.into();
                         match expr.children[0].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
                                 "last" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListGetLast { list }, info })),
                                 "any" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListGetRandom { list }, info })),
-                                "" => Err(Box::new_with(|| ErrorKind::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
-                                x => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                                "" => Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
+                                x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                             }
                             None => {
-                                let index = self.parse_expr(&expr.children[0])?;
+                                let index = self.parse_expr(&expr.children[0], &location)?;
                                 let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Ok(Box::new_with(|| Expr { kind: ExprKind::ListGet { list, index }, info }))
                             }
                         }
                     }
                     "reportLetter" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let string = self.parse_expr(&expr.children[1])?.into();
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let string = self.parse_expr(&expr.children[1], &location)?.into();
                         match expr.children[0].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
                                 "last" => Ok(Box::new_with(|| Expr { kind: ExprKind::StrGetLast { string }, info })),
                                 "any" => Ok(Box::new_with(|| Expr { kind: ExprKind::StrGetRandom { string }, info })),
-                                "" => Err(Box::new_with(|| ErrorKind::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
-                                x => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                                "" => Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
+                                x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                             }
                             None => {
-                                let index = self.parse_expr(&expr.children[0])?;
+                                let index = self.parse_expr(&expr.children[0], &location)?;
                                 let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Ok(Box::new_with(|| Expr { kind: ExprKind::StrGet { string, index }, info }))
                             }
                         }
                     }
                     "reportTextSplit" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let text = self.parse_expr(&expr.children[0])?.into();
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let text = self.parse_expr(&expr.children[0], &location)?.into();
                         let mode = match expr.children[1].get(&["option"]) {
                             Some(opt) => match opt.text.as_str() {
                                 "letter" => TextSplitMode::Letter,
@@ -2007,35 +2031,34 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                                 "cr" => TextSplitMode::CR,
                                 "csv" => TextSplitMode::Csv,
                                 "json" => TextSplitMode::Json,
-                                "" => return Err(Box::new_with(|| ErrorKind::BlockOptionNotSelected { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into() })),
-                                x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                                "" => return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
+                                x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                             }
-                            None => TextSplitMode::Custom(self.parse_expr(&expr.children[1])?.into()),
+                            None => TextSplitMode::Custom(self.parse_expr(&expr.children[1], &location)?.into()),
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::TextSplit { text, mode }, info }))
                     }
 
-                    "reportStringSize" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::StrLen { value }, info })),
-                    "reportUnicodeAsLetter" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::UnicodeToChar { value }, info })),
-                    "reportUnicode" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::CharToUnicode { value }, info })),
+                    "reportStringSize" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::StrLen { value }, info })),
+                    "reportUnicodeAsLetter" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::UnicodeToChar { value }, info })),
+                    "reportUnicode" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::CharToUnicode { value }, info })),
 
-                    "reportCDR" => self.parse_1_args(expr, s).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListCdr { value }, info })),
-                    "reportCONS" => self.parse_2_args(expr, s).map(|(item, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListCons { item, list }, info })),
+                    "reportCDR" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListCdr { value }, info })),
+                    "reportCONS" => self.parse_2_args(expr, &location).map(|(item, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListCons { item, list }, info })),
 
-                    "reportJoinWords" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::StrCat { values }, info })),
-                    "reportConcatenatedLists" => self.parse_1_varargs(expr, s).map(|(lists, info)| Box::new_with(|| Expr { kind: ExprKind::ListCat { lists }, info })),
-                    "reportNewList" => self.parse_1_varargs(expr, s).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::MakeList { values }, info })),
-                    "reportCrossproduct" => self.parse_1_varargs(expr, s).map(|(sources, info)| Box::new_with(|| Expr { kind: ExprKind::ListCombinations { sources }, info })),
+                    "reportJoinWords" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::StrCat { values }, info })),
+                    "reportConcatenatedLists" => self.parse_1_varargs(expr, &location).map(|(lists, info)| Box::new_with(|| Expr { kind: ExprKind::ListCat { lists }, info })),
+                    "reportNewList" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::MakeList { values }, info })),
+                    "reportCrossproduct" => self.parse_1_varargs(expr, &location).map(|(sources, info)| Box::new_with(|| Expr { kind: ExprKind::ListCombinations { sources }, info })),
 
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
-                        Some(v) if v.text == "true" => Ok(Box::new_with(|| true.into())),
-                        Some(v) if v.text == "false" => Ok(Box::new_with(|| false.into())),
-                        _ => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BoolUnknownValue { role: self.role.name.clone(), entity: self.entity.name.clone() } })),
+                        Some(x) => self.parse_bool(&x.text, &location),
+                        None => Err(Box::new_with(|| Error { kind: ProjectError::BoolNoValue.into(), location: location.to_owned() })),
                     }
                     "reportMonadic" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let func = self.grab_option(s, &expr.children[0])?;
-                        let value = self.parse_expr(&expr.children[1])?;
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let func = self.grab_option(&expr.children[0], &location)?;
+                        let value = self.parse_expr(&expr.children[1], &location)?;
                         match func {
                             "id" => Ok(value),
 
@@ -2061,13 +2084,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "2^" => Ok(Box::new_with(|| Expr { kind: ExprKind::Pow { base: Box::new_with(|| 2f64.into()), power: value }, info })),
                             "10^" => Ok(Box::new_with(|| Expr { kind: ExprKind::Pow { base: Box::new_with(|| 10f64.into()), power: value }, info })),
 
-                            _ => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } })),
+                            _ => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: func.into() }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportListAttribute" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let func = self.grab_option(s, &expr.children[0])?;
-                        let value = self.parse_expr(&expr.children[1])?;
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let func = self.grab_option(&expr.children[0], &location)?;
+                        let value = self.parse_expr(&expr.children[1], &location)?;
                         match func {
                             "length" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
                             "rank" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListRank { value }, info })),
@@ -2080,151 +2103,151 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "csv" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListCsv { value }, info })),
                             "json" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListJson { value }, info })),
 
-                            _ => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: func.into() } })),
+                            _ => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: func.into() }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportReshape" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let value = self.parse_expr(&expr.children[0])?;
-                        let dims = self.parse_varargs(&expr.children[1])?;
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let value = self.parse_expr(&expr.children[0], &location)?;
+                        let dims = self.parse_varargs(&expr.children[1], &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::ListReshape { value, dims }, info }))
                     }
 
                     "reportIfElse" => {
-                        let info = self.check_children_get_info(expr, s, 3)?;
-                        let condition = self.parse_expr(&expr.children[0])?;
-                        let then = self.parse_expr(&expr.children[1])?;
-                        let otherwise = self.parse_expr(&expr.children[2])?;
+                        let info = self.check_children_get_info(expr, 3, &location)?;
+                        let condition = self.parse_expr(&expr.children[0], &location)?;
+                        let then = self.parse_expr(&expr.children[1], &location)?;
+                        let otherwise = self.parse_expr(&expr.children[2], &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Conditional { condition, then, otherwise }, info }))
                     }
                     "getJSFromRPCStruct" => {
-                        let rpc = self.parse_rpc(expr, s)?;
+                        let rpc = self.parse_rpc(expr, &location)?;
                         Ok(Box::new_with(|| (*rpc).into()))
                     }
 
-                    "reportStageWidth" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
-                    "reportStageHeight" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageHeight, info })),
+                    "reportStageWidth" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
+                    "reportStageHeight" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageHeight, info })),
 
-                    "reportMouseX" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseX, info })),
-                    "reportMouseY" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseY, info })),
+                    "reportMouseX" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseX, info })),
+                    "reportMouseY" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseY, info })),
 
-                    "reportLatitude" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Latitude, info })),
-                    "reportLongitude" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Longitude, info })),
+                    "reportLatitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Latitude, info })),
+                    "reportLongitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Longitude, info })),
 
-                    "reportPenTrailsAsCostume" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::ImageOfDrawings, info })),
+                    "reportPenTrailsAsCostume" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::ImageOfDrawings, info })),
                     "reportImageOfObject" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        let entity = self.grab_entity(s, &expr.children[0], BlockInfo::none())?.into();
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        let entity = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?.into();
                         Ok(Box::new_with(|| Expr { kind: ExprKind::ImageOfEntity { entity }, info }))
                     }
                     "reportTouchingObject" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
+                        let info = self.check_children_get_info(expr, 1, &location)?;
                         let child = &expr.children[0];
                         if child.name == "l" && child.get(&["option"]).is_some() {
-                            match self.grab_option(s, child)? {
+                            match self.grab_option(child, &location)? {
                                 "mouse-pointer" => Ok(Box::new_with(|| Expr { kind: ExprKind::IsTouchingMouse, info })),
                                 "pen trails" => Ok(Box::new_with(|| Expr { kind: ExprKind::IsTouchingDrawings, info })),
                                 "edge" => Ok(Box::new_with(|| Expr { kind: ExprKind::IsTouchingEdge, info })),
-                                x => Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::BlockOptionUnknown { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), got: x.into() } })),
+                                x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                             }
                         }
                         else {
-                            let entity = self.grab_entity(s, child, BlockInfo::none())?.into();
+                            let entity = self.grab_entity(child, BlockInfo::none(), &location)?.into();
                             Ok(Box::new_with(|| Expr { kind: ExprKind::IsTouchingEntity { entity }, info }))
                         }
                     }
 
-                    "reportRPCError" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::RpcError, info })),
+                    "reportRPCError" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::RpcError, info })),
 
-                    "getScale" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Size, info })),
-                    "reportShown" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::IsVisible, info })),
+                    "getScale" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Size, info })),
+                    "reportShown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::IsVisible, info })),
 
-                    "xPosition" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::XPos, info })),
-                    "yPosition" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::YPos, info })),
-                    "direction" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Heading, info })),
+                    "xPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::XPos, info })),
+                    "yPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::YPos, info })),
+                    "direction" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Heading, info })),
 
-                    "getPenDown" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::PenDown, info })),
+                    "getPenDown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::PenDown, info })),
 
-                    "getLastAnswer" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Answer, info })),
-                    "getLastMessage" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Message, info })),
+                    "getLastAnswer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Answer, info })),
+                    "getLastMessage" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Message, info })),
 
-                    "getTimer" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::Timer, info })),
+                    "getTimer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Timer, info })),
 
-                    "reportMap" => self.parse_2_args(expr, s).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Map { f, list }, info })),
-                    "reportKeep" => self.parse_2_args(expr, s).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Keep { f, list }, info })),
-                    "reportFindFirst" => self.parse_2_args(expr, s).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::FindFirst { f, list }, info })),
-                    "reportCombine" => self.parse_2_args(expr, s).map(|(list, f, info)| Box::new_with(|| Expr { kind: ExprKind::Combine { list, f }, info })),
+                    "reportMap" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Map { f, list }, info })),
+                    "reportKeep" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Keep { f, list }, info })),
+                    "reportFindFirst" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::FindFirst { f, list }, info })),
+                    "reportCombine" => self.parse_2_args(expr, &location).map(|(list, f, info)| Box::new_with(|| Expr { kind: ExprKind::Combine { list, f }, info })),
 
-                    "reifyScript" => self.parse_closure(s, expr, ClosureKind::Command, false),
-                    "reifyReporter" => self.parse_closure(s, expr, ClosureKind::Reporter, false),
-                    "reifyPredicate" => self.parse_closure(s, expr, ClosureKind::Predicate, false),
+                    "reifyScript" => self.parse_closure(expr, ClosureKind::Command, false, &location),
+                    "reifyReporter" => self.parse_closure(expr, ClosureKind::Reporter, false, &location),
+                    "reifyPredicate" => self.parse_closure(expr, ClosureKind::Predicate, false, &location),
 
                     "evaluate" => {
-                        let info = self.check_children_get_info(expr, s, 2)?;
-                        let closure = self.parse_expr(&expr.children[0])?;
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let closure = self.parse_expr(&expr.children[0], &location)?;
                         let mut args = Vec::with_capacity(expr.children[1].children.len());
                         for input in expr.children[1].children.iter() {
-                            args.push_boxed(self.parse_expr(input)?);
+                            args.push_boxed(self.parse_expr(input, &location)?);
                         }
                         Ok(Box::new_with(|| Expr { kind: ExprKind::CallClosure { new_entity: None, closure, args }, info }))
                     }
                     "reportAskFor" => {
-                        let info = self.check_children_get_info(expr, s, 3)?;
-                        let entity = self.grab_entity(s, &expr.children[0], BlockInfo::none())?;
-                        let closure = self.parse_expr(&expr.children[1])?;
+                        let info = self.check_children_get_info(expr, 3, &location)?;
+                        let entity = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?;
+                        let closure = self.parse_expr(&expr.children[1], &location)?;
                         let mut args = Vec::with_capacity(expr.children[2].children.len());
                         for input in expr.children[2].children.iter() {
-                            args.push_boxed(self.parse_expr(input)?);
+                            args.push_boxed(self.parse_expr(input, &location)?);
                         }
                         Ok(Box::new_with(|| Expr { kind: ExprKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
                     }
                     "doSocketRequest" => {
-                        let res = self.parse_send_message_common(expr, s)?;
+                        let res = self.parse_send_message_common(expr, &location)?;
                         Ok(Box::new_with(|| {
                             let NetworkMessage { target, msg_type, values, info } = *res;
                             Expr { kind: ExprKind::NetworkMessageReply { target, msg_type, values }, info }
                         }))
                     }
                     "nativeCallSyscall" => {
-                        let res = self.parse_syscall(expr, s)?;
+                        let res = self.parse_syscall(expr, &location)?;
                         Ok(Box::new_with(|| {
                             let Syscall { name, args, info } = *res;
                             Expr { kind: ExprKind::Syscall { name, args }, info }
                         }))
                     }
-                    "nativeSyscallError" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::SyscallError, info })),
+                    "nativeSyscallError" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::SyscallError, info })),
                     "getEffect" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        let effect = self.parse_effect(&expr.children[0], s)?;
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        let effect = self.parse_effect(&expr.children[0], &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Effect { kind: effect }, info }))
                     }
                     "getPenAttribute" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        let attr = self.parse_pen_attr(&expr.children[0], s)?;
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        let attr = self.parse_pen_attr(&expr.children[0], &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::PenAttr { attr }, info }))
                     }
                     "reportGet" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        match self.grab_option(s, &expr.children[0])? {
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        match self.grab_option(&expr.children[0], &location)? {
                             "costumes" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeList, info })),
                             "costume" => Ok(Box::new_with(|| Expr { kind: ExprKind::Costume, info })),
-                            m => Err(Box::new_with(|| ErrorKind::BlockCurrentlyUnsupported { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.into(), what: format!("the {s} block with option {m} is currently not supported") })),
+                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option {m} is currently not supported") }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportObject" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        self.grab_entity(s, &expr.children[0], info)
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        self.grab_entity(&expr.children[0], info, &location)
                     }
-                    "getCostumeIdx" => self.parse_0_args(expr, s).map(|info| Box::new_with(|| Expr { kind: ExprKind::CostumeNumber, info })),
+                    "getCostumeIdx" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::CostumeNumber, info })),
                     "newClone" => {
-                        let info = self.check_children_get_info(expr, s, 1)?;
-                        let target = self.grab_entity(s, &expr.children[0], BlockInfo::none())?;
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        let target = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Clone { target }, info }))
                     }
-                    _ => Err(Box::new_with(|| ErrorKind::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: s.to_owned() })),
+                    _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
                 }
             }
-            x => Err(Box::new_with(|| ErrorKind::UnknownBlockType { role: self.role.name.clone(), entity: self.entity.name.clone(), block_type: x.into() })),
+            _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
         }
     }
 }
@@ -2251,31 +2274,38 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         }
     }
     fn parse(mut self, entity: &'a Xml) -> Result<Entity, Box<Error>> {
+        let location = LocationRef {
+            role: Some(&self.role.name),
+            entity: Some(&self.name),
+            collab_id: None,
+            block_type: None,
+        };
+
         for costume in entity.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
             if let Some(ident) = costume.get(&["ref"]).map(|r| r.attr("mediaID")).flatten() {
                 let ident = ident.value.as_str();
                 if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_cst_") {
-                    return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CostumeIdFormat { id: ident.into() } }));
+                    return Err(Box::new_with(|| Error { kind: ProjectError::CostumeIdFormat { id: ident.into() }.into(), location: location.to_owned() }));
                 }
                 let name = &ident[self.name.len() + 5..];
 
                 let content = match self.role.images.get(ident) {
                     Some(x) => x.clone(),
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CostumeUndefinedRef { id: ident.into() } })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::CostumeUndefinedRef { id: ident.into() }.into(), location: location.to_owned() })),
                 };
 
                 match self.costumes.define(name.into(), Value::Image(content)) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CostumesWithSameName { name: prev.def.name } })),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| ErrorKind::NameTransformError { name })),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| ErrorKind::CostumesWithSameTransName { trans_name, names })),
+                    Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::CostumesWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::CostumesWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                 }
             }
         }
 
         let blocks = entity.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
         for block in blocks {
-            parse_block_header(block, &mut self.funcs, &self.role.name, Some(&self.name))?;
+            parse_block_header(block, &mut self.funcs, &location)?;
         }
         let mut funcs = vec![];
         for block in blocks {
@@ -2300,14 +2330,14 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             let mut defs = vec![];
             for def in fields.children.iter().filter(|v| v.name == "variable") {
                 let name = match def.attr("name") {
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnnamedField })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::UnnamedField.into(), location: location.to_owned() })),
                     Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::FieldNoValue { name } })),
-                    Some(x) => match dummy_script.parse_expr(x)?.kind {
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::FieldNoValue { name }.into(), location: location.to_owned() })),
+                    Some(x) => match dummy_script.parse_expr(x, &location)?.kind {
                         ExprKind::Value(v) => v,
-                        _ => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ValueNotEvaluated })),
+                        _ => return Err(Box::new_with(|| Error { kind: ProjectError::ValueNotEvaluated.into(), location: location.to_owned() })),
                     }
                 };
                 defs.push((name, value));
@@ -2316,9 +2346,9 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             for (name, value) in defs {
                 match self.fields.define(name.clone(), value) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::FieldsWithSameName { name: prev.def.name } })),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| ErrorKind::NameTransformError { name })),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| ErrorKind::FieldsWithSameTransName { trans_name, names })),
+                    Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::FieldsWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::FieldsWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                 }
             }
         }
@@ -2405,32 +2435,39 @@ fn test_block_name_from_ref() {
     assert_eq!(block_name_from_ref("hello %world "), "hello \t ");
 }
 
-fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &str, entity: Option<&str>) -> Result<(), Box<Error>> {
-    let entity = || entity.map(|v| v.to_owned());
-
+fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location: &LocationRef) -> Result<(), Box<Error>> {
+    let collab_id = get_collab_id(block);
+    let mut location = LocationRef {
+        role: location.role,
+        entity: location.entity,
+        collab_id: collab_id.as_deref(),
+        block_type: None,
+    };
     let s = match block.attr("s") {
         Some(v) => v.value.as_str(),
-        None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockWithoutName })),
+        None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutName.into(), location: location.to_owned() })),
     };
+    location.block_type = Some(s);
+
     let returns = match block.attr("type") {
         Some(v) => match v.value.as_str() {
             "command" => false,
             "reporter" | "predicate" => true,
-            x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockUnknownType { role: role.into(), entity: entity(), sig: s.into(), ty: x.into() } })),
+            x => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockUnknownType { ty: x.into() }.into(), location: location.to_owned() })),
         }
-        None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockWithoutType { role: role.into(), entity: entity(), sig: s.into() } })),
+        None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutType.into(), location: location.to_owned() })),
     };
     let params: Vec<_> = ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()).collect();
     let upvars = match block.get(&["inputs"]) {
         Some(inputs) => {
             let mut res = vec![];
             if params.len() != inputs.children.len() {
-                return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.into(), entity: entity(), sig: s.into() } }));
+                return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() }));
             }
             for (param, input) in iter::zip(&params, &inputs.children) {
                 let t = match input.attr("type") {
                     Some(x) if !x.value.is_empty() => x.value.as_str(),
-                    _ => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.into(), entity: entity(), sig: s.into() } })),
+                    _ => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
                 };
                 match t {
                     "%upvar" => res.push(Value::String(param.clone())),
@@ -2439,16 +2476,16 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, role: &st
             }
             res
         }
-        None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockWithoutInputsMeta { role: role.into(), entity: entity(), sig: s.into() } })),
+        None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutInputsMeta.into(), location: location.to_owned() })),
     };
     let params = params.into_iter().map(Value::String).collect();
 
     let name = block_name_from_def(s);
     match funcs.define(name, Value::List(vec![Value::from(s), Value::from(returns), Value::List(params, None), Value::List(upvars, None)], None)) {
         Ok(None) => Ok(()),
-        Ok(Some(prev)) => Err(Box::new_with(|| ErrorKind::BlocksWithSameName { role: role.into(), entity: entity(), name: prev.def.name, sigs: (get_block_info(&prev.init).s.into(), s.into()) })),
-        Err(SymbolError::NameTransformError { name }) => Err(Box::new_with(|| ErrorKind::NameTransformError { name, role: Some(role.into()), entity: entity() })),
-        Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| ErrorKind::BlocksWithSameTransName { role: role.into(), entity: entity(), trans_name, names })),
+        Ok(Some(prev)) => Err(Box::new_with(|| Error { kind: CompileError::BlocksWithSameName { name: prev.def.name, sigs: (get_block_info(&prev.init).s.into(), s.into()) }.into(), location: location.to_owned() })),
+        Err(SymbolError::NameTransformError { name }) => Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+        Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| Error { kind: CompileError::BlocksWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
     }
 }
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Box<Error>> {
@@ -2457,10 +2494,18 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let BlockHeaderInfo { s: s2, returns, params, upvars } = get_block_info(&entry.init);
     assert_eq!(s, s2);
 
+    let collab_id = get_collab_id(block);
+    let location = LocationRef {
+        role: Some(&role.name),
+        entity: entity.map(|x| x.name.as_str()),
+        collab_id: collab_id.as_deref(),
+        block_type: Some(s),
+    };
+
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
         for param in params {
-            script_info.decl_local(param, 0f64.into())?;
+            script_info.decl_local(param, 0f64.into(), &location)?;
         }
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
@@ -2476,7 +2521,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
             for upvar in upvars.iter() {
                 match params.iter().find(|x| x.name == *upvar) {
                     Some(x) => res.push(x.ref_at(VarLocation::Local)),
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::CustomBlockInputsMetaCorrupted { role: role.name.clone(), entity: entity.as_ref().map(|x| x.name.clone()), sig: s.into() } })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
                 };
             }
             res
@@ -2522,18 +2567,27 @@ impl<'a> RoleInfo<'a> {
         }
     }
     fn parse(mut self, role_root: &'a Xml) -> Result<Role, Box<Error>> {
+        let mut location = LocationRef {
+            role: None,
+            entity: None,
+            collab_id: None,
+            block_type: None,
+        };
+
         assert_eq!(role_root.name, "role");
         let role = match role_root.attr("name") {
-            None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnnamedRole })),
+            None => return Err(Box::new_with(|| Error { kind: ProjectError::RoleNoName.into(), location: location.to_owned() })),
             Some(x) => x.value.clone(),
         };
+        location.role = Some(&role);
+
         let content = match role_root.get(&["project"]) {
-            None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::NoRoleContent { role } })),
+            None => return Err(Box::new_with(|| Error { kind: ProjectError::RoleNoContent.into(), location: location.to_owned() })),
             Some(x) => x,
         };
         let notes = content.get(&["notes"]).map(|v| v.text.as_str()).unwrap_or("").to_owned();
         let stage = match content.get(&["stage"]) {
-            None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::NoStageDef { role } })),
+            None => return Err(Box::new_with(|| Error { kind: ProjectError::NoStage.into(), location: location.to_owned() })),
             Some(x) => x,
         };
         let stage_width = stage.attr("width").and_then(|x| x.value.parse::<usize>().ok()).unwrap_or(480);
@@ -2542,17 +2596,17 @@ impl<'a> RoleInfo<'a> {
         let msg_types = stage.get(&["messageTypes"]).map(|x| x.children.as_slice()).unwrap_or(&[]);
         for msg_type in msg_types {
             let name = match msg_type.get(&["name"]) {
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::MessageTypeMissingName { role } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::MessageTypeMissingName.into(), location: location.to_owned() })),
                 Some(x) => x.text.as_str(),
             };
             let fields = match msg_type.get(&["fields"]) {
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::MessageTypeMissingFields { role, msg_type: name.into() } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::MessageTypeMissingFields { msg_type: name.into() }.into(), location: location.to_owned() })),
                 Some(x) => {
                     let mut res = vec![];
                     for field in x.children.iter() {
                         if field.name != "field" { continue }
                         res.push(match field.text.as_str() {
-                            "" => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::MessageTypeFieldEmpty { role, msg_type: name.into() } })),
+                            "" => return Err(Box::new_with(|| Error { kind: ProjectError::MessageTypeFieldEmpty { msg_type: name.into() }.into(), location: location.to_owned() })),
                             x => x,
                         });
                     }
@@ -2561,7 +2615,7 @@ impl<'a> RoleInfo<'a> {
             };
 
             if self.msg_types.insert(name, fields).is_some() {
-                return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::MessageTypeMultiplyDefined { role, msg_type: name.into() } }));
+                return Err(Box::new_with(|| Error { kind: ProjectError::MessageTypeMultiplyDefined { msg_type: name.into() }.into(), location: location.to_owned() }));
             }
         }
 
@@ -2569,19 +2623,22 @@ impl<'a> RoleInfo<'a> {
             if entry.name != "costume" { continue }
             let id = match entry.attr("mediaID") {
                 Some(x) => x.value.as_str(),
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ImageWithoutId { role } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutId.into(), location: location.to_owned() })),
             };
 
             let content = match entry.attr("image") {
-                Some(x) => match x.value.as_str() {
-                    x if x.starts_with("data:image/png;base64,") => base64_decode(&x[22..])?,
-                    x => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ImageUnknownFormat { role, id: id.into(), content: x.into() } })),
+                Some(x) => match x.value.as_str().strip_prefix("data:image/png;base64,") {
+                    Some(x) => match base64_decode(x) {
+                        Ok(x) => x,
+                        Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                    }
+                    _ => return Err(Box::new_with(|| Error { kind: ProjectError::ImageUnknownFormat { id: id.into(), content: x.value.clone() }.into(), location: location.to_owned() })),
                 }
-                None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ImageWithoutContent { role, id: id.into() } })),
+                None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
             };
 
             if self.images.insert(id, Rc::new(content)).is_some() {
-                return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ImagesWithSameId { role, id: id.into() } }));
+                return Err(Box::new_with(|| Error { kind: ProjectError::ImagesWithSameId { id: id.into() }.into(), location: location.to_owned() }));
             }
         }
 
@@ -2593,14 +2650,14 @@ impl<'a> RoleInfo<'a> {
             let mut defs = vec![];
             for def in globals.children.iter().filter(|v| v.name == "variable") {
                 let name = match def.attr("name") {
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnnamedGlobal { role } })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::UnnamedGlobal.into(), location: location.to_owned() })),
                     Some(x) => x.value.clone(),
                 };
                 let value = match def.children.get(0) {
                     None => Value::Number(0.0),
-                    Some(x) => match dummy_script.parse_expr(x)?.kind {
+                    Some(x) => match dummy_script.parse_expr(x, &location)?.kind {
                         ExprKind::Value(v) => v,
-                        _ => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::ValueNotEvaluated { role, entity: None } })),
+                        _ => return Err(Box::new_with(|| Error { kind: ProjectError::ValueNotEvaluated.into(), location: location.to_owned() })),
                     }
                 };
                 defs.push((name, value));
@@ -2609,9 +2666,9 @@ impl<'a> RoleInfo<'a> {
             for (name, value) in defs {
                 match self.globals.define(name.clone(), value) {
                     Ok(None) => (),
-                    Ok(Some(prev)) => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::GlobalsWithSameName { role: self.name.clone(), name: prev.def.name } })),
-                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| ErrorKind::NameTransformError { name, role: Some(self.name.clone()), entity: None })),
-                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| ErrorKind::GlobalsWithSameTransName { role: self.name.clone(), trans_name, names })),
+                    Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::GlobalsWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::GlobalsWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                 }
             }
         }
@@ -2620,12 +2677,12 @@ impl<'a> RoleInfo<'a> {
         if let Some(entities_xml) = stage.get(&["sprites"]) {
             for entity in iter::once(stage).chain(entities_xml.children.iter().filter(|s| s.name == "sprite")) {
                 let name = match entity.attr("name") {
-                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnnamedEntity { role } })),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::UnnamedEntity.into(), location: location.to_owned() })),
                     Some(x) => match self.entities.define(x.value.clone(), 0f64.into()) {
                         Ok(None) => self.entities.get(&x.value).unwrap().def.ref_at(VarLocation::Global),
-                        Ok(Some(prev)) => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::EntitiesWithSameName { role, name: prev.def.name } })),
-                        Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| ErrorKind::NameTransformError { role: Some(role), entity: Some(name.clone()), name })),
-                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| ErrorKind::EntitiesWithSameTransName { role, trans_name, names })),
+                        Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::EntitiesWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
+                        Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                        Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::EntitiesWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                     }
                 };
                 entities_raw.push((entity, name));
@@ -2634,7 +2691,7 @@ impl<'a> RoleInfo<'a> {
 
         let blocks = content.get(&["blocks"]).map(|v| v.children.as_slice()).unwrap_or(&[]);
         for block in blocks {
-            parse_block_header(block, &mut self.funcs, &self.name, None)?;
+            parse_block_header(block, &mut self.funcs, &location)?;
         }
 
         // ----------------------------------------------------------------------------------- //
@@ -2701,19 +2758,29 @@ impl Parser {
         Ok(project)
     }
     pub fn parse(&self, xml: &str) -> Result<Project, Box<Error>> {
+        let location = LocationRef {
+            role: None,
+            entity: None,
+            collab_id: None,
+            block_type: None,
+        };
+
         let mut xml = xmlparser::Tokenizer::from(xml);
         while let Some(Ok(e)) = xml.next() {
             if let xmlparser::Token::ElementStart { local, .. } = e {
                 let (proj_name, roles) = match local.as_str() {
                     "room" => {
-                        let project_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let project_xml = match parse_xml_root(&mut xml, local.as_str()) {
+                            Ok(x) => x,
+                            Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                        };
                         let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
 
                         let mut roles = Vec::with_capacity(project_xml.children.len());
                         for child in project_xml.children.iter() {
                             if child.name == "role" {
                                 let role_name = match child.attr("name") {
-                                    None => return Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::UnnamedRole })),
+                                    None => return Err(Box::new_with(|| Error { kind: ProjectError::RoleNoName.into(), location: location.to_owned() })),
                                     Some(x) => x.value.clone(),
                                 };
                                 roles.push(RoleInfo::new(self, role_name).parse(child)?);
@@ -2723,7 +2790,10 @@ impl Parser {
                         (proj_name, roles)
                     }
                     "role" => {
-                        let role_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let role_xml = match parse_xml_root(&mut xml, local.as_str()) {
+                            Ok(x) => x,
+                            Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                        };
                         let proj_name = role_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
 
                         let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
@@ -2731,7 +2801,10 @@ impl Parser {
                         (proj_name, vec![role])
                     }
                     "project" => {
-                        let project_xml = parse_xml_root(&mut xml, local.as_str())?;
+                        let project_xml = match parse_xml_root(&mut xml, local.as_str()) {
+                            Ok(x) => x,
+                            Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                        };
                         let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
 
                         let role_xml = Xml {
@@ -2752,6 +2825,6 @@ impl Parser {
                 return Ok(project.unwrap())
             }
         }
-        Err(Box::new_with(|| ErrorKind::InvalidProject { error: ProjectError::NoRoot }))
+        Err(Box::new_with(|| Error { kind: ProjectError::NoRoot.into(), location: location.to_owned() }))
     }
 }
