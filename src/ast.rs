@@ -1314,8 +1314,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let name = block_name_from_ref(s);
-        let (function, function_meta) = self.reference_fn(&name, &location)?;
-        let block_info = get_block_info(&function_meta);
+        let function = self.reference_fn(&name, &location)?;
+        let block_info = get_block_info(&function.1);
         let argc = block_info.params.len();
         debug_assert_eq!(ArgIter::new(s).count(), argc);
         let info = self.check_children_get_info(stmt, argc, &location)?;
@@ -1339,7 +1339,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             args.push_boxed(self.parse_expr(expr, &location)?);
         }
 
-        Ok(Box::new_with(|| FnCall { function, args, upvars, info }))
+        Ok(Box::new_with(|| FnCall { function: function.0, args, upvars, info }))
     }
     #[inline(never)]
     fn parse_send_message_common(&mut self, stmt: &Xml, location: &LocationRef) -> Result<Box<NetworkMessage>, Box<Error>> {
@@ -1747,10 +1747,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Err(Box::new_with(|| Error { kind: CompileError::UndefinedVariable { name: name.into() }.into(), location: location.to_owned() }))
     }
     #[inline(never)]
-    fn reference_fn(&self, name: &str, location: &LocationRef) -> Result<(FnRef, Value), Box<Error>> {
+    fn reference_fn(&self, name: &str, location: &LocationRef) -> Result<Box<(FnRef, Value)>, Box<Error>> {
         let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
-        match locs.iter().find_map(|v| v.0.get(name).map(|x| (x.def.fn_ref_at(v.1), x.init.clone()))) {
-            Some(x) => Ok(x),
+        match locs.iter().find_map(|v| v.0.get(name).map(|x| (v, x))) {
+            Some((v, x)) => Ok(Box::new_with(|| (x.def.fn_ref_at(v.1), x.init.clone()))),
             None => Err(Box::new_with(|| Error { kind: CompileError::UndefinedFn { name: name.into() }.into(), location: location.to_owned() }))
         }
     }
@@ -2398,7 +2398,8 @@ struct BlockHeaderInfo<'a> {
 }
 
 // returns the signature and returns flag of the block header value
-fn get_block_info(value: &Value) -> BlockHeaderInfo {
+#[inline(never)]
+fn get_block_info(value: &Value) -> Box<BlockHeaderInfo> {
     match value {
         Value::List(vals, _) => {
             assert_eq!(vals.len(), 4);
@@ -2406,15 +2407,17 @@ fn get_block_info(value: &Value) -> BlockHeaderInfo {
             let returns = match &vals[1] { Value::Bool(v) => *v, _ => panic!() };
             let params = match &vals[2] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
             let upvars = match &vals[3] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
-            BlockHeaderInfo { s, returns, params, upvars }
+            Box::new_with(|| BlockHeaderInfo { s, returns, params, upvars })
         }
         _ => panic!(), // header parser would never do this
     }
 }
 
+#[inline(never)]
 fn block_name_from_def(s: &str) -> String {
     replace_ranges(s, ParamIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
+#[inline(never)]
 fn block_name_from_ref(s: &str) -> String {
     replace_ranges(s, ArgIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
@@ -2491,8 +2494,8 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location:
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Box<Error>> {
     let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
     let entry = funcs.get(&block_name_from_def(s)).unwrap();
-    let BlockHeaderInfo { s: s2, returns, params, upvars } = get_block_info(&entry.init);
-    assert_eq!(s, s2);
+    let block_header = get_block_info(&entry.init);
+    assert_eq!(s, block_header.s);
 
     let collab_id = get_collab_id(block);
     let location = LocationRef {
@@ -2504,7 +2507,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
 
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
-        for param in params {
+        for param in block_header.params {
             script_info.decl_local(param, 0f64.into(), &location)?;
         }
         debug_assert_eq!(script_info.locals.len(), 1);
@@ -2518,7 +2521,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
 
         let upvars = {
             let mut res = vec![];
-            for upvar in upvars.iter() {
+            for upvar in block_header.upvars.iter() {
                 match params.iter().find(|x| x.name == *upvar) {
                     Some(x) => res.push(x.ref_at(VarLocation::Local)),
                     None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
@@ -2532,7 +2535,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
             trans_name: entry.def.trans_name.clone(),
             upvars,
             params,
-            returns,
+            returns: block_header.returns,
             stmts,
         })
     };
