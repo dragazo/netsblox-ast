@@ -603,11 +603,13 @@ pub struct VariableDef {
     pub trans_name: String,
 }
 impl VariableDef {
-    fn ref_at(&self, location: VarLocation) -> VariableRef {
-        VariableRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
+    #[inline(always)]
+    fn ref_at(&self, location: VarLocation) -> Box<VariableRef> {
+        Box::new_with(|| VariableRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location })
     }
-    fn fn_ref_at(&self, location: FnLocation) -> FnRef {
-        FnRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location }
+    #[inline(always)]
+    fn fn_ref_at(&self, location: FnLocation) -> Box<FnRef> {
+        Box::new_with(|| FnRef { name: self.name.clone(), trans_name: self.trans_name.clone(), location })
     }
 }
 #[derive(Debug, Clone)]
@@ -1216,7 +1218,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                     if child.name != "l" { break }
                     let var = self.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
-                    fields.push(var);
+                    fields.push_boxed(var);
                 }
                 let location = get_collab_id(stmt);
                 let info = Box::new_with(|| BlockInfo { comment, location: location.map(ToOwned::to_owned) });
@@ -1319,7 +1321,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 _ => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
             };
             let def = self.decl_local(upvar_target.into(), Value::from(0.0f64), &location)?;
-            upvars.push(def.def.ref_at(VarLocation::Local));
+            upvars.push_boxed(def.def.ref_at(VarLocation::Local));
         }
 
         let mut args = Vec::with_capacity(argc);
@@ -1422,7 +1424,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForLoop { var, start, stop, stmts }, info }))
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts }, info }))
             }
             "doForEach" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
@@ -1435,7 +1437,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(var.to_owned(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForeachLoop { var, items, stmts }, info }))
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts }, info }))
             }
             "doRepeat" | "doUntil" | "doIf" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
@@ -1468,7 +1470,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error { kind: ProjectError::UpvarNotConst.into(), location: location.to_owned() })),
                 };
                 let handler = self.parse(&stmt.children[2])?.stmts;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::TryCatch { code, var, handler }, info }))
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::TryCatch { code, var: *var, handler }, info }))
             }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
@@ -1723,20 +1725,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if i != 0 {
                     let (locals, captures) = self.locals.last_mut().unwrap();
                     locals.define(res.name.clone(), 0.0.into()).unwrap();
-                    captures.push(res.clone());
+                    captures.push_boxed(res.clone());
                 }
-                return Ok(Box::new(res))
+                return Ok(res)
             }
         }
-        if let Some(x) = self.entity.fields.get(name) { return Ok(Box::new(x.def.ref_at(VarLocation::Field))) }
-        if let Some(x) = self.role.globals.get(name) { return Ok(Box::new(x.def.ref_at(VarLocation::Global))) }
+        if let Some(x) = self.entity.fields.get(name) { return Ok(x.def.ref_at(VarLocation::Field)) }
+        if let Some(x) = self.role.globals.get(name) { return Ok(x.def.ref_at(VarLocation::Global)) }
         Err(Box::new_with(|| Error { kind: CompileError::UndefinedVariable { name: name.into() }.into(), location: location.to_owned() }))
     }
     #[inline(never)]
     fn reference_fn(&self, name: &str, location: &LocationRef) -> Result<Box<(FnRef, Value)>, Box<Error>> {
         let locs = [(&self.entity.funcs, FnLocation::Method), (&self.role.funcs, FnLocation::Global)];
         match locs.iter().find_map(|v| v.0.get(name).map(|x| (v, x))) {
-            Some((v, x)) => Ok(Box::new_with(|| (x.def.fn_ref_at(v.1), x.init.clone()))),
+            Some((v, x)) => Ok(Box::new_with(|| (*x.def.fn_ref_at(v.1), x.init.clone()))),
             None => Err(Box::new_with(|| Error { kind: CompileError::UndefinedFn { name: name.into() }.into(), location: location.to_owned() }))
         }
     }
@@ -2518,7 +2520,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
             let mut res = vec![];
             for upvar in block_header.upvars.iter() {
                 match params.iter().find(|x| x.name == *upvar) {
-                    Some(x) => res.push(x.ref_at(VarLocation::Local)),
+                    Some(x) => res.push_boxed(x.ref_at(VarLocation::Local)),
                     None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
                 };
             }
@@ -2697,7 +2699,7 @@ impl<'a> RoleInfo<'a> {
         // ----------------------------------------------------------------------------------- //
 
         let funcs = blocks.iter().map(|block| parse_block(block, &self.funcs, &self, None)).collect::<Result<Vec<_>,_>>()?;
-        let entities = entities_raw.into_iter().map(|(entity, name)| EntityInfo::new(&self, name).parse(entity)).collect::<Result<Vec<_>,_>>()?;
+        let entities = entities_raw.into_iter().map(|(entity, name)| EntityInfo::new(&self, *name).parse(entity)).collect::<Result<Vec<_>,_>>()?;
 
         Ok(Role {
             name: role,
