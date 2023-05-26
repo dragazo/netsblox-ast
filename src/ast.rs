@@ -1393,8 +1393,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let value = self.parse_expr(&stmt.children[1], &location)?;
                 match s {
-                    "doSetVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Assign { var, value }, info })),
-                    "doChangeVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::AddAssign { var, value }, info })),
+                    "doSetVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Assign { var: *var, value }, info })),
+                    "doChangeVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::AddAssign { var: *var, value }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1405,8 +1405,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error { kind: CompileError::DerefAssignment.into(), location: location.to_owned() })),
                 };
                 match s {
-                    "doShowVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ShowVar { var }, info })),
-                    "doHideVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::HideVar { var }, info })),
+                    "doShowVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ShowVar { var: *var }, info })),
+                    "doHideVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::HideVar { var: *var }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1716,7 +1716,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     #[inline(never)]
-    fn reference_var(&mut self, name: &str, location: &LocationRef) -> Result<VariableRef, Box<Error>> {
+    fn reference_var(&mut self, name: &str, location: &LocationRef) -> Result<Box<VariableRef>, Box<Error>> {
         for (i, locals) in self.locals.iter().rev().enumerate() {
             if let Some(x) = locals.0.get(name) {
                 let res = x.def.ref_at(VarLocation::Local);
@@ -1725,11 +1725,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     locals.define(res.name.clone(), 0.0.into()).unwrap();
                     captures.push(res.clone());
                 }
-                return Ok(res)
+                return Ok(Box::new(res))
             }
         }
-        if let Some(x) = self.entity.fields.get(name) { return Ok(x.def.ref_at(VarLocation::Field)) }
-        if let Some(x) = self.role.globals.get(name) { return Ok(x.def.ref_at(VarLocation::Global)) }
+        if let Some(x) = self.entity.fields.get(name) { return Ok(Box::new(x.def.ref_at(VarLocation::Field))) }
+        if let Some(x) = self.role.globals.get(name) { return Ok(Box::new(x.def.ref_at(VarLocation::Global))) }
         Err(Box::new_with(|| Error { kind: CompileError::UndefinedVariable { name: name.into() }.into(), location: location.to_owned() }))
     }
     #[inline(never)]
@@ -1919,7 +1919,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if let Some(var) = expr.attr("var") {
                     let info = self.check_children_get_info(expr, 0, &location)?;
                     let var = self.reference_var(&var.value, &location)?;
-                    return Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var }, info }));
+                    return Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var: *var }, info }));
                 }
                 let s = match expr.attr("s") {
                     None => return Err(Box::new_with(|| Error { kind: ProjectError::BlockWithoutType.into(), location: location.to_owned() })),
