@@ -140,24 +140,14 @@ fn test_inline_list_iter() {
     assert_eq!(InlineListIter::new(r#",,",",",,",""",",",""",""",""",","","",""#).collect::<Vec<_>>(), &["", "", ",", ",,", "\",", ",\"", "\",\"", ",\",\","]);
 }
 
-fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Iterator<Item = (usize, usize)>{
-    let mut res = String::with_capacity(s.len());
-    let mut last_stop = 0;
-    for (a, b) in ranges {
-        res += &s[last_stop..a];
-        last_stop = b;
-        res += with;
-    }
-    res += &s[last_stop..];
-    res
-}
-
+#[inline(never)]
 fn clean_newlines(s: &str) -> String {
     Punctuated(s.lines(), "\n").to_string()
 }
 
-fn get_collab_id(block: &Xml) -> Option<String> {
-    block.attr("collabId").map(|x| x.value.clone()).filter(|x| !x.is_empty())
+#[inline(never)]
+fn get_collab_id(block: &Xml) -> Option<&str> {
+    block.attr("collabId").map(|x| x.value.as_str()).filter(|x| !x.is_empty())
 }
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
@@ -1073,7 +1063,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => None,
         };
         let location = get_collab_id(expr);
-        Ok(Box::new_with(|| BlockInfo { comment, location }))
+        Ok(Box::new_with(|| BlockInfo { comment, location: location.map(ToOwned::to_owned) }))
     }
     #[inline(never)]
     fn decl_local(&mut self, name: String, value: Value, location: &LocationRef) -> Result<&VariableDefInit, Box<Error>> {
@@ -1126,13 +1116,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let mut stmts = vec![];
         for stmt in stmts_xml {
-            let collab_id = get_collab_id(stmt);
-            let location = LocationRef {
+            let location = Box::new_with(|| LocationRef {
                 role: Some(&self.role.name),
                 entity: Some(&self.entity.name),
-                collab_id: collab_id.as_deref(),
+                collab_id: get_collab_id(stmt),
                 block_type: Some(&stmt.name),
-            };
+            });
             match stmt.name.as_str() {
                 "block" => stmts.push_boxed(self.parse_block(stmt)?),
                 "custom-block" => {
@@ -1149,13 +1138,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     }
     #[inline(never)]
     fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Box<Hat>>, Box<Error>> {
-        let collab_id = get_collab_id(stmt);
-        let mut location = LocationRef {
+        let mut location = Box::new_with(|| LocationRef {
             role: Some(&self.role.name),
             entity: Some(&self.entity.name),
-            collab_id: collab_id.as_deref(),
+            collab_id: get_collab_id(stmt),
             block_type: None,
-        };
+        });
         let s = match stmt.attr("s") {
             None => return Err(Box::new_with(|| Error { kind: ProjectError::BlockWithoutType.into(), location: location.to_owned() })),
             Some(v) => v.value.as_str(),
@@ -1231,7 +1219,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     fields.push(var);
                 }
                 let location = get_collab_id(stmt);
-                let info = Box::new_with(|| BlockInfo { comment, location });
+                let info = Box::new_with(|| BlockInfo { comment, location: location.map(ToOwned::to_owned) });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
             x if x.starts_with("receive") => return Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
@@ -1306,12 +1294,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             Some(v) => v.value.as_str(),
             None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutName.into(), location: location.to_owned() })),
         };
-        let location = LocationRef {
+        let location = Box::new_with(|| LocationRef {
             role: location.role,
             entity: location.entity,
             collab_id: location.collab_id,
             block_type: Some(s),
-        };
+        });
 
         let name = block_name_from_ref(s);
         let function = self.reference_fn(&name, &location)?;
@@ -1369,20 +1357,18 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => self.parse_expr(target_xml, location)?,
         };
 
-        let comment = comment.map(|x| x.to_owned());
         let location = get_collab_id(stmt);
-        let info = Box::new_with(|| BlockInfo { comment, location });
+        let info = Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.map(ToOwned::to_owned) });
         Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info }))
     }
     #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
-        let collab_id = get_collab_id(stmt);
-        let mut location = LocationRef {
+        let mut location = Box::new_with(|| LocationRef {
             role: Some(&self.role.name),
             entity: Some(&self.entity.name),
-            collab_id: collab_id.as_deref(),
+            collab_id: get_collab_id(stmt),
             block_type: None,
-        };
+        });
         let s = match stmt.attr("s") {
             None => return Err(Box::new_with(|| Error { kind: ProjectError::BlockWithoutType.into(), location: location.to_owned() })),
             Some(v) => v.value.as_str(),
@@ -1860,13 +1846,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     }
     #[inline(never)]
     fn parse_expr(&mut self, expr: &Xml, location: &LocationRef) -> Result<Box<Expr>, Box<Error>> {
-        let collab_id = get_collab_id(expr);
-        let mut location = LocationRef {
+        let mut location = Box::new_with(|| LocationRef {
             role: location.role,
             entity: location.entity,
-            collab_id: collab_id.as_deref().or(location.collab_id),
+            collab_id: get_collab_id(expr).or(location.collab_id),
             block_type: location.block_type,
-        };
+        });
 
         match expr.name.as_str() {
             "l" => match expr.children.first() {
@@ -2274,12 +2259,12 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         }
     }
     fn parse(mut self, entity: &'a Xml) -> Result<Entity, Box<Error>> {
-        let location = LocationRef {
+        let location = Box::new_with(|| LocationRef {
             role: Some(&self.role.name),
             entity: Some(&self.name),
             collab_id: None,
             block_type: None,
-        };
+        });
 
         for costume in entity.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
             if let Some(ident) = costume.get(&["ref"]).map(|r| r.attr("mediaID")).flatten() {
@@ -2413,6 +2398,18 @@ fn get_block_info(value: &Value) -> Box<BlockHeaderInfo> {
     }
 }
 
+fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Iterator<Item = (usize, usize)>{
+    let mut res = String::with_capacity(s.len());
+    let mut last_stop = 0;
+    for (a, b) in ranges {
+        res += &s[last_stop..a];
+        last_stop = b;
+        res += with;
+    }
+    res += &s[last_stop..];
+    res
+}
+
 #[inline(never)]
 fn block_name_from_def(s: &str) -> String {
     replace_ranges(s, ParamIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
@@ -2439,13 +2436,12 @@ fn test_block_name_from_ref() {
 }
 
 fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location: &LocationRef) -> Result<(), Box<Error>> {
-    let collab_id = get_collab_id(block);
-    let mut location = LocationRef {
+    let mut location = Box::new_with(|| LocationRef {
         role: location.role,
         entity: location.entity,
-        collab_id: collab_id.as_deref(),
+        collab_id: get_collab_id(block),
         block_type: None,
-    };
+    });
     let s = match block.attr("s") {
         Some(v) => v.value.as_str(),
         None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutName.into(), location: location.to_owned() })),
@@ -2497,13 +2493,12 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let block_header = get_block_info(&entry.init);
     assert_eq!(s, block_header.s);
 
-    let collab_id = get_collab_id(block);
-    let location = LocationRef {
+    let location = Box::new_with(|| LocationRef {
         role: Some(&role.name),
         entity: entity.map(|x| x.name.as_str()),
-        collab_id: collab_id.as_deref(),
+        collab_id: get_collab_id(block),
         block_type: Some(s),
-    };
+    });
 
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
@@ -2570,12 +2565,12 @@ impl<'a> RoleInfo<'a> {
         }
     }
     fn parse(mut self, role_root: &'a Xml) -> Result<Role, Box<Error>> {
-        let mut location = LocationRef {
+        let mut location = Box::new_with(|| LocationRef {
             role: None,
             entity: None,
             collab_id: None,
             block_type: None,
-        };
+        });
 
         assert_eq!(role_root.name, "role");
         let role = match role_root.attr("name") {
@@ -2761,12 +2756,12 @@ impl Parser {
         Ok(project)
     }
     pub fn parse(&self, xml: &str) -> Result<Project, Box<Error>> {
-        let location = LocationRef {
+        let location = Box::new_with(|| LocationRef {
             role: None,
             entity: None,
             collab_id: None,
             block_type: None,
-        };
+        });
 
         let mut xml = xmlparser::Tokenizer::from(xml);
         while let Some(Ok(e)) = xml.next() {
