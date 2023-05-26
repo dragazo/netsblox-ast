@@ -1044,8 +1044,8 @@ struct ScriptInfo<'a, 'b, 'c> {
     in_autofill_mode: bool,
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
-    fn new(entity: &'c EntityInfo<'a, 'b>) -> Self {
-        Self {
+    fn new(entity: &'c EntityInfo<'a, 'b>) -> Box<Self> {
+        Box::new_with(|| Self {
             parser: entity.parser,
             role: entity.role,
             entity,
@@ -1053,7 +1053,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
             autofill_args: vec![],
             in_autofill_mode: false,
-        }
+        })
     }
     #[inline(never)]
     fn check_children_get_info(&self, expr: &Xml, req: usize, location: &LocationRef) -> Result<Box<BlockInfo>, Box<Error>> {
@@ -2249,8 +2249,8 @@ struct EntityInfo<'a, 'b> {
     costumes: SymbolTable<'a>,
 }
 impl<'a, 'b> EntityInfo<'a, 'b> {
-    fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Self {
-        Self {
+    fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Box<Self> {
+        Box::new_with(|| Self {
             parser: role.parser,
             role,
             name: name.name,
@@ -2258,7 +2258,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             fields: SymbolTable::new(role.parser),
             funcs: SymbolTable::new(role.parser),
             costumes: SymbolTable::new(role.parser),
-        }
+        })
     }
     fn parse(mut self, entity: &'a Xml) -> Result<Entity, Box<Error>> {
         let location = Box::new_with(|| LocationRef {
@@ -2555,8 +2555,8 @@ struct RoleInfo<'a> {
     msg_types: VecMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
-    fn new(parser: &'a Parser, name: String) -> Self {
-        Self {
+    fn new(parser: &'a Parser, name: String) -> Box<Self> {
+        Box::new_with(|| Self {
             parser,
             name,
             globals: SymbolTable::new(parser),
@@ -2564,7 +2564,7 @@ impl<'a> RoleInfo<'a> {
             funcs: SymbolTable::new(parser),
             images: Default::default(),
             msg_types: Default::default(),
-        }
+        })
     }
     fn parse(mut self, role_root: &'a Xml) -> Result<Role, Box<Error>> {
         let mut location = Box::new_with(|| LocationRef {
