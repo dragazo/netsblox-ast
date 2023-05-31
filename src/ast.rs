@@ -826,6 +826,10 @@ pub enum ClosureKind {
     Command, Reporter, Predicate,
 }
 #[derive(Debug, Clone)]
+pub enum ValueType {
+    Number, Text, Bool, List, Sprite, Costume, Sound, Command, Reporter, Predicate,
+}
+#[derive(Debug, Clone)]
 pub enum VariadicInput {
     /// A fixed list of inputs specified inline.
     Fixed(Vec<Expr>),
@@ -1005,6 +1009,8 @@ pub enum ExprKind {
     CostumeNumber,
 
     Clone { target: Box<Expr> },
+
+    TypeQuery { value: Box<Expr>, ty: ValueType },
 }
 impl<T: Into<Value>> From<T> for Expr {
     fn from(v: T) -> Expr {
@@ -2230,6 +2236,24 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let info = self.check_children_get_info(expr, 1, &location)?;
                         let target = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Clone { target }, info }))
+                    }
+                    "reportIsA" => {
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let value = self.parse_expr(&expr.children[0], &location)?;
+                        let ty = match self.grab_option(&expr.children[1], &location)? {
+                            "number" => ValueType::Number,
+                            "text" => ValueType::Text,
+                            "Boolean" => ValueType::Bool,
+                            "list" => ValueType::List,
+                            "sprite" => ValueType::Sprite,
+                            "costume" => ValueType::Costume,
+                            "sound" => ValueType::Sound,
+                            "command" => ValueType::Command,
+                            "reporter" => ValueType::Reporter,
+                            "predicate" => ValueType::Predicate,
+                            x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
+                        };
+                        Ok(Box::new_with(|| Expr { kind: ExprKind::TypeQuery { value, ty }, info }))
                     }
                     _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
                 }
