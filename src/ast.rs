@@ -524,7 +524,7 @@ fn test_sym_tab() {
 #[derive(Debug)]
 struct Syscall {
     name: Box<Expr>,
-    args: VariadicInput,
+    args: Box<Expr>,
     info: Box<BlockInfo>,
 }
 #[derive(Debug)]
@@ -767,7 +767,7 @@ pub enum StmtKind {
 
     Pause,
 
-    Syscall { name: Box<Expr>, args: VariadicInput },
+    Syscall { name: Box<Expr>, args: Box<Expr> },
 
     SetEffect { kind: EffectKind, value: Box<Expr> },
     ChangeEffect { kind: EffectKind, delta: Box<Expr> },
@@ -830,13 +830,6 @@ pub enum ValueType {
     Number, Text, Bool, List, Sprite, Costume, Sound, Command, Reporter, Predicate,
 }
 #[derive(Debug, Clone)]
-pub enum VariadicInput {
-    /// A fixed list of inputs specified inline.
-    Fixed(Vec<Expr>),
-    /// Inputs are the contents of an expression, which is expected to evaluate to a list.
-    VarArgs(Box<Expr>),
-}
-#[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
     pub info: Box<BlockInfo>,
@@ -846,10 +839,10 @@ pub enum ExprKind {
     Value(Value),
     Variable { var: VariableRef },
 
-    Add { values: VariadicInput },
-    Mul { values: VariadicInput },
-    Min { values: VariadicInput },
-    Max { values: VariadicInput },
+    Add { values: Box<Expr> },
+    Mul { values: Box<Expr> },
+    Min { values: Box<Expr> },
+    Max { values: Box<Expr> },
 
     Sub { left: Box<Expr>, right: Box<Expr> },
     Div { left: Box<Expr>, right: Box<Expr> },
@@ -886,8 +879,9 @@ pub enum ExprKind {
     /// Get a list of all the numbers starting at `start` and stepping towards `stop` (by `+1` or `-1`), but not going past `stop`.
     Range { start: Box<Expr>, stop: Box<Expr> },
 
-    MakeList { values: VariadicInput },
-    ListCat { lists: VariadicInput },
+    MakeList { values: Vec<Expr> },
+    CopyList { list: Box<Expr> },
+    ListCat { lists: Box<Expr> },
 
     ListLength { value: Box<Expr> },
     ListRank { value: Box<Expr> },
@@ -900,8 +894,8 @@ pub enum ExprKind {
     ListCsv { value: Box<Expr> },
     ListJson { value: Box<Expr> },
 
-    ListReshape { value: Box<Expr>, dims: VariadicInput },
-    ListCombinations { sources: VariadicInput },
+    ListReshape { value: Box<Expr>, dims: Box<Expr> },
+    ListCombinations { sources: Box<Expr> },
 
     ListIsEmpty { value: Box<Expr> },
     /// Given a list, returns a new (shallow copy) of all the items except the first.
@@ -921,7 +915,7 @@ pub enum ExprKind {
     StrGetLast { string: Box<Expr> },
     StrGetRandom { string: Box<Expr> },
 
-    StrCat { values: VariadicInput },
+    StrCat { values: Box<Expr> },
     /// String length in terms of unicode code points (not bytes or grapheme clusters!).
     StrLen { value: Box<Expr> },
 
@@ -998,7 +992,7 @@ pub enum ExprKind {
 
     NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)> },
 
-    Syscall { name: Box<Expr>, args: VariadicInput },
+    Syscall { name: Box<Expr>, args: Box<Expr> },
     SyscallError,
 
     Effect { kind: EffectKind },
@@ -1238,7 +1232,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn parse_syscall(&mut self, stmt: &Xml, location: &LocationRef) -> Result<Box<Syscall>, Box<Error>> {
         let info = self.check_children_get_info(stmt, 2, location)?;
         let name = self.parse_expr(&stmt.children[0], &location)?;
-        let args = self.parse_varargs(&stmt.children[1], &location)?;
+        let args = self.parse_expr(&stmt.children[1], &location)?;
         Ok(Box::new_with(|| Syscall { name, args, info }))
     }
     #[inline(never)]
@@ -1751,7 +1745,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     #[inline(never)]
     fn cnd_adjust_index(&self, index: Box<Expr>, condition: bool, delta: f64) -> Box<Expr> {
         match condition {
-            true => Box::new_with(|| Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![*index, delta.into()]) }, info: BlockInfo::none() }),
+            true => Box::new_with(|| Expr { kind: ExprKind::Add { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*index, delta.into()] }, info: BlockInfo::none() }) }, info: BlockInfo::none() }),
             false => index,
         }
     }
@@ -1771,25 +1765,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let a = self.parse_expr(&expr.children[0], location)?;
         let b = self.parse_expr(&expr.children[1], location)?;
         Ok((a, b, info))
-    }
-    #[inline(always)]
-    fn parse_1_varargs(&mut self, expr: &Xml, location: &LocationRef) -> Result<(VariadicInput, Box<BlockInfo>), Box<Error>> {
-        let info = self.check_children_get_info(expr, 1, location)?;
-        let values = self.parse_varargs(&expr.children[0], location)?;
-        Ok((values, info))
-    }
-    #[inline(always)]
-    fn parse_varargs(&mut self, varargs_root: &Xml, location: &LocationRef) -> Result<VariadicInput, Box<Error>> {
-        Ok(match varargs_root.name.as_str() {
-            "list" => {
-                let mut res = vec![];
-                for item in varargs_root.children.iter() {
-                    res.push_boxed(self.parse_expr(item, location)?);
-                }
-                VariadicInput::Fixed(res)
-            }
-            _ => VariadicInput::VarArgs(self.parse_expr(varargs_root, location)?),
-        })
     }
     #[inline(never)]
     fn parse_bool(&self, val: &str, location: &LocationRef) -> Result<Box<Expr>, Box<Error>> {
@@ -1891,25 +1866,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => {
                         let mut values = Vec::with_capacity(expr.children.len());
                         for item in expr.children.iter() {
-                            let target = match item.name.as_str() {
+                            values.push_boxed(match item.name.as_str() {
                                 "item" => match item.children.get(0) {
-                                    Some(x) => x,
-                                    None => {
-                                        values.push(Value::String(item.text.clone()));
-                                        continue;
-                                    }
+                                    Some(x) => self.parse_expr(x, &location)?,
+                                    None => Box::new_with(|| Expr { kind: ExprKind::Value(Value::String(item.text.clone())), info: BlockInfo::none() }),
                                 }
-                                _ => item,
-                            };
-                            match self.parse_expr(target, &location)?.kind {
-                                ExprKind::Value(v) => values.push(v),
-                                _ => return Err(Box::new_with(|| Error { kind: ProjectError::ValueNotEvaluated.into(), location: location.to_owned() })),
-                            }
+                                _ => self.parse_expr(item, &location)?,
+                            });
                         }
                         values
                     }
                 };
-                Ok(Box::new_with(|| Value::List(values, ref_id).into()))
+
+                let mut evaluated = Vec::with_capacity(values.len());
+                for value in values.iter() {
+                    match &value.kind {
+                        ExprKind::Value(x) => evaluated.push_with(|| x.clone()),
+                        _ => match ref_id {
+                            Some(_) => return Err(Box::new_with(|| Error { kind: ProjectError::ValueNotEvaluated.into(), location: location.to_owned() })),
+                            None => return Ok(Box::new_with(|| Expr { kind: ExprKind::MakeList { values }, info: BlockInfo::none() })),
+                        }
+                    }
+                }
+                Ok(Box::new_with(|| Value::List(evaluated, ref_id).into()))
             }
             "ref" => match expr.attr("id").and_then(|x| x.value.parse().ok()).map(RefId) {
                 Some(ref_id) => Ok(Box::new_with(|| Value::Ref(ref_id).into())),
@@ -1936,15 +1915,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 location.block_type = Some(s);
 
                 match s {
-                    "reportVariadicSum" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values }, info })),
-                    "reportVariadicProduct" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values }, info })),
-                    "reportVariadicMin" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values }, info })),
-                    "reportVariadicMax" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values }, info })),
+                    "reportVariadicSum" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values }, info })),
+                    "reportVariadicProduct" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values }, info })),
+                    "reportVariadicMin" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values }, info })),
+                    "reportVariadicMax" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values }, info })),
 
-                    "reportSum" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportProduct" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportMin" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
-                    "reportMax" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values: VariadicInput::Fixed(vec![*left, *right]) }, info })),
+                    "reportSum" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Add { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*left, *right] }, info: BlockInfo::none() }) }, info })),
+                    "reportProduct" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Mul { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*left, *right] }, info: BlockInfo::none() }) }, info })),
+                    "reportMin" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Min { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*left, *right] }, info: BlockInfo::none() }) }, info })),
+                    "reportMax" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Max { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*left, *right] }, info: BlockInfo::none() }) }, info })),
 
                     "reportDifference" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Sub { left, right }, info })),
                     "reportQuotient" => self.parse_2_args(expr, &location).map(|(left, right, info)| Box::new_with(|| Expr { kind: ExprKind::Div { left, right }, info })),
@@ -1972,12 +1951,62 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportListLength" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
                     "reportListIsEmpty" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListIsEmpty { value }, info })),
 
+                    "reportStringSize" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::StrLen { value }, info })),
+                    "reportUnicodeAsLetter" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::UnicodeToChar { value }, info })),
+                    "reportUnicode" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::CharToUnicode { value }, info })),
+
+                    "reportCDR" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListCdr { value }, info })),
+                    "reportCONS" => self.parse_2_args(expr, &location).map(|(item, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListCons { item, list }, info })),
+
+                    "reportJoinWords" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::StrCat { values }, info })),
+                    "reportConcatenatedLists" => self.parse_1_args(expr, &location).map(|(lists, info)| Box::new_with(|| Expr { kind: ExprKind::ListCat { lists }, info })),
+                    "reportNewList" => self.parse_1_args(expr, &location).map(|(list, info)| Box::new_with(|| Expr { kind: ExprKind::CopyList { list }, info })),
+                    "reportCrossproduct" => self.parse_1_args(expr, &location).map(|(sources, info)| Box::new_with(|| Expr { kind: ExprKind::ListCombinations { sources }, info })),
+
+                    "reportStageWidth" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
+                    "reportStageHeight" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageHeight, info })),
+
+                    "reportMouseX" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseX, info })),
+                    "reportMouseY" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseY, info })),
+
+                    "reportLatitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Latitude, info })),
+                    "reportLongitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Longitude, info })),
+
+                    "reportPenTrailsAsCostume" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::ImageOfDrawings, info })),
+
+                    "reportListContainsItem" => self.parse_2_args(expr, &location).map(|(list, value, info)| Box::new_with(|| Expr { kind: ExprKind::ListContains { list, value }, info })),
+
+                    "reportRPCError" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::RpcError, info })),
+
+                    "getScale" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Size, info })),
+                    "reportShown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::IsVisible, info })),
+
+                    "xPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::XPos, info })),
+                    "yPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::YPos, info })),
+                    "direction" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Heading, info })),
+
+                    "getPenDown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::PenDown, info })),
+
+                    "getLastAnswer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Answer, info })),
+                    "getLastMessage" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Message, info })),
+
+                    "getTimer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Timer, info })),
+
+                    "reportMap" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Map { f, list }, info })),
+                    "reportKeep" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Keep { f, list }, info })),
+                    "reportFindFirst" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::FindFirst { f, list }, info })),
+                    "reportCombine" => self.parse_2_args(expr, &location).map(|(list, f, info)| Box::new_with(|| Expr { kind: ExprKind::Combine { list, f }, info })),
+
+                    "reifyScript" => self.parse_closure(expr, ClosureKind::Command, false, &location),
+                    "reifyReporter" => self.parse_closure(expr, ClosureKind::Reporter, false, &location),
+                    "reifyPredicate" => self.parse_closure(expr, ClosureKind::Predicate, false, &location),
+
+                    "getCostumeIdx" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::CostumeNumber, info })),
+
                     "reportListIndex" => {
                         let index = self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info }))?;
                         Ok(self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0))
                     }
-                    "reportListContainsItem" => self.parse_2_args(expr, &location).map(|(list, value, info)| Box::new_with(|| Expr { kind: ExprKind::ListContains { list, value }, info })),
-
                     "reportListItem" => {
                         let info = self.check_children_get_info(expr, 2, &location)?;
                         let list = self.parse_expr(&expr.children[1], &location)?.into();
@@ -2031,19 +2060,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::TextSplit { text, mode }, info }))
                     }
-
-                    "reportStringSize" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::StrLen { value }, info })),
-                    "reportUnicodeAsLetter" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::UnicodeToChar { value }, info })),
-                    "reportUnicode" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::CharToUnicode { value }, info })),
-
-                    "reportCDR" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListCdr { value }, info })),
-                    "reportCONS" => self.parse_2_args(expr, &location).map(|(item, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListCons { item, list }, info })),
-
-                    "reportJoinWords" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::StrCat { values }, info })),
-                    "reportConcatenatedLists" => self.parse_1_varargs(expr, &location).map(|(lists, info)| Box::new_with(|| Expr { kind: ExprKind::ListCat { lists }, info })),
-                    "reportNewList" => self.parse_1_varargs(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::MakeList { values }, info })),
-                    "reportCrossproduct" => self.parse_1_varargs(expr, &location).map(|(sources, info)| Box::new_with(|| Expr { kind: ExprKind::ListCombinations { sources }, info })),
-
                     "reportBoolean" => match expr.get(&["l", "bool"]) {
                         Some(x) => self.parse_bool(&x.text, &location),
                         None => Err(Box::new_with(|| Error { kind: ProjectError::BoolNoValue.into(), location: location.to_owned() })),
@@ -2102,10 +2118,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportReshape" => {
                         let info = self.check_children_get_info(expr, 2, &location)?;
                         let value = self.parse_expr(&expr.children[0], &location)?;
-                        let dims = self.parse_varargs(&expr.children[1], &location)?;
+                        let dims = self.parse_expr(&expr.children[1], &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::ListReshape { value, dims }, info }))
                     }
-
                     "reportIfElse" => {
                         let info = self.check_children_get_info(expr, 3, &location)?;
                         let condition = self.parse_expr(&expr.children[0], &location)?;
@@ -2117,17 +2132,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let rpc = self.parse_rpc(expr, &location)?;
                         Ok(Box::new_with(|| (*rpc).into()))
                     }
-
-                    "reportStageWidth" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
-                    "reportStageHeight" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageHeight, info })),
-
-                    "reportMouseX" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseX, info })),
-                    "reportMouseY" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::MouseY, info })),
-
-                    "reportLatitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Latitude, info })),
-                    "reportLongitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Longitude, info })),
-
-                    "reportPenTrailsAsCostume" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::ImageOfDrawings, info })),
                     "reportImageOfObject" => {
                         let info = self.check_children_get_info(expr, 1, &location)?;
                         let entity = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?.into();
@@ -2149,32 +2153,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             Ok(Box::new_with(|| Expr { kind: ExprKind::IsTouchingEntity { entity }, info }))
                         }
                     }
-
-                    "reportRPCError" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::RpcError, info })),
-
-                    "getScale" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Size, info })),
-                    "reportShown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::IsVisible, info })),
-
-                    "xPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::XPos, info })),
-                    "yPosition" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::YPos, info })),
-                    "direction" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Heading, info })),
-
-                    "getPenDown" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::PenDown, info })),
-
-                    "getLastAnswer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Answer, info })),
-                    "getLastMessage" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Message, info })),
-
-                    "getTimer" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Timer, info })),
-
-                    "reportMap" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Map { f, list }, info })),
-                    "reportKeep" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::Keep { f, list }, info })),
-                    "reportFindFirst" => self.parse_2_args(expr, &location).map(|(f, list, info)| Box::new_with(|| Expr { kind: ExprKind::FindFirst { f, list }, info })),
-                    "reportCombine" => self.parse_2_args(expr, &location).map(|(list, f, info)| Box::new_with(|| Expr { kind: ExprKind::Combine { list, f }, info })),
-
-                    "reifyScript" => self.parse_closure(expr, ClosureKind::Command, false, &location),
-                    "reifyReporter" => self.parse_closure(expr, ClosureKind::Reporter, false, &location),
-                    "reifyPredicate" => self.parse_closure(expr, ClosureKind::Predicate, false, &location),
-
                     "evaluate" => {
                         let info = self.check_children_get_info(expr, 2, &location)?;
                         let closure = self.parse_expr(&expr.children[0], &location)?;
@@ -2231,7 +2209,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let info = self.check_children_get_info(expr, 1, &location)?;
                         self.grab_entity(&expr.children[0], info, &location)
                     }
-                    "getCostumeIdx" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::CostumeNumber, info })),
                     "newClone" => {
                         let info = self.check_children_get_info(expr, 1, &location)?;
                         let target = self.grab_entity(&expr.children[0], BlockInfo::none(), &location)?;

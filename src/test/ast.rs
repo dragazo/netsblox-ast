@@ -405,8 +405,8 @@ fn test_auto_fill_lambda_args() {
         match &stmts[i].kind {
             StmtKind::Assign { value, .. } => match &value.kind {
                 ExprKind::Add { values } => {
-                    let (left, right) = match values {
-                        VariadicInput::Fixed(x) => {
+                    let (left, right) = match &values.kind {
+                        ExprKind::MakeList { values: x } => {
                             assert_eq!(x.len(), 2);
                             (&x[0], &x[1])
                         }
@@ -435,8 +435,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -469,8 +469,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -503,8 +503,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -538,8 +538,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -575,8 +575,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -584,8 +584,8 @@ fn test_auto_fill_lambda_args() {
                             };
                             match &left.kind {
                                 ExprKind::Add { values } => {
-                                    let (left, right) = match values {
-                                        VariadicInput::Fixed(x) => {
+                                    let (left, right) = match &values.kind {
+                                        ExprKind::MakeList { values: x } => {
                                             assert_eq!(x.len(), 2);
                                             (&x[0], &x[1])
                                         }
@@ -604,8 +604,8 @@ fn test_auto_fill_lambda_args() {
                                             match &stmts[0].kind {
                                                 StmtKind::Return { value } => match &value.kind {
                                                     ExprKind::Add { values } => {
-                                                        let (left, right) = match values {
-                                                            VariadicInput::Fixed(x) => {
+                                                        let (left, right) = match &values.kind {
+                                                            ExprKind::MakeList { values: x } => {
                                                                 assert_eq!(x.len(), 2);
                                                                 (&x[0], &x[1])
                                                             }
@@ -654,8 +654,8 @@ fn test_auto_fill_lambda_args() {
                 match &stmts[0].kind {
                     StmtKind::Return { value } => match &value.kind {
                         ExprKind::Add { values } => {
-                            let (left, right) = match values {
-                                VariadicInput::Fixed(x) => {
+                            let (left, right) = match &values.kind {
+                                ExprKind::MakeList { values: x } => {
                                     assert_eq!(x.len(), 2);
                                     (&x[0], &x[1])
                                 }
@@ -663,8 +663,8 @@ fn test_auto_fill_lambda_args() {
                             };
                             match &left.kind {
                                 ExprKind::Add { values } => {
-                                    let (left, right) = match values {
-                                        VariadicInput::Fixed(x) => {
+                                    let (left, right) = match &values.kind {
+                                        ExprKind::MakeList { values: x } => {
                                             assert_eq!(x.len(), 2);
                                             (&x[0], &x[1])
                                         }
@@ -682,8 +682,8 @@ fn test_auto_fill_lambda_args() {
                                             match &stmts[0].kind {
                                                 StmtKind::Return { value } => match &value.kind {
                                                     ExprKind::Add { values } => {
-                                                        let (left, right) = match values {
-                                                            VariadicInput::Fixed(x) => {
+                                                        let (left, right) = match &values.kind {
+                                                            ExprKind::MakeList { values: x } => {
                                                                 assert_eq!(x.len(), 2);
                                                                 (&x[0], &x[1])
                                                             }
