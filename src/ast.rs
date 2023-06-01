@@ -522,12 +522,6 @@ fn test_sym_tab() {
 }
 
 #[derive(Debug)]
-struct Syscall {
-    name: Box<Expr>,
-    args: Box<Expr>,
-    info: Box<BlockInfo>,
-}
-#[derive(Debug)]
 struct Rpc {
     service: String,
     rpc: String,
@@ -767,8 +761,6 @@ pub enum StmtKind {
 
     Pause,
 
-    Syscall { name: Box<Expr>, args: Box<Expr> },
-
     SetEffect { kind: EffectKind, value: Box<Expr> },
     ChangeEffect { kind: EffectKind, delta: Box<Expr> },
     ClearEffects,
@@ -993,9 +985,6 @@ pub enum ExprKind {
     Combine { f: Box<Expr>, list: Box<Expr> },
 
     NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)> },
-
-    Syscall { name: Box<Expr>, args: Box<Expr> },
-    SyscallError,
 
     Effect { kind: EffectKind },
     PenAttr { attr: PenAttribute },
@@ -1229,13 +1218,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             x if x.starts_with("receive") => return Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
             _ => return Ok(None),
         }))
-    }
-    #[inline(never)]
-    fn parse_syscall(&mut self, stmt: &Xml, location: &LocationRef) -> Result<Box<Syscall>, Box<Error>> {
-        let info = self.check_children_get_info(stmt, 2, location)?;
-        let name = self.parse_expr(&stmt.children[0], &location)?;
-        let args = self.parse_expr(&stmt.children[1], &location)?;
-        Ok(Box::new_with(|| Syscall { name, args, info }))
     }
     #[inline(never)]
     fn parse_effect(&mut self, effect: &Xml, location: &LocationRef) -> Result<EffectKind, Box<Error>> {
@@ -1643,10 +1625,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     args.push_boxed(self.parse_expr(arg, &location)?);
                 }
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info }))
-            }
-            "nativeRunSyscall" => {
-                let info = self.parse_syscall(stmt, &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::Syscall { name: info.name, args: info.args }, info: info.info }))
             }
             "setEffect" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
@@ -2204,14 +2182,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             Expr { kind: ExprKind::NetworkMessageReply { target, msg_type, values }, info }
                         }))
                     }
-                    "nativeCallSyscall" => {
-                        let res = self.parse_syscall(expr, &location)?;
-                        Ok(Box::new_with(|| {
-                            let Syscall { name, args, info } = *res;
-                            Expr { kind: ExprKind::Syscall { name, args }, info }
-                        }))
-                    }
-                    "nativeSyscallError" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::SyscallError, info })),
                     "getEffect" => {
                         let info = self.check_children_get_info(expr, 1, &location)?;
                         let effect = self.parse_effect(&expr.children[0], &location)?;
