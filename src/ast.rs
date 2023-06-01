@@ -2748,14 +2748,14 @@ pub struct Parser {
     /// All symbol names in the program will be passed through this function,
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
     /// The default operation performs no conversion.
-    /// Note that non-default transform strategies may also require a custom [`ParserBuilder::autofill_generator`].
+    /// Note that non-default transform strategies may also require a custom [`Parser::autofill_generator`].
     pub name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
 
     /// A generator used to produce symbol names for auto-fill closure arguments.
     /// The function receives a number that can be used to differentiate different generated arguments.
     /// It is expected that multiple calls to this function with the same input will produce the same output symbol name.
     /// The default is to produce a string of format `%n` where `n` is the input number.
-    /// Note that, after generation, symbol names are still passed through [`ParserBuilder::name_transformer`] as usual.
+    /// Note that, after generation, symbol names are still passed through [`Parser::name_transformer`] as usual.
     pub autofill_generator: Rc<dyn Fn(usize) -> Result<String, ()>>,
 }
 impl Default for Parser {
