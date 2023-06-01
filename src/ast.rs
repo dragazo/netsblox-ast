@@ -775,6 +775,8 @@ pub enum StmtKind {
 
     SetPenAttr { attr: PenAttribute, value: Box<Expr> },
     ChangePenAttr { attr: PenAttribute, delta: Box<Expr> },
+
+    UnknownBlock { name: String, args: Vec<Expr> },
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
@@ -1005,6 +1007,8 @@ pub enum ExprKind {
     Clone { target: Box<Expr> },
 
     TypeQuery { value: Box<Expr>, ty: ValueType },
+
+    UnknownBlock { name: String, args: Vec<Expr> },
 }
 impl<T: Into<Value>> From<T> for Expr {
     fn from(v: T) -> Expr {
@@ -1064,8 +1068,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
             None => None,
         };
-        let location = get_collab_id(expr);
-        Ok(Box::new_with(|| BlockInfo { comment, location: location.map(ToOwned::to_owned) }))
+        Ok(Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) }))
     }
     #[inline(never)]
     fn decl_local(&mut self, name: String, value: Value, location: &LocationRef) -> Result<&VariableDefInit, Box<Error>> {
@@ -1220,8 +1223,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let var = self.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
                     fields.push_boxed(var);
                 }
-                let location = get_collab_id(stmt);
-                let info = Box::new_with(|| BlockInfo { comment, location: location.map(ToOwned::to_owned) });
+                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
             x if x.starts_with("receive") => return Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
@@ -1359,9 +1361,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => self.parse_expr(target_xml, location)?,
         };
 
-        let location = get_collab_id(stmt);
-        let info = Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.map(ToOwned::to_owned) });
+        let info = Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.collab_id.map(ToOwned::to_owned) });
         Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info }))
+    }
+    #[inline(never)]
+    fn parse_unknown_common(&mut self, stmt: &Xml, location: &LocationRef) -> Result<(Vec<Expr>, Box<BlockInfo>), Box<Error>> {
+        let (argc, comment) = stmt.children.iter().enumerate().find(|(_, x)| x.name == "comment").map(|(i, x)| (i, Some(x.text.as_str()))).unwrap_or((stmt.children.len(), None));
+        let mut args = Vec::with_capacity(argc);
+        for arg in stmt.children[..argc].iter() {
+            args.push_boxed(self.parse_expr(arg, &location)?);
+        }
+        Ok((args, Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.collab_id.map(ToOwned::to_owned) })))
     }
     #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
@@ -1714,7 +1724,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doResetTimer" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ResetTimer, info })),
             "clearEffects" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ClearEffects, info })),
             "doWearNextCostume" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::NextCostume, info })),
-            _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
+            x => self.parse_unknown_common(stmt, &location).map(|(args, info)| Box::new_with(|| Stmt { kind: StmtKind::UnknownBlock { name: x.into(), args }, info })),
         }
     }
     #[inline(never)]
@@ -2247,7 +2257,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::TypeQuery { value, ty }, info }))
                     }
-                    _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
+                    x => self.parse_unknown_common(expr, &location).map(|(args, info)| Box::new_with(|| Expr { kind: ExprKind::UnknownBlock { name: x.into(), args }, info })),
                 }
             }
             _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),

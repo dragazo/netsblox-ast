@@ -938,6 +938,169 @@ fn test_list_ctor_opt() {
 }
 
 #[test]
+fn test_unknown_blocks() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="31.42857142857143" y="41.85714285714283"><block collabId="item_47" s="tuneScopeSetInstrument"><l>Clarinet</l></block><block collabId="item_47_1" s="tuneScopeSetVolume"><l>1337</l></block><block collabId="item_47_2" s="tuneScopePlayChordForDuration"><block collabId="item_47_4" s="reportNewList"><list><block collabId="item_47_5" s="tuneScopeNote"><l>A3</l></block><block collabId="item_47_6" s="tuneScopeNote"><l>Fb3</l></block></list></block><l>Quarter</l></block><block collabId="item_47_3" s="tuneScopePlayTracks"><l>4/4</l><list><block collabId="item_47_8" s="reportBoolean"><l><bool>true</bool></l></block><block collabId="item_47_9" s="reportBoolean"><l><bool>false</bool></l></block><block collabId="item_47_10" s="reportVariadicSum"><list><l>1</l><l>2</l></list></block></list></block><block collabId="item_47_7" s="tuneScopePlayTracks"><l>6/8</l><block collabId="item_47_11" s="tuneScopeSection"><list><block collabId="item_47_12" s="tuneScopeNote"><l>C4</l></block><block collabId="item_47_13" s="tuneScopeDuration"><l>Half</l></block></list></block></block></script>"##,
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 5);
+
+    match &stmts[0].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name, "tuneScopeSetInstrument");
+            assert_eq!(args.len(), 1);
+            match &args[0].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Clarinet"),
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[1].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name, "tuneScopeSetVolume");
+            assert_eq!(args.len(), 1);
+            match &args[0].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, "1337"),
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[2].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name, "tuneScopePlayChordForDuration");
+            assert_eq!(args.len(), 2);
+            match &args[0].kind {
+                ExprKind::MakeList { values } => {
+                    assert_eq!(values.len(), 2);
+                    match &values[0].kind {
+                        ExprKind::UnknownBlock { name, args } => {
+                            assert_eq!(name, "tuneScopeNote");
+                            assert_eq!(args.len(), 1);
+                            match &args[0].kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "A3"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[1].kind {
+                        ExprKind::UnknownBlock { name, args } => {
+                            assert_eq!(name, "tuneScopeNote");
+                            assert_eq!(args.len(), 1);
+                            match &args[0].kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Fb3"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+            match &args[1].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Quarter"),
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[3].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name, "tuneScopePlayTracks");
+            assert_eq!(args.len(), 2);
+            match &args[0].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, "4/4"),
+                x => panic!("{x:?}"),
+            }
+            match &args[1].kind {
+                ExprKind::MakeList { values } => {
+                    assert_eq!(values.len(), 3);
+                    match &values[0].kind {
+                        ExprKind::Value(Value::Bool(x)) => assert_eq!(*x, true),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[1].kind {
+                        ExprKind::Value(Value::Bool(x)) => assert_eq!(*x, false),
+                        x => panic!("{x:?}"),
+                    }
+                    match &values[2].kind {
+                        ExprKind::Add { values } => match &values.kind {
+                            ExprKind::Value(Value::List(values, None)) => {
+                                assert_eq!(values.len(), 2);
+                                match &values[0] {
+                                    Value::String(x) => assert_eq!(x, "1"),
+                                    x => panic!("{x:?}"),
+                                }
+                                match &values[1] {
+                                    Value::String(x) => assert_eq!(x, "2"),
+                                    x => panic!("{x:?}"),
+                                }
+                            }
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[4].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name, "tuneScopePlayTracks");
+            assert_eq!(args.len(), 2);
+            match &args[0].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6/8"),
+                x => panic!("{x:?}"),
+            }
+            match &args[1].kind {
+                ExprKind::UnknownBlock { name, args } => {
+                    assert_eq!(name, "tuneScopeSection");
+                    assert_eq!(args.len(), 1);
+                    match &args[0].kind {
+                        ExprKind::MakeList { values } => {
+                            assert_eq!(values.len(), 2);
+                            match &values[0].kind {
+                                ExprKind::UnknownBlock { name, args } => {
+                                    assert_eq!(name, "tuneScopeNote");
+                                    assert_eq!(args.len(), 1);
+                                    match &args[0].kind {
+                                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "C4"),
+                                        x => panic!("{x:?}"),
+                                    }
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                            match &values[1].kind {
+                                ExprKind::UnknownBlock { name, args } => {
+                                    assert_eq!(name, "tuneScopeDuration");
+                                    assert_eq!(args.len(), 1);
+                                    match &args[0].kind {
+                                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "Half"),
+                                        x => panic!("{x:?}"),
+                                    }
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 #[allow(unreachable_code)]
 fn test_stack_size_usage() {
     #[cfg(not(target_pointer_width = "64"))]
@@ -955,5 +1118,5 @@ fn test_stack_size_usage() {
 
     assert_compiles!(src: "projects/stack-size-1.xml", stack_size: 16 * 1024); // this is min stack size on linux
     assert_compiles!(src: "projects/stack-size-2.xml", stack_size: 16 * 1024); // this is min stack size on linux
-    assert_compiles!(src: "projects/stack-size-3.xml", stack_size: 29 * 1024);
+    assert_compiles!(src: "projects/stack-size-3.xml", stack_size: 30 * 1024);
 }
