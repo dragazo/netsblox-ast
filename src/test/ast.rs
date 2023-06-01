@@ -871,6 +871,73 @@ fn test_upvars_var_defs() {
 }
 
 #[test]
+fn test_list_ctor_opt() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "", fields = "",
+        funcs = "", methods = "",
+        scripts = r##"<script x="39.285714285714285" y="37.428571428571416"><block collabId="item_27" s="doDeclareVariables"><list><l>v</l></list></block><block collabId="item_2" s="doSetVar"><l>v</l><block collabId="item_6" s="reportNewList"><list></list></block></block><block collabId="item_7" s="doSetVar"><l>v</l><block collabId="item_7_1" s="reportNewList"><list><l>u</l><l>v</l></list></block></block><block collabId="item_29" s="doSetVar"><l>v</l><block collabId="item_29_1" s="reportNewList"><list><l>u</l><l>v</l><block collabId="item_30" s="reportVariadicSum"><list><l>0</l><l>1</l></list></block></list></block></block><block collabId="item_11" s="doSetVar"><l>v</l><block collabId="item_11_1" s="reportNewList"><block collabId="item_12" s="reportNewList"><list></list></block></block></block><block collabId="item_15" s="doSetVar"><l>v</l><block collabId="item_15_1" s="reportNewList"><block collabId="item_15_2" s="reportNewList"><list><l>x</l><l>y</l></list></block></block></block><block collabId="item_17" s="doSetVar"><l>v</l><block collabId="item_17_1" s="reportNewList"><block collabId="item_17_2" s="reportNewList"><list><l>x</l><l>y</l><block collabId="item_33" s="reportVariadicSum"><list><l>0</l><l>1</l></list></block></list></block></block></block></script>"##,
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
+    assert_eq!(stmts.len(), 7);
+    match &stmts[1].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Value(Value::List(values, None)) => {
+                assert_eq!(values.len(), 0);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[2].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Value(Value::List(values, None)) => {
+                assert_eq!(values.len(), 2);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[3].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::MakeList { values } => {
+                assert_eq!(values.len(), 3);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[4].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Value(Value::List(values, None)) => {
+                assert_eq!(values.len(), 0);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[5].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Value(Value::List(values, None)) => {
+                assert_eq!(values.len(), 2);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[6].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::MakeList { values } => {
+                assert_eq!(values.len(), 3);
+            }
+            x => panic!("{:?}", x),
+        }
+        x => panic!("{:?}", x),
+    }
+}
+
+#[test]
 #[allow(unreachable_code)]
 fn test_stack_size_usage() {
     #[cfg(not(target_pointer_width = "64"))]

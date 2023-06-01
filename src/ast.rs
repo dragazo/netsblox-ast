@@ -1960,7 +1960,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "reportJoinWords" => self.parse_1_args(expr, &location).map(|(values, info)| Box::new_with(|| Expr { kind: ExprKind::StrCat { values }, info })),
                     "reportConcatenatedLists" => self.parse_1_args(expr, &location).map(|(lists, info)| Box::new_with(|| Expr { kind: ExprKind::ListCat { lists }, info })),
-                    "reportNewList" => self.parse_1_args(expr, &location).map(|(list, info)| Box::new_with(|| Expr { kind: ExprKind::CopyList { list }, info })),
                     "reportCrossproduct" => self.parse_1_args(expr, &location).map(|(sources, info)| Box::new_with(|| Expr { kind: ExprKind::ListCombinations { sources }, info })),
 
                     "reportStageWidth" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::StageWidth, info })),
@@ -2002,6 +2001,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reifyPredicate" => self.parse_closure(expr, ClosureKind::Predicate, false, &location),
 
                     "getCostumeIdx" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::CostumeNumber, info })),
+
+                    "reportNewList" => {
+                        let (mut list, info) = self.parse_1_args(expr, &location)?;
+                        let already_owning = match &list.kind {
+                            ExprKind::Value(Value::List( .. )) => true,
+                            ExprKind::MakeList { .. } => true,
+                            _ => false,
+                        };
+                        Ok(match already_owning {
+                            true => {
+                                list.info = info;
+                                list
+                            }
+                            false => Box::new_with(|| Expr { kind: ExprKind::CopyList { list }, info }),
+                        })
+                    }
 
                     "reportListIndex" => {
                         let index = self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info }))?;
