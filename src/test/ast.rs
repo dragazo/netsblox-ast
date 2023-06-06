@@ -858,6 +858,34 @@ fn test_upvars() {
 }
 
 #[test]
+fn test_crlf() {
+    let script = format!(include_str!("script-template.xml"),
+        globals = "",
+        fields = "",
+        funcs = "",
+        methods = "",
+        scripts = r#"<script x="62.85714285714286" y="43.85714285714285"><block collabId="item_1" s="doDeclareVariables"><list><l>a</l></list></block><block collabId="item_0" s="doSetVar"><l>a</l><l>hello,"one&#xD;two&#xD;three"&#xD;world,test,"one&#xD;two&#xD;"&#xD;again,"&#xD;two","&#xD;two&#xD;"</l></block></script>"#,
+    );
+    let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
+    let ast = parser.parse(&script).unwrap();
+    assert_eq!(ast.roles.len(), 1);
+    let role = &ast.roles[0];
+    assert_eq!(role.entities.len(), 1);
+    let entity = &role.entities[0];
+    assert_eq!(entity.scripts.len(), 1);
+    let stmts = &entity.scripts[0].stmts;
+    assert_eq!(stmts.len(), 2);
+
+    match &stmts[1].kind {
+        StmtKind::Assign { value, .. } => match &value.kind {
+            ExprKind::Value(Value::String(x)) => assert_eq!(x, "hello,\"one\ntwo\nthree\"\nworld,test,\"one\ntwo\n\"\nagain,\"\ntwo\",\"\ntwo\n\""),
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 fn test_upvars_var_defs() {
     let script = format!(include_str!("script-template.xml"),
         globals = "",

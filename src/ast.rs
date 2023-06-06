@@ -6,7 +6,6 @@ use std::{mem, iter, fmt};
 use base64::engine::Engine as Base64Engine;
 use base64::DecodeError as Base64Error;
 
-use crate::util::Punctuated;
 use crate::rpcs::*;
 
 #[cfg(test)]
@@ -142,7 +141,33 @@ fn test_inline_list_iter() {
 
 #[inline(never)]
 fn clean_newlines(s: &str) -> String {
-    Punctuated(s.lines(), "\n").to_string()
+    let mut res = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    loop {
+        match chars.next() {
+            Some('\r') => {
+                res.push('\n');
+                if chars.peek().copied() == Some('\n') { chars.next(); }
+            }
+            Some('\n') => res.push('\n'),
+            Some(x) => res.push(x),
+            None => break,
+        }
+    }
+    res
+}
+#[test]
+fn test_clean_newlines() {
+    assert_eq!(clean_newlines("hello world"), "hello world");
+    assert_eq!(clean_newlines("hello\nworld"), "hello\nworld");
+    assert_eq!(clean_newlines("hello\rworld"), "hello\nworld");
+    assert_eq!(clean_newlines("hello\r\nworld"), "hello\nworld");
+    assert_eq!(clean_newlines("hello\r\n\nworld"), "hello\n\nworld");
+    assert_eq!(clean_newlines("hello\r\n\n\rworld"), "hello\n\n\nworld");
+    assert_eq!(clean_newlines("hello\r\n\n\rworld\n"), "hello\n\n\nworld\n");
+    assert_eq!(clean_newlines("hello\r\n\n\rworld\r"), "hello\n\n\nworld\n");
+    assert_eq!(clean_newlines("hello\r\n\n\rworld\r\n"), "hello\n\n\nworld\n");
+    assert_eq!(clean_newlines("hello,\"one\rtwo\rthree\"\rworld,test,\"one\rtwo\r\"\ragain,\"\rtwo\",\"\rtwo\r\""), "hello,\"one\ntwo\nthree\"\nworld,test,\"one\ntwo\n\"\nagain,\"\ntwo\",\"\ntwo\n\"");
 }
 
 #[inline(never)]
@@ -1054,7 +1079,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             return Err(Box::new_with(|| Error { kind: ErrorKind::ProjectError(ProjectError::BlockChildCount { needed: req, got: expr.children.len() }), location: location.to_owned() }));
         }
         let comment = match expr.children.get(req) {
-            Some(comment) => if comment.name == "comment" { Some(clean_newlines(&comment.text)) } else { None },
+            Some(comment) => if comment.name == "comment" { Some(comment.text.clone()) } else { None },
             None => None,
         };
         Ok(Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) }))
@@ -1206,7 +1231,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let mut comment = None;
                 for child in stmt.children[1..].iter() {
                     if child.name == "comment" {
-                        comment = Some(clean_newlines(&child.text));
+                        comment = Some(child.text.clone());
                     }
                     if child.name != "l" { break }
                     let var = self.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
