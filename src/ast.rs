@@ -849,6 +849,10 @@ pub enum ValueType {
     Number, Text, Bool, List, Sprite, Costume, Sound, Command, Reporter, Predicate,
 }
 #[derive(Debug, Clone)]
+pub enum TimeQuery {
+    Year, Month, Date, DayOfWeek, Hour, Minute, Second, UnixTimestampMs,
+}
+#[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
     pub info: Box<BlockInfo>,
@@ -1021,6 +1025,7 @@ pub enum ExprKind {
     Clone { target: Box<Expr> },
 
     TypeQuery { value: Box<Expr>, ty: ValueType },
+    RealTime { query: TimeQuery },
 
     UnknownBlock { name: String, args: Vec<Expr> },
 }
@@ -2251,6 +2256,21 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::TypeQuery { value, ty }, info }))
+                    }
+                    "reportDate" => {
+                        let info = self.check_children_get_info(expr, 1, &location)?;
+                        let query = match self.grab_option(&expr.children[0], &location)? {
+                            "year" => TimeQuery::Year,
+                            "month" => TimeQuery::Month,
+                            "date" => TimeQuery::Date,
+                            "day of week" => TimeQuery::DayOfWeek,
+                            "hour" => TimeQuery::Hour,
+                            "minute" => TimeQuery::Minute,
+                            "second" => TimeQuery::Second,
+                            "time in milliseconds" => TimeQuery::UnixTimestampMs,
+                            x => return Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
+                        };
+                        Ok(Box::new_with(|| Expr { kind: ExprKind::RealTime { query }, info }))
                     }
                     x => self.parse_unknown_common(expr, &location).map(|(args, info)| Box::new_with(|| Expr { kind: ExprKind::UnknownBlock { name: x.into(), args }, info })),
                 }
