@@ -677,6 +677,7 @@ pub enum HatKind {
     When { condition: Box<Expr> },
     LocalMessage { msg_type: Option<String> },
     NetworkMessage { msg_type: String, fields: Vec<VariableRef> },
+    Unknown { name: String, fields: Vec<VariableRef> },
 }
 #[derive(Debug, Clone)]
 pub struct Stmt {
@@ -1174,6 +1175,20 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
         location.block_type = Some(s);
 
+        fn parse_fields(script: &mut ScriptInfo, children: &[Xml], location: &LocationRef) -> Result<(Vec<VariableRef>, Option<String>), Box<Error>> {
+            let mut fields = vec![];
+            let mut comment = None;
+            for child in children {
+                if child.name == "comment" {
+                    comment = Some(child.text.clone());
+                }
+                if child.name != "l" { break }
+                let var = script.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
+                fields.push_boxed(var);
+            }
+            Ok((fields, comment))
+        }
+
         Ok(Some(match s {
             "receiveGo" => {
                 let info = self.check_children_get_info(stmt, 0, &location)?;
@@ -1232,20 +1247,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     x => x.to_owned(),
                 };
 
-                let mut fields = vec![];
-                let mut comment = None;
-                for child in stmt.children[1..].iter() {
-                    if child.name == "comment" {
-                        comment = Some(child.text.clone());
-                    }
-                    if child.name != "l" { break }
-                    let var = self.decl_local(child.text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local);
-                    fields.push_boxed(var);
-                }
+                let (fields, comment) = parse_fields(self, &stmt.children[1..], &location)?;
                 let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
-            x if x.starts_with("receive") => return Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
+            x if x.starts_with("receive") => {
+                let (fields, comment) = parse_fields(self, &stmt.children, &location)?;
+                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) });
+                Box::new_with(|| Hat { kind: HatKind::Unknown { fields, name: x.into() }, info })
+            }
             _ => return Ok(None),
         }))
     }
