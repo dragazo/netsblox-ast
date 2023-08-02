@@ -224,6 +224,41 @@ lazy_static! {
             rpcs.insert("triesRemaining", [].as_slice());
             rpcs
         });
+        services.insert("DrugOverdose", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getNumberAllByYear", [].as_slice());
+            rpcs.insert("getNumberAllColumn", [].as_slice());
+            rpcs.insert("getNumberOpioidAnyByYear", [].as_slice());
+            rpcs.insert("getNumberOpioidAnyColumn", [].as_slice());
+            rpcs.insert("getNumberOpioidCocaineByYear", [].as_slice());
+            rpcs.insert("getNumberOpioidCocaineColumn", [].as_slice());
+            rpcs.insert("getNumberOpioidHeroinByYear", [].as_slice());
+            rpcs.insert("getNumberOpioidHeroinColumn", [].as_slice());
+            rpcs.insert("getNumberOpioidPrescriptionByYear", [].as_slice());
+            rpcs.insert("getNumberOpioidPrescriptionColumn", [].as_slice());
+            rpcs.insert("getNumberOpioidSyntheticByYear", [].as_slice());
+            rpcs.insert("getNumberOpioidSyntheticColumn", [].as_slice());
+            rpcs.insert("getRateAllRaceAmericanIndianOrAlaskaNativeByYear", [].as_slice());
+            rpcs.insert("getRateAllRaceAmericanIndianOrAlaskaNativeColumn", [].as_slice());
+            rpcs.insert("getRateAllRaceAsianOrPacificIslanderByYear", [].as_slice());
+            rpcs.insert("getRateAllRaceAsianOrPacificIslanderColumn", [].as_slice());
+            rpcs.insert("getRateAllRaceBlackByYear", [].as_slice());
+            rpcs.insert("getRateAllRaceBlackColumn", [].as_slice());
+            rpcs.insert("getRateAllRaceHispanicByYear", [].as_slice());
+            rpcs.insert("getRateAllRaceHispanicColumn", [].as_slice());
+            rpcs.insert("getRateAllRaceWhiteByYear", [].as_slice());
+            rpcs.insert("getRateAllRaceWhiteColumn", [].as_slice());
+            rpcs.insert("getRateAllSexFemaleByYear", [].as_slice());
+            rpcs.insert("getRateAllSexFemaleColumn", [].as_slice());
+            rpcs.insert("getRateAllSexMaleByYear", [].as_slice());
+            rpcs.insert("getRateAllSexMaleColumn", [].as_slice());
+            rpcs.insert("getRateAllTotalByYear", [].as_slice());
+            rpcs.insert("getRateAllTotalColumn", [].as_slice());
+            rpcs.insert("getTable", [].as_slice());
+            rpcs.insert("getValue", ["Year", "column name"].as_slice());
+            rpcs.insert("getYearColumn", [].as_slice());
+            rpcs
+        });
         services.insert("EarthOrbit", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getEccentricity", ["startyear", "endyear"].as_slice());
@@ -524,6 +559,14 @@ lazy_static! {
             rpcs.insert("searchByTitle", ["query"].as_slice());
             rpcs
         });
+        services.insert("MetalDetector", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("dig", ["id"].as_slice());
+            rpcs.insert("getDevices", [].as_slice());
+            rpcs.insert("getIntensity", ["id"].as_slice());
+            rpcs.insert("listen", ["id"].as_slice());
+            rpcs
+        });
         services.insert("MovieDB", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getImage", ["path"].as_slice());
@@ -634,12 +677,6 @@ lazy_static! {
             rpcs.insert("searchMovieReviews", ["query", "offset"].as_slice());
             rpcs
         });
-        services.insert("NexradRadar", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("listRadars", ["latitude", "longitude", "width", "height", "zoom"].as_slice());
-            rpcs.insert("plotRadarImages", ["latitude", "longitude", "width", "height", "zoom", "mapType", "radars"].as_slice());
-            rpcs
-        });
         services.insert("OceanData", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getDeepOceanTemp", ["startYear", "endYear"].as_slice());
@@ -715,10 +752,13 @@ lazy_static! {
             rpcs.insert("getMicrophoneLevel", ["device"].as_slice());
             rpcs.insert("getOrientation", ["device"].as_slice());
             rpcs.insert("getPosition", ["device", "id"].as_slice());
+            rpcs.insert("getPressure", ["device"].as_slice());
             rpcs.insert("getProximity", ["device"].as_slice());
+            rpcs.insert("getRelativeHumidity", ["device"].as_slice());
             rpcs.insert("getRotation", ["device"].as_slice());
             rpcs.insert("getSensors", [].as_slice());
             rpcs.insert("getStepCount", ["device"].as_slice());
+            rpcs.insert("getTemperature", ["device"].as_slice());
             rpcs.insert("getText", ["device", "id"].as_slice());
             rpcs.insert("getToggleState", ["device", "id"].as_slice());
             rpcs.insert("isPressed", ["device", "id"].as_slice());
@@ -732,6 +772,7 @@ lazy_static! {
             rpcs.insert("setLevel", ["device", "id", "value"].as_slice());
             rpcs.insert("setText", ["device", "id", "text"].as_slice());
             rpcs.insert("setToggleState", ["device", "id", "state"].as_slice());
+            rpcs.insert("stopSensors", ["device"].as_slice());
             rpcs
         });
         services.insert("Pixabay", {
@@ -764,6 +805,13 @@ lazy_static! {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getPublicRoleId", [].as_slice());
             rpcs.insert("requestPublicRoleId", [].as_slice());
+            rpcs
+        });
+        services.insert("RainViewer", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getColorSchemes", [].as_slice());
+            rpcs.insert("getOverlay", ["latitude", "longitude", "width", "height", "zoom", "timeOffset", "options"].as_slice());
+            rpcs.insert("getTimeOffsets", [].as_slice());
             rpcs
         });
         services.insert("RoboScape", {
@@ -973,6 +1021,13 @@ lazy_static! {
             rpcs.insert("waterTemp", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice());
             rpcs
         });
+        services.insert("WaypointList", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getDevices", [].as_slice());
+            rpcs.insert("getNextWaypoint", ["id"].as_slice());
+            rpcs.insert("listen", ["id"].as_slice());
+            rpcs
+        });
         services.insert("Weather", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("description", ["latitude", "longitude"].as_slice());
@@ -990,6 +1045,15 @@ lazy_static! {
             rpcs.insert("get172", ["Well A"].as_slice());
             rpcs.insert("getAllWellAValues", [].as_slice());
             rpcs.insert("getTable", [].as_slice());
+            rpcs
+        });
+        services.insert("Wildcam", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getCameras", ["latitude", "longitude", "radius"].as_slice());
+            rpcs.insert("getImage", ["entry"].as_slice());
+            rpcs.insert("getSpeciesList", [].as_slice());
+            rpcs.insert("search", ["startDate", "stopDate", "species", "latitude", "longitude", "radius"].as_slice());
+            rpcs.insert("searchByCamera", ["startDate", "stopDate", "species", "camera"].as_slice());
             rpcs
         });
         services.insert("WordGuess", {
@@ -1048,6 +1112,15 @@ lazy_static! {
             rpcs.insert("getValue", ["index", "column name"].as_slice());
             rpcs
         });
+        services.insert("classhole", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getAColumn", [].as_slice());
+            rpcs.insert("getBByA", [].as_slice());
+            rpcs.insert("getBColumn", [].as_slice());
+            rpcs.insert("getTable", [].as_slice());
+            rpcs.insert("getValue", ["a", "column name"].as_slice());
+            rpcs
+        });
         services.insert("coreys-soccer-wtih-options", {
             let mut rpcs = BTreeMap::new();
             rpcs.insert("getAwayScoreByDate", [].as_slice());
@@ -1082,6 +1155,14 @@ lazy_static! {
             rpcs.insert("get0Column", [].as_slice());
             rpcs.insert("getTable", [].as_slice());
             rpcs.insert("getValue", ["0", "column name"].as_slice());
+            rpcs
+        });
+        services.insert("myfirstservice", {
+            let mut rpcs = BTreeMap::new();
+            rpcs.insert("getAForA", ["a"].as_slice());
+            rpcs.insert("getAllAValues", [].as_slice());
+            rpcs.insert("getBForA", ["a"].as_slice());
+            rpcs.insert("getTable", [].as_slice());
             rpcs
         });
         services.insert("myservice", {
