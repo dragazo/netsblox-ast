@@ -899,6 +899,21 @@ fn test_upvars_var_defs() {
 }
 
 #[test]
+fn test_field_refs() {
+    let res = Parser::default().parse(include_str!("projects/field-refs.xml")).unwrap();
+    assert_eq!(res.roles.len(), 1);
+
+    let role = &res.roles[0];
+    assert_eq!(role.globals.len(), 1);
+    assert_eq!(role.globals[0].def.name, "g");
+
+    assert_eq!(role.entities.len(), 1);
+    let entity = &role.entities[0];
+    assert_eq!(entity.fields.len(), 1);
+    assert_eq!(entity.fields[0].def.name, "f");
+}
+
+#[test]
 fn test_list_ctor_opt() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",

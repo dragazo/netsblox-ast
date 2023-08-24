@@ -2345,10 +2345,6 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         for block in blocks {
             parse_block_header(block, &mut self.funcs, &location)?;
         }
-        let mut funcs = vec![];
-        for block in blocks {
-            funcs.push(parse_block(block, &self.funcs, self.role, Some(&self))?);
-        }
 
         let active_costume = match entity.attr("costume").map(|v| v.value.parse::<usize>().ok()).flatten() {
             Some(idx) if idx >= 1 && idx <= self.costumes.len() => Some(idx - 1),
@@ -2389,6 +2385,11 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::FieldsWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                 }
             }
+        }
+
+        let mut funcs = vec![];
+        for block in blocks {
+            funcs.push(parse_block(block, &self.funcs, self.role, Some(&self))?);
         }
 
         let mut scripts = vec![];
