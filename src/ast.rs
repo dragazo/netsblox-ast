@@ -1,7 +1,9 @@
-use std::prelude::v1::*;
-
-use std::rc::Rc;
-use std::{mem, iter, fmt};
+use alloc::rc::Rc;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::borrow::ToOwned;
+use core::{mem, iter, fmt};
 
 use base64::engine::Engine as Base64Engine;
 use base64::DecodeError as Base64Error;
@@ -41,7 +43,7 @@ impl<T> VecExt<T> for Vec<T> {
 }
 
 // regex equivalent: r"%'([^']*)'"
-struct ParamIter<'a>(iter::Fuse<std::str::CharIndices<'a>>);
+struct ParamIter<'a>(iter::Fuse<core::str::CharIndices<'a>>);
 impl<'a> ParamIter<'a> {
     fn new(src: &'a str) -> Self {
         Self(src.char_indices().fuse())
@@ -69,7 +71,7 @@ fn test_param_iter() {
 }
 
 // regex equivalent: r"%\S*"
-struct ArgIter<'a>(iter::Fuse<std::str::CharIndices<'a>>, usize);
+struct ArgIter<'a>(iter::Fuse<core::str::CharIndices<'a>>, usize);
 impl<'a> ArgIter<'a> {
     fn new(src: &'a str) -> Self {
         Self(src.char_indices().fuse(), src.len())
@@ -96,7 +98,7 @@ fn test_arg_iter() {
     assert_eq!(ArgIter::new("hello %world      %gjherg3495830_ ").collect::<Vec<_>>(), vec![(6, 12), (18, 33)]);
 }
 
-struct InlineListIter<'a>(iter::Peekable<iter::Fuse<std::str::Chars<'a>>>);
+struct InlineListIter<'a>(iter::Peekable<iter::Fuse<core::str::Chars<'a>>>);
 impl<'a> InlineListIter<'a> {
     fn new(s: &'a str) -> Self {
         Self(s.chars().fuse().peekable())
@@ -458,13 +460,13 @@ impl<K, V> VecMap<K, V> {
     fn len(&self) -> usize {
         self.0.len()
     }
-    fn into_iter(self) -> std::vec::IntoIter<(K, V)> {
+    fn into_iter(self) -> alloc::vec::IntoIter<(K, V)> {
         self.0.into_iter()
     }
-    fn get<Q: PartialEq + ?Sized>(&self, key: &Q) -> Option<&V> where K: std::borrow::Borrow<Q> {
+    fn get<Q: PartialEq + ?Sized>(&self, key: &Q) -> Option<&V> where K: core::borrow::Borrow<Q> {
         self.0.iter().find(|x| x.0.borrow() == key).map(|x| &x.1)
     }
-    fn get_mut<Q: PartialEq + ?Sized>(&mut self, key: &Q) -> Option<&mut V> where K: std::borrow::Borrow<Q> {
+    fn get_mut<Q: PartialEq + ?Sized>(&mut self, key: &Q) -> Option<&mut V> where K: core::borrow::Borrow<Q> {
         self.0.iter_mut().find(|x| x.0.borrow() == key).map(|x| &mut x.1)
     }
     fn insert(&mut self, k: K, v: V) -> Option<V> where K: PartialEq {

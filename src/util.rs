@@ -1,5 +1,5 @@
-use std::fmt::{self, Debug, Display};
-use std::prelude::v1::*;
+use core::fmt::{self, Debug, Display};
+use alloc::string::{String, ToString};
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
 macro_rules! impl_punctuated {

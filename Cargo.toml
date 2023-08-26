@@ -20,7 +20,7 @@ path = "src/main.rs"
 
 [features]
 default = ["std"]
-std = ["no-std-compat/std"]
+std = []
 
 [dev-dependencies]
 proptest = "1.1.0"
@@ -28,5 +28,4 @@ proptest = "1.1.0"
 [dependencies]
 xmlparser = { version = "0.13.5", default-features = false }
 lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
-no-std-compat = { version = "0.4.1", default-features = false, features = ["alloc"] }
 base64 = { version = "0.21.0", default-features = false, features = ["alloc"] }

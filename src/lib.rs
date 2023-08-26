@@ -1,7 +1,7 @@
-// #![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 #![no_std]
 
-extern crate no_std_compat as std;
+#[macro_use] extern crate alloc;
 
 #[macro_use] extern crate lazy_static;
 

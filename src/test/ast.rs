@@ -1,5 +1,5 @@
+use alloc::vec::Vec;
 use crate::*;
-use std::prelude::v1::*;
 
 #[test]
 fn test_opt_cmp() {
@@ -1153,7 +1153,7 @@ fn test_stack_size_usage() {
 
     macro_rules! assert_compiles {
         (src: $src:literal, stack_size: $stack_size:expr) => {
-            std::thread::Builder::new().name($src.into()).stack_size($stack_size).spawn(|| {
+            super::std::thread::Builder::new().name($src.into()).stack_size($stack_size).spawn(|| {
                 Parser::default().parse(include_str!($src)).unwrap();
             }).unwrap().join().unwrap();
         }
