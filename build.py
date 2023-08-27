@@ -28,22 +28,17 @@ async def main():
             rpcs_meta = await asyncio.gather(*[asyncio.ensure_future(get_rpcs(x)) for x in services])
 
     with open('src/rpcs.rs', 'w') as f:
-        f.write('''use std::collections::BTreeMap;
-
-lazy_static! {
-    pub(crate) static ref SERVICE_INFO: BTreeMap<&'static str, BTreeMap<&'static str, &'static [&'static str]>> = {
-        let mut services = BTreeMap::new();
-''')
+        f.write("pub(crate) const SERVICE_INFO: &'static [(&'static str, &'static [(&'static str, &'static [&'static str])])] = [\n")
         for i in range(len(services)):
             service = services[i]
             rpcs = rpcs_meta[i]
 
-            f.write(f'        services.insert("{escape(service)}", {{\n            let mut rpcs = BTreeMap::new();\n')
+            f.write(f'    ("{escape(service)}", [\n')
             for rpc, args in rpcs:
                 trans_args = [f'"{escape(x)}"' for x in args]
-                f.write(f'            rpcs.insert("{escape(rpc)}", [{", ".join(trans_args)}].as_slice());\n')
-            f.write('            rpcs\n        });\n')
-        f.write('        services\n    };\n}\n')
+                f.write(f'        ("{escape(rpc)}", [{", ".join(trans_args)}].as_slice()),\n')
+            f.write('    ].as_slice()),\n')
+        f.write('].as_slice();')
 
 def main_sync():
     loop = asyncio.new_event_loop()

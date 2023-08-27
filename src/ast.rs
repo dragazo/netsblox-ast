@@ -1299,11 +1299,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let arg_names = match stmt.attr("inputNames").map(|x| x.value.split(';').map(str::trim).filter(|v| !v.is_empty()).collect::<Vec<_>>()) {
             Some(x) => x,
-            None => match SERVICE_INFO.get(service.as_str()) {
+            None => match SERVICE_INFO.iter().find(|x| x.0 == service) {
                 None => return Err(Box::new_with(|| Error { kind: CompileError::UnknownService { service }.into(), location: location.to_owned() })),
-                Some(x) => match x.get(rpc.as_str()) {
+                Some(x) => match x.1.iter().find(|x| x.0 == rpc) {
                     None => return Err(Box::new_with(|| Error { kind: CompileError::UnknownRPC { service, rpc }.into(), location: location.to_owned() })),
-                    Some(&x) => x.to_owned(),
+                    Some(x) => x.1.to_owned(),
                 }
             }
         };

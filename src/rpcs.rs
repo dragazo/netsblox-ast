@@ -1,1220 +1,1014 @@
-use alloc::collections::BTreeMap;
-
-lazy_static! {
-    pub(crate) static ref SERVICE_INFO: BTreeMap<&'static str, BTreeMap<&'static str, &'static [&'static str]>> = {
-        let mut services = BTreeMap::new();
-        services.insert("AirQuality", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("aqi", ["latitude", "longitude"].as_slice());
-            rpcs.insert("qualityIndex", ["latitude", "longitude"].as_slice());
-            rpcs.insert("qualityIndexByZipCode", ["zipCode"].as_slice());
-            rpcs
-        });
-        services.insert("Alcohol Consumption", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllCountryValues", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValueLitresPerCapita15", ["Country"].as_slice());
-            rpcs.insert("getYEA", ["Country"].as_slice());
-            rpcs.insert("getYear", ["Country"].as_slice());
-            rpcs
-        });
-        services.insert("Alexa", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("createSkill", ["configuration"].as_slice());
-            rpcs.insert("deleteSkill", ["ID"].as_slice());
-            rpcs.insert("getSkill", ["ID"].as_slice());
-            rpcs.insert("getSkillCategories", [].as_slice());
-            rpcs.insert("getSlotTypes", [].as_slice());
-            rpcs.insert("invokeSkill", ["ID", "utterance"].as_slice());
-            rpcs.insert("listSkills", [].as_slice());
-            rpcs.insert("updateSkill", ["ID", "configuration"].as_slice());
-            rpcs
-        });
-        services.insert("Autograders", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("createAutograder", ["configuration"].as_slice());
-            rpcs.insert("getAutograderConfig", ["name"].as_slice());
-            rpcs.insert("getAutograders", [].as_slice());
-            rpcs
-        });
-        services.insert("Avoidable Death", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllVariableValues", [].as_slice());
-            rpcs.insert("getCountry", ["Variable"].as_slice());
-            rpcs.insert("getDeathPer100000", ["Variable"].as_slice());
-            rpcs.insert("getMeasure", ["Variable"].as_slice());
-            rpcs.insert("getYear", ["Variable"].as_slice());
-            rpcs
-        });
-        services.insert("BaseX", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("command", ["url", "command", "username", "password"].as_slice());
-            rpcs.insert("query", ["url", "database", "query", "username", "password"].as_slice());
-            rpcs
-        });
-        services.insert("Battleship", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("allShips", [].as_slice());
-            rpcs.insert("fire", ["row", "column"].as_slice());
-            rpcs.insert("placeShip", ["ship", "row", "column", "facing"].as_slice());
-            rpcs.insert("remainingShips", ["roleID"].as_slice());
-            rpcs.insert("reset", [].as_slice());
-            rpcs.insert("shipLength", ["ship"].as_slice());
-            rpcs.insert("start", [].as_slice());
-            rpcs
-        });
-        services.insert("BingTraffic", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("search", ["westLongitude", "northLatitude", "eastLongitude", "southLatitude"].as_slice());
-            rpcs.insert("stop", [].as_slice());
-            rpcs
-        });
-        services.insert("CARES data", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get1222021", ["Well A"].as_slice());
-            rpcs.insert("get172", ["Well A"].as_slice());
-            rpcs.insert("getAllWellAValues", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs
-        });
-        services.insert("COVID-19", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getConfirmedCounts", ["country", "state", "city"].as_slice());
-            rpcs.insert("getDeathCounts", ["country", "state", "city"].as_slice());
-            rpcs.insert("getLocationCoordinates", ["country", "state", "city"].as_slice());
-            rpcs.insert("getLocationsWithData", [].as_slice());
-            rpcs.insert("getRecoveredCounts", ["country", "state", "city"].as_slice());
-            rpcs.insert("getVaccinationCategories", [].as_slice());
-            rpcs.insert("getVaccinationCountries", [].as_slice());
-            rpcs.insert("getVaccinationData", ["country", "state", "category", "startDate", "endDate"].as_slice());
-            rpcs.insert("getVaccinationStates", [].as_slice());
-            rpcs
-        });
-        services.insert("COVID-19 Estimated ICU Beds", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllStateValues", [].as_slice());
-            rpcs.insert("getCollectionDate", ["state"].as_slice());
-            rpcs.insert("getCountLL", ["state"].as_slice());
-            rpcs.insert("getCountUL", ["state"].as_slice());
-            rpcs.insert("getGeocodedStateForState", ["state"].as_slice());
-            rpcs.insert("getPercentageLL", ["state"].as_slice());
-            rpcs.insert("getPercentageOfStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice());
-            rpcs.insert("getPercentageUL", ["state"].as_slice());
-            rpcs.insert("getStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getTotalLL", ["state"].as_slice());
-            rpcs.insert("getTotalStaffedAdultICUBeds", ["state"].as_slice());
-            rpcs.insert("getTotalUL", ["state"].as_slice());
-            rpcs
-        });
-        services.insert("COVID-19 ICU Bed", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllStateValues", [].as_slice());
-            rpcs.insert("getCollectionDate", ["state"].as_slice());
-            rpcs.insert("getPercentageOfStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice());
-            rpcs.insert("getStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getTotalStaffedAdultICUBeds", ["state"].as_slice());
-            rpcs
-        });
-        services.insert("CS PhDs By Ethnicity", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAsianByYear", [].as_slice());
-            rpcs.insert("getAsianColumn", [].as_slice());
-            rpcs.insert("getBlackByYear", [].as_slice());
-            rpcs.insert("getBlackColumn", [].as_slice());
-            rpcs.insert("getHispanicByYear", [].as_slice());
-            rpcs.insert("getHispanicColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["Year", "column name"].as_slice());
-            rpcs.insert("getWhiteByYear", [].as_slice());
-            rpcs.insert("getWhiteColumn", [].as_slice());
-            rpcs.insert("getYearColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("Cape Grim CO2", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllCO2PpmValues", [].as_slice());
-            rpcs.insert("getAllDATEValues", [].as_slice());
-            rpcs.insert("getCO2Ppm", ["DATE"].as_slice());
-            rpcs.insert("getRecord", ["DATE"].as_slice());
-            rpcs
-        });
-        services.insert("Chart", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("defaultOptions", [].as_slice());
-            rpcs.insert("draw", ["lines", "options"].as_slice());
-            rpcs.insert("drawBarChart", ["dataset", "xAxisTag", "yAxisTag", "datasetTag", "title"].as_slice());
-            rpcs.insert("drawLineChart", ["dataset", "xAxisTag", "yAxisTag", "datasetTag", "title"].as_slice());
-            rpcs
-        });
-        services.insert("Climate Forcings", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAerosolsByYear", [].as_slice());
-            rpcs.insert("getAerosolsColumn", [].as_slice());
-            rpcs.insert("getAllByYear", [].as_slice());
-            rpcs.insert("getAllColumn", [].as_slice());
-            rpcs.insert("getAnnualMeanByYear", [].as_slice());
-            rpcs.insert("getAnnualMeanColumn", [].as_slice());
-            rpcs.insert("getGreenhouseGasByYear", [].as_slice());
-            rpcs.insert("getGreenhouseGasColumn", [].as_slice());
-            rpcs.insert("getHumanByYear", [].as_slice());
-            rpcs.insert("getHumanColumn", [].as_slice());
-            rpcs.insert("getLandUseByYear", [].as_slice());
-            rpcs.insert("getLandUseColumn", [].as_slice());
-            rpcs.insert("getNaturalByYear", [].as_slice());
-            rpcs.insert("getNaturalColumn", [].as_slice());
-            rpcs.insert("getOrbitByYear", [].as_slice());
-            rpcs.insert("getOrbitColumn", [].as_slice());
-            rpcs.insert("getOzoneByYear", [].as_slice());
-            rpcs.insert("getOzoneColumn", [].as_slice());
-            rpcs.insert("getSolarByYear", [].as_slice());
-            rpcs.insert("getSolarColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["Year", "column name"].as_slice());
-            rpcs.insert("getVolcanismByYear", [].as_slice());
-            rpcs.insert("getVolcanismColumn", [].as_slice());
-            rpcs.insert("getYearColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("CloudVariables", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("deleteUserVariable", ["name"].as_slice());
-            rpcs.insert("deleteVariable", ["name", "password"].as_slice());
-            rpcs.insert("getUserVariable", ["name"].as_slice());
-            rpcs.insert("getVariable", ["name", "password"].as_slice());
-            rpcs.insert("listenToUserVariable", ["name", "msgType", "duration"].as_slice());
-            rpcs.insert("listenToVariable", ["name", "msgType", "password", "duration"].as_slice());
-            rpcs.insert("lockVariable", ["name", "password"].as_slice());
-            rpcs.insert("setUserVariable", ["name", "value"].as_slice());
-            rpcs.insert("setVariable", ["name", "value", "password"].as_slice());
-            rpcs.insert("unlockVariable", ["name", "password"].as_slice());
-            rpcs
-        });
-        services.insert("ConnectN", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("isFullBoard", [].as_slice());
-            rpcs.insert("isGameOver", [].as_slice());
-            rpcs.insert("newGame", ["row", "column", "numDotsToConnect"].as_slice());
-            rpcs.insert("play", ["row", "column"].as_slice());
-            rpcs
-        });
-        services.insert("Coral Growth Anomaly", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCoralGrowthAnomalyByYEAR", [].as_slice());
-            rpcs.insert("getCoralGrowthAnomalyColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["YEAR", "column name"].as_slice());
-            rpcs.insert("getYEARColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("CoreNLP", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("annotate", ["text", "annotators"].as_slice());
-            rpcs.insert("getAnnotators", [].as_slice());
-            rpcs
-        });
-        services.insert("DailyWordGuess", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getWordList", [].as_slice());
-            rpcs.insert("giveUp", [].as_slice());
-            rpcs.insert("guess", ["word"].as_slice());
-            rpcs.insert("timeRemaining", [].as_slice());
-            rpcs.insert("triesRemaining", [].as_slice());
-            rpcs
-        });
-        services.insert("DrugOverdose", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getNumberAllByYear", [].as_slice());
-            rpcs.insert("getNumberAllColumn", [].as_slice());
-            rpcs.insert("getNumberOpioidAnyByYear", [].as_slice());
-            rpcs.insert("getNumberOpioidAnyColumn", [].as_slice());
-            rpcs.insert("getNumberOpioidCocaineByYear", [].as_slice());
-            rpcs.insert("getNumberOpioidCocaineColumn", [].as_slice());
-            rpcs.insert("getNumberOpioidHeroinByYear", [].as_slice());
-            rpcs.insert("getNumberOpioidHeroinColumn", [].as_slice());
-            rpcs.insert("getNumberOpioidPrescriptionByYear", [].as_slice());
-            rpcs.insert("getNumberOpioidPrescriptionColumn", [].as_slice());
-            rpcs.insert("getNumberOpioidSyntheticByYear", [].as_slice());
-            rpcs.insert("getNumberOpioidSyntheticColumn", [].as_slice());
-            rpcs.insert("getRateAllRaceAmericanIndianOrAlaskaNativeByYear", [].as_slice());
-            rpcs.insert("getRateAllRaceAmericanIndianOrAlaskaNativeColumn", [].as_slice());
-            rpcs.insert("getRateAllRaceAsianOrPacificIslanderByYear", [].as_slice());
-            rpcs.insert("getRateAllRaceAsianOrPacificIslanderColumn", [].as_slice());
-            rpcs.insert("getRateAllRaceBlackByYear", [].as_slice());
-            rpcs.insert("getRateAllRaceBlackColumn", [].as_slice());
-            rpcs.insert("getRateAllRaceHispanicByYear", [].as_slice());
-            rpcs.insert("getRateAllRaceHispanicColumn", [].as_slice());
-            rpcs.insert("getRateAllRaceWhiteByYear", [].as_slice());
-            rpcs.insert("getRateAllRaceWhiteColumn", [].as_slice());
-            rpcs.insert("getRateAllSexFemaleByYear", [].as_slice());
-            rpcs.insert("getRateAllSexFemaleColumn", [].as_slice());
-            rpcs.insert("getRateAllSexMaleByYear", [].as_slice());
-            rpcs.insert("getRateAllSexMaleColumn", [].as_slice());
-            rpcs.insert("getRateAllTotalByYear", [].as_slice());
-            rpcs.insert("getRateAllTotalColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["Year", "column name"].as_slice());
-            rpcs.insert("getYearColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("EarthOrbit", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getEccentricity", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getInsolation", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getLongitude", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getObliquity", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getPrecession", ["startyear", "endyear"].as_slice());
-            rpcs
-        });
-        services.insert("Earthquakes", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("byRegion", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude", "startTime", "endTime", "minMagnitude", "maxMagnitude"].as_slice());
-            rpcs.insert("stop", [].as_slice());
-            rpcs
-        });
-        services.insert("Eclipse2017", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("availableStations", ["maxReadingMedian", "maxDistanceFromCenter", "latitude", "longitude", "maxDistanceFromPoint"].as_slice());
-            rpcs.insert("condition", ["stationId"].as_slice());
-            rpcs.insert("conditionHistory", ["stationId", "limit"].as_slice());
-            rpcs.insert("conditionHistoryRange", ["stationId", "startTime", "endTime"].as_slice());
-            rpcs.insert("eclipsePath", [].as_slice());
-            rpcs.insert("pastCondition", ["stationId", "time"].as_slice());
-            rpcs.insert("pastTemperature", ["stationId", "time"].as_slice());
-            rpcs.insert("selectPointBased", [].as_slice());
-            rpcs.insert("selectSectionBased", ["numSections", "perSection"].as_slice());
-            rpcs.insert("stationInfo", ["stationId"].as_slice());
-            rpcs.insert("stations", [].as_slice());
-            rpcs.insert("stationsInfo", [].as_slice());
-            rpcs.insert("temperature", ["stationId"].as_slice());
-            rpcs.insert("temperatureHistory", ["stationId", "limit"].as_slice());
-            rpcs.insert("temperatureHistoryRange", ["stationId", "startTime", "endTime"].as_slice());
-            rpcs
-        });
-        services.insert("Execute", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("call", ["fn"].as_slice());
-            rpcs
-        });
-        services.insert("Fairbanks Weather", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllDATEValues", [].as_slice());
-            rpcs.insert("getAllPRCPValues", [].as_slice());
-            rpcs.insert("getAllSNOWValues", [].as_slice());
-            rpcs.insert("getAllTMAXValues", [].as_slice());
-            rpcs.insert("getAllTMINValues", [].as_slice());
-            rpcs.insert("getAllTOBSValues", [].as_slice());
-            rpcs.insert("getPRCP", ["DATE"].as_slice());
-            rpcs.insert("getRecord", ["DATE"].as_slice());
-            rpcs.insert("getSNOW", ["DATE"].as_slice());
-            rpcs.insert("getTMAX", ["DATE"].as_slice());
-            rpcs.insert("getTMIN", ["DATE"].as_slice());
-            rpcs.insert("getTOBS", ["DATE"].as_slice());
-            rpcs
-        });
-        services.insert("Franklin Temperatures", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllDATEValues", [].as_slice());
-            rpcs.insert("getAllTMAXValues", [].as_slice());
-            rpcs.insert("getAllTMINValues", [].as_slice());
-            rpcs.insert("getAllTOBSValues", [].as_slice());
-            rpcs.insert("getRecord", ["DATE"].as_slice());
-            rpcs.insert("getTMAX", ["DATE"].as_slice());
-            rpcs.insert("getTMIN", ["DATE"].as_slice());
-            rpcs.insert("getTOBS", ["DATE"].as_slice());
-            rpcs
-        });
-        services.insert("GDPTrend", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getChinaByYear", [].as_slice());
-            rpcs.insert("getChinaColumn", [].as_slice());
-            rpcs.insert("getGermanyByYear", [].as_slice());
-            rpcs.insert("getGermanyColumn", [].as_slice());
-            rpcs.insert("getJapanByYear", [].as_slice());
-            rpcs.insert("getJapanColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getUnitedStatesByYear", [].as_slice());
-            rpcs.insert("getUnitedStatesColumn", [].as_slice());
-            rpcs.insert("getValue", ["Year", "column name"].as_slice());
-            rpcs.insert("getYearColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("Genius", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getArtist", ["ID"].as_slice());
-            rpcs.insert("getSong", ["ID"].as_slice());
-            rpcs.insert("getSongLyrics", ["ID"].as_slice());
-            rpcs.insert("getSongsByArtist", ["ID"].as_slice());
-            rpcs.insert("searchSongs", ["query"].as_slice());
-            rpcs
-        });
-        services.insert("Geolocation", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("city", ["latitude", "longitude"].as_slice());
-            rpcs.insert("country", ["latitude", "longitude"].as_slice());
-            rpcs.insert("countryCode", ["latitude", "longitude"].as_slice());
-            rpcs.insert("county*", ["latitude", "longitude"].as_slice());
-            rpcs.insert("geolocate", ["address"].as_slice());
-            rpcs.insert("info", ["latitude", "longitude"].as_slice());
-            rpcs.insert("nearbySearch", ["latitude", "longitude", "keyword", "radius"].as_slice());
-            rpcs.insert("state*", ["latitude", "longitude"].as_slice());
-            rpcs.insert("stateCode*", ["latitude", "longitude"].as_slice());
-            rpcs.insert("streetAddress", ["address"].as_slice());
-            rpcs.insert("timezone", ["address"].as_slice());
-            rpcs
-        });
-        services.insert("GlobalLandTemperature", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get10YearAverage", ["Date"].as_slice());
-            rpcs.insert("getAll10YearAverageValues", [].as_slice());
-            rpcs.insert("getAllAnnualValues", [].as_slice());
-            rpcs.insert("getAllDateValues", [].as_slice());
-            rpcs.insert("getAllMonthlyValues", [].as_slice());
-            rpcs.insert("getAnnual", ["Date"].as_slice());
-            rpcs.insert("getMonthly", ["Date"].as_slice());
-            rpcs.insert("getRecord", ["Date"].as_slice());
-            rpcs
-        });
-        services.insert("GoogleMaps", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDistance", ["startLatitude", "startLongitude", "endLatitude", "endLongitude"].as_slice());
-            rpcs.insert("getEarthCoordinates", ["x", "y"].as_slice());
-            rpcs.insert("getImageCoordinates", ["latitude", "longitude"].as_slice());
-            rpcs.insert("getLatitude", ["y"].as_slice());
-            rpcs.insert("getLatitudeFromY", ["y"].as_slice());
-            rpcs.insert("getLongitude", ["x"].as_slice());
-            rpcs.insert("getLongitudeFromX", ["x"].as_slice());
-            rpcs.insert("getMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice());
-            rpcs.insert("getSatelliteMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice());
-            rpcs.insert("getTerrainMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice());
-            rpcs.insert("getXFromLongitude", ["longitude"].as_slice());
-            rpcs.insert("getYFromLatitude", ["latitude"].as_slice());
-            rpcs.insert("maxLatitude", [].as_slice());
-            rpcs.insert("maxLongitude", [].as_slice());
-            rpcs.insert("minLatitude", [].as_slice());
-            rpcs.insert("minLongitude", [].as_slice());
-            rpcs
-        });
-        services.insert("GoogleStreetView", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getInfo", ["latitude", "longitude", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("getInfoFromAddress", ["location", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("getView", ["latitude", "longitude", "width", "height", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("getViewFromAddress", ["location", "width", "height", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("getViewFromLatLong", ["latitude", "longitude", "width", "height", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("isAvailable", ["latitude", "longitude", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs.insert("isAvailableFromAddress", ["location", "fieldofview", "heading", "pitch"].as_slice());
-            rpcs
-        });
-        services.insert("HPV Vaccination", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllSexValues", [].as_slice());
-            rpcs.insert("getAnnualPercentChangeAPC", ["Sex"].as_slice());
-            rpcs.insert("getAverageAnnualPercentChangeAAPC", ["Sex"].as_slice());
-            rpcs.insert("getHealthyPeople2020TargetForSex", ["Sex"].as_slice());
-            rpcs.insert("getPercent", ["Sex"].as_slice());
-            rpcs.insert("getPercentTrendLine", ["Sex"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getYear", ["Sex"].as_slice());
-            rpcs
-        });
-        services.insert("Hangman", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCurrentlyKnownWord", [].as_slice());
-            rpcs.insert("getWrongCount", [].as_slice());
-            rpcs.insert("guess", ["letter"].as_slice());
-            rpcs.insert("isWordGuessed", [].as_slice());
-            rpcs.insert("setWord", ["word"].as_slice());
-            rpcs
-        });
-        services.insert("HistoricalTemperature", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("annualAnomaly", ["region"].as_slice());
-            rpcs.insert("fiveYearAnomaly", ["region"].as_slice());
-            rpcs.insert("monthlyAnomaly", ["region"].as_slice());
-            rpcs.insert("tenYearAnomaly", ["region"].as_slice());
-            rpcs.insert("twentyYearAnomaly", ["region"].as_slice());
-            rpcs
-        });
-        services.insert("HumanMortalityDatabase", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllData", [].as_slice());
-            rpcs.insert("getAllDataForCountry", ["country"].as_slice());
-            rpcs.insert("getCategories", [].as_slice());
-            rpcs.insert("getCountries", [].as_slice());
-            rpcs.insert("getGenders", [].as_slice());
-            rpcs.insert("getTimeSeries", ["country", "gender", "category"].as_slice());
-            rpcs
-        });
-        services.insert("HurricaneData", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getHurricaneData", ["name", "year"].as_slice());
-            rpcs.insert("getHurricanesInYear", ["year"].as_slice());
-            rpcs.insert("getYearsWithHurricaneNamed", ["name"].as_slice());
-            rpcs
-        });
-        services.insert("IceCoreData", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCarbonDioxideData", ["core", "startyear", "endyear"].as_slice());
-            rpcs.insert("getDataAvailability", [].as_slice());
-            rpcs.insert("getDelta18OData", ["core", "startyear", "endyear"].as_slice());
-            rpcs.insert("getDeuteriumData", ["core", "startyear", "endyear"].as_slice());
-            rpcs.insert("getIceCoreMetadata", ["core"].as_slice());
-            rpcs.insert("getIceCoreNames", [].as_slice());
-            rpcs.insert("getTemperatureData", ["core", "startyear", "endyear"].as_slice());
-            rpcs
-        });
-        services.insert("IoTScape", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDevices", ["service"].as_slice());
-            rpcs.insert("getMessageTypes", ["service"].as_slice());
-            rpcs.insert("getServices", [].as_slice());
-            rpcs.insert("send", ["service", "id", "command"].as_slice());
-            rpcs
-        });
-        services.insert("KeyValueStore", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("child", ["key", "password"].as_slice());
-            rpcs.insert("delete", ["key", "password"].as_slice());
-            rpcs.insert("get", ["key", "password"].as_slice());
-            rpcs.insert("parent", ["key"].as_slice());
-            rpcs.insert("put", ["key", "value", "password"].as_slice());
-            rpcs
-        });
-        services.insert("LIDARSensor", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDevices", [].as_slice());
-            rpcs.insert("getRange", ["id"].as_slice());
-            rpcs.insert("listen", ["id"].as_slice());
-            rpcs
-        });
-        services.insert("LandOceanTemperatureIndex", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllAprValues", [].as_slice());
-            rpcs.insert("getAllAugValues", [].as_slice());
-            rpcs.insert("getAllDJFValues", [].as_slice());
-            rpcs.insert("getAllDNValues", [].as_slice());
-            rpcs.insert("getAllDecValues", [].as_slice());
-            rpcs.insert("getAllFebValues", [].as_slice());
-            rpcs.insert("getAllJDValues", [].as_slice());
-            rpcs.insert("getAllJJAValues", [].as_slice());
-            rpcs.insert("getAllJanValues", [].as_slice());
-            rpcs.insert("getAllJulValues", [].as_slice());
-            rpcs.insert("getAllJunValues", [].as_slice());
-            rpcs.insert("getAllMAMValues", [].as_slice());
-            rpcs.insert("getAllMarValues", [].as_slice());
-            rpcs.insert("getAllMayValues", [].as_slice());
-            rpcs.insert("getAllNovValues", [].as_slice());
-            rpcs.insert("getAllOctValues", [].as_slice());
-            rpcs.insert("getAllSONValues", [].as_slice());
-            rpcs.insert("getAllSepValues", [].as_slice());
-            rpcs.insert("getAllYearValues", [].as_slice());
-            rpcs.insert("getApr", ["Year"].as_slice());
-            rpcs.insert("getAug", ["Year"].as_slice());
-            rpcs.insert("getDJF", ["Year"].as_slice());
-            rpcs.insert("getDN", ["Year"].as_slice());
-            rpcs.insert("getDec", ["Year"].as_slice());
-            rpcs.insert("getFeb", ["Year"].as_slice());
-            rpcs.insert("getJD", ["Year"].as_slice());
-            rpcs.insert("getJJA", ["Year"].as_slice());
-            rpcs.insert("getJan", ["Year"].as_slice());
-            rpcs.insert("getJul", ["Year"].as_slice());
-            rpcs.insert("getJun", ["Year"].as_slice());
-            rpcs.insert("getMAM", ["Year"].as_slice());
-            rpcs.insert("getMar", ["Year"].as_slice());
-            rpcs.insert("getMay", ["Year"].as_slice());
-            rpcs.insert("getNov", ["Year"].as_slice());
-            rpcs.insert("getOct", ["Year"].as_slice());
-            rpcs.insert("getRecord", ["Year"].as_slice());
-            rpcs.insert("getSON", ["Year"].as_slice());
-            rpcs.insert("getSep", ["Year"].as_slice());
-            rpcs
-        });
-        services.insert("MaunaLoaCO2Data", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCO2Trend", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getRawCO2", ["startyear", "endyear"].as_slice());
-            rpcs
-        });
-        services.insert("MetMuseum", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("advancedSearch", ["field", "query", "skip", "limit"].as_slice());
-            rpcs.insert("fields", [].as_slice());
-            rpcs.insert("getImageUrls", ["id"].as_slice());
-            rpcs.insert("getInfo", ["id"].as_slice());
-            rpcs.insert("searchByArtistDisplayBio", ["query"].as_slice());
-            rpcs.insert("searchByArtistDisplayName", ["query"].as_slice());
-            rpcs.insert("searchByClassification", ["query"].as_slice());
-            rpcs.insert("searchByCountry", ["query"].as_slice());
-            rpcs.insert("searchByCreditLine", ["query"].as_slice());
-            rpcs.insert("searchByDepartment", ["query"].as_slice());
-            rpcs.insert("searchByDimensions", ["query"].as_slice());
-            rpcs.insert("searchByIsHighlight", ["query"].as_slice());
-            rpcs.insert("searchByMedium", ["query"].as_slice());
-            rpcs.insert("searchByObjectDate", ["query"].as_slice());
-            rpcs.insert("searchByObjectName", ["query"].as_slice());
-            rpcs.insert("searchByRepository", ["query"].as_slice());
-            rpcs.insert("searchByTitle", ["query"].as_slice());
-            rpcs
-        });
-        services.insert("MetalDetector", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("dig", ["id"].as_slice());
-            rpcs.insert("getDevices", [].as_slice());
-            rpcs.insert("getIntensity", ["id"].as_slice());
-            rpcs.insert("listen", ["id"].as_slice());
-            rpcs
-        });
-        services.insert("MovieDB", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getImage", ["path"].as_slice());
-            rpcs.insert("movieBackdropPath", ["id"].as_slice());
-            rpcs.insert("movieBudget", ["id"].as_slice());
-            rpcs.insert("movieCastCharacters", ["id"].as_slice());
-            rpcs.insert("movieCastNames", ["id"].as_slice());
-            rpcs.insert("movieCastPersonIDs", ["id"].as_slice());
-            rpcs.insert("movieCastProfilePaths", ["id"].as_slice());
-            rpcs.insert("movieCrewJobs", ["id"].as_slice());
-            rpcs.insert("movieCrewNames", ["id"].as_slice());
-            rpcs.insert("movieCrewPersonIDs", ["id"].as_slice());
-            rpcs.insert("movieCrewProfilePaths", ["id"].as_slice());
-            rpcs.insert("movieGenres", ["id"].as_slice());
-            rpcs.insert("movieOriginalLanguage", ["id"].as_slice());
-            rpcs.insert("movieOriginalTitle", ["id"].as_slice());
-            rpcs.insert("movieOverview", ["id"].as_slice());
-            rpcs.insert("moviePopularity", ["id"].as_slice());
-            rpcs.insert("moviePosterPath", ["id"].as_slice());
-            rpcs.insert("movieProductionCompanies", ["id"].as_slice());
-            rpcs.insert("movieProductionCountries", ["id"].as_slice());
-            rpcs.insert("movieReleaseDate", ["id"].as_slice());
-            rpcs.insert("movieRevenue", ["id"].as_slice());
-            rpcs.insert("movieRuntime", ["id"].as_slice());
-            rpcs.insert("movieSpokenLanguages", ["id"].as_slice());
-            rpcs.insert("movieTagline", ["id"].as_slice());
-            rpcs.insert("movieTitle", ["id"].as_slice());
-            rpcs.insert("movieVoteAverage", ["id"].as_slice());
-            rpcs.insert("movieVoteCount", ["id"].as_slice());
-            rpcs.insert("personBiography", ["id"].as_slice());
-            rpcs.insert("personBirthday", ["id"].as_slice());
-            rpcs.insert("personCastCharacters", ["id"].as_slice());
-            rpcs.insert("personCastMovieIDs", ["id"].as_slice());
-            rpcs.insert("personCastOriginalTitles", ["id"].as_slice());
-            rpcs.insert("personCastPosterPaths", ["id"].as_slice());
-            rpcs.insert("personCastReleaseDates", ["id"].as_slice());
-            rpcs.insert("personCastTitles", ["id"].as_slice());
-            rpcs.insert("personCrewJobs", ["id"].as_slice());
-            rpcs.insert("personCrewMovieIDs", ["id"].as_slice());
-            rpcs.insert("personCrewOriginalTitles", ["id"].as_slice());
-            rpcs.insert("personCrewPosterPaths", ["id"].as_slice());
-            rpcs.insert("personCrewReleaseDates", ["id"].as_slice());
-            rpcs.insert("personCrewTitles", ["id"].as_slice());
-            rpcs.insert("personDeathday", ["id"].as_slice());
-            rpcs.insert("personGender", ["id"].as_slice());
-            rpcs.insert("personImageAspectRatios", ["id"].as_slice());
-            rpcs.insert("personImageFilePaths", ["id"].as_slice());
-            rpcs.insert("personImageHeights", ["id"].as_slice());
-            rpcs.insert("personImageVoteCounts", ["id"].as_slice());
-            rpcs.insert("personImageWidths", ["id"].as_slice());
-            rpcs.insert("personName", ["id"].as_slice());
-            rpcs.insert("personPlaceOfBirth", ["id"].as_slice());
-            rpcs.insert("personPopularity", ["id"].as_slice());
-            rpcs.insert("personProfilePath", ["id"].as_slice());
-            rpcs.insert("searchMovie", ["title"].as_slice());
-            rpcs.insert("searchPerson", ["name"].as_slice());
-            rpcs
-        });
-        services.insert("NASA", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("apod", [].as_slice());
-            rpcs.insert("apodDetails", [].as_slice());
-            rpcs.insert("apodMedia", [].as_slice());
-            rpcs.insert("marsHighTemp", [].as_slice());
-            rpcs.insert("marsLowTemp", [].as_slice());
-            rpcs.insert("marsWeather", [].as_slice());
-            rpcs
-        });
-        services.insert("NPlayer", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("endTurn", ["next"].as_slice());
-            rpcs.insert("getActive", [].as_slice());
-            rpcs.insert("getN", [].as_slice());
-            rpcs.insert("getNext", [].as_slice());
-            rpcs.insert("getPrevious", [].as_slice());
-            rpcs.insert("start", [].as_slice());
-            rpcs
-        });
-        services.insert("NewYorkPublicLibrary", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDetails", ["uuid"].as_slice());
-            rpcs.insert("getImage", ["itemID"].as_slice());
-            rpcs.insert("search", ["term", "perPage", "page"].as_slice());
-            rpcs
-        });
-        services.insert("NewYorkTimes", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getArticleSections", [].as_slice());
-            rpcs.insert("getArticlesWithConcept", ["concept"].as_slice());
-            rpcs.insert("getBestSellerLists", [].as_slice());
-            rpcs.insert("getBestSellers", ["list", "date"].as_slice());
-            rpcs.insert("getConceptInfo", ["concept"].as_slice());
-            rpcs.insert("getConceptTypes", [].as_slice());
-            rpcs.insert("getCriticsPicks", ["offset"].as_slice());
-            rpcs.insert("getLatestArticles", ["section"].as_slice());
-            rpcs.insert("getMostEmailedArticles", ["period"].as_slice());
-            rpcs.insert("getMostSharedArticles", ["period"].as_slice());
-            rpcs.insert("getMostViewedArticles", ["period"].as_slice());
-            rpcs.insert("getMovieCriticInfo", ["name"].as_slice());
-            rpcs.insert("getMovieCritics", [].as_slice());
-            rpcs.insert("getMovieReviews", ["offset"].as_slice());
-            rpcs.insert("getMovieReviewsByCritic", ["critic", "offset"].as_slice());
-            rpcs.insert("getTopBestSellers", ["date"].as_slice());
-            rpcs.insert("getTopStories", ["section"].as_slice());
-            rpcs.insert("searchArticles", ["query", "offset"].as_slice());
-            rpcs.insert("searchBestSellers", ["title", "author", "offset"].as_slice());
-            rpcs.insert("searchConcepts", ["query"].as_slice());
-            rpcs.insert("searchMovieReviews", ["query", "offset"].as_slice());
-            rpcs
-        });
-        services.insert("OceanData", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDeepOceanTemp", ["startYear", "endYear"].as_slice());
-            rpcs.insert("getOxygenRatio", ["startYear", "endYear"].as_slice());
-            rpcs.insert("getSeaLevel", ["startYear", "endYear"].as_slice());
-            rpcs.insert("getSurfaceTemp", ["startYear", "endYear"].as_slice());
-            rpcs
-        });
-        services.insert("PaleoceanOxygenIsotopes", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAverageSedimentationRates", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getDelta18O", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getDelta18OError", ["startyear", "endyear"].as_slice());
-            rpcs.insert("getNormalizedSedimentationRates", ["startyear", "endyear"].as_slice());
-            rpcs
-        });
-        services.insert("ParallelDots", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAbuse", ["text"].as_slice());
-            rpcs.insert("getEmotion", ["text"].as_slice());
-            rpcs.insert("getIntent", ["text"].as_slice());
-            rpcs.insert("getKeywords", ["text"].as_slice());
-            rpcs.insert("getNamedEntities", ["text"].as_slice());
-            rpcs.insert("getSarcasmProbability", ["text"].as_slice());
-            rpcs.insert("getSentiment", ["text"].as_slice());
-            rpcs.insert("getSimilarity", ["text1", "text2"].as_slice());
-            rpcs.insert("getTaxonomy", ["text"].as_slice());
-            rpcs
-        });
-        services.insert("People", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAgeByName", [].as_slice());
-            rpcs.insert("getAgeColumn", [].as_slice());
-            rpcs.insert("getNameColumn", [].as_slice());
-            rpcs.insert("getSexByName", [].as_slice());
-            rpcs.insert("getSexColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["name", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("PhoneIoT", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("addButton", ["device", "x", "y", "width", "height", "text", "options"].as_slice());
-            rpcs.insert("addImageDisplay", ["device", "x", "y", "width", "height", "options"].as_slice());
-            rpcs.insert("addJoystick", ["device", "x", "y", "width", "options"].as_slice());
-            rpcs.insert("addLabel", ["device", "x", "y", "text", "options"].as_slice());
-            rpcs.insert("addRadioButton", ["device", "x", "y", "text", "options"].as_slice());
-            rpcs.insert("addSlider", ["device", "x", "y", "width", "options"].as_slice());
-            rpcs.insert("addTextField", ["device", "x", "y", "width", "height", "options"].as_slice());
-            rpcs.insert("addToggle", ["device", "x", "y", "text", "options"].as_slice());
-            rpcs.insert("addTouchpad", ["device", "x", "y", "width", "height", "options"].as_slice());
-            rpcs.insert("authenticate", ["device"].as_slice());
-            rpcs.insert("clearControls", ["device"].as_slice());
-            rpcs.insert("getAccelerometer", ["device"].as_slice());
-            rpcs.insert("getAltitude", ["device"].as_slice());
-            rpcs.insert("getBearing", ["device"].as_slice());
-            rpcs.insert("getColor", ["red", "green", "blue", "alpha"].as_slice());
-            rpcs.insert("getCompassCardinalDirection", ["device"].as_slice());
-            rpcs.insert("getCompassDirection", ["device"].as_slice());
-            rpcs.insert("getCompassHeading", ["device"].as_slice());
-            rpcs.insert("getFacingDirection", ["device"].as_slice());
-            rpcs.insert("getGPSHeading", ["device"].as_slice());
-            rpcs.insert("getGameRotation", ["device"].as_slice());
-            rpcs.insert("getGravity", ["device"].as_slice());
-            rpcs.insert("getGyroscope", ["device"].as_slice());
-            rpcs.insert("getImage", ["device", "id"].as_slice());
-            rpcs.insert("getJoystickVector", ["device", "id"].as_slice());
-            rpcs.insert("getLevel", ["device", "id"].as_slice());
-            rpcs.insert("getLightLevel", ["device"].as_slice());
-            rpcs.insert("getLinearAcceleration", ["device"].as_slice());
-            rpcs.insert("getLocation", ["device"].as_slice());
-            rpcs.insert("getMagneticField", ["device"].as_slice());
-            rpcs.insert("getMicrophoneLevel", ["device"].as_slice());
-            rpcs.insert("getOrientation", ["device"].as_slice());
-            rpcs.insert("getPosition", ["device", "id"].as_slice());
-            rpcs.insert("getPressure", ["device"].as_slice());
-            rpcs.insert("getProximity", ["device"].as_slice());
-            rpcs.insert("getRelativeHumidity", ["device"].as_slice());
-            rpcs.insert("getRotation", ["device"].as_slice());
-            rpcs.insert("getSensors", [].as_slice());
-            rpcs.insert("getStepCount", ["device"].as_slice());
-            rpcs.insert("getTemperature", ["device"].as_slice());
-            rpcs.insert("getText", ["device", "id"].as_slice());
-            rpcs.insert("getToggleState", ["device", "id"].as_slice());
-            rpcs.insert("isPressed", ["device", "id"].as_slice());
-            rpcs.insert("listenToGUI", ["device"].as_slice());
-            rpcs.insert("listenToSensors", ["device", "sensors"].as_slice());
-            rpcs.insert("magnitude", ["vec"].as_slice());
-            rpcs.insert("normalize", ["vec"].as_slice());
-            rpcs.insert("removeControl", ["device", "id"].as_slice());
-            rpcs.insert("setCredentials", ["device", "password"].as_slice());
-            rpcs.insert("setImage", ["device", "id", "img"].as_slice());
-            rpcs.insert("setLevel", ["device", "id", "value"].as_slice());
-            rpcs.insert("setText", ["device", "id", "text"].as_slice());
-            rpcs.insert("setToggleState", ["device", "id", "state"].as_slice());
-            rpcs.insert("stopSensors", ["device"].as_slice());
-            rpcs
-        });
-        services.insert("Pixabay", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getImage", ["url"].as_slice());
-            rpcs.insert("searchAll", ["keywords", "maxHeight", "minHeight"].as_slice());
-            rpcs.insert("searchIllustration", ["keywords", "maxHeight", "minHeight"].as_slice());
-            rpcs.insert("searchPhoto", ["keywords", "maxHeight", "minHeight"].as_slice());
-            rpcs
-        });
-        services.insert("PositionSensor", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDevices", [].as_slice());
-            rpcs.insert("getHeading", ["id"].as_slice());
-            rpcs.insert("getPosition", ["id"].as_slice());
-            rpcs.insert("getX", ["id"].as_slice());
-            rpcs.insert("getY", ["id"].as_slice());
-            rpcs.insert("getZ", ["id"].as_slice());
-            rpcs.insert("listen", ["id"].as_slice());
-            rpcs
-        });
-        services.insert("ProjectGutenberg", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getInfo", ["ID"].as_slice());
-            rpcs.insert("getText", ["ID"].as_slice());
-            rpcs.insert("search", ["field", "text"].as_slice());
-            rpcs
-        });
-        services.insert("PublicRoles", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getPublicRoleId", [].as_slice());
-            rpcs.insert("requestPublicRoleId", [].as_slice());
-            rpcs
-        });
-        services.insert("RainViewer", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getColorSchemes", [].as_slice());
-            rpcs.insert("getOverlay", ["latitude", "longitude", "width", "height", "zoom", "timeOffset", "options"].as_slice());
-            rpcs.insert("getTimeOffsets", [].as_slice());
-            rpcs
-        });
-        services.insert("RoboScape", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("eavesdrop", ["robots"].as_slice());
-            rpcs.insert("getRobots", [].as_slice());
-            rpcs.insert("listen", ["robots"].as_slice());
-            rpcs.insert("send", ["robot", "command"].as_slice());
-            rpcs
-        });
-        services.insert("S1", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get1222021", ["Well A"].as_slice());
-            rpcs.insert("get172", ["Well A"].as_slice());
-            rpcs.insert("getAllWellAValues", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs
-        });
-        services.insert("ServiceCreation", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("createServiceFromTable", ["name", "data", "options"].as_slice());
-            rpcs.insert("deleteService", ["name"].as_slice());
-            rpcs.insert("getCreateFromTableOptions", ["data"].as_slice());
-            rpcs
-        });
-        services.insert("SimpleHangman", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCurrentlyKnownWord", [].as_slice());
-            rpcs.insert("getWrongCount", [].as_slice());
-            rpcs.insert("guess", ["letter"].as_slice());
-            rpcs.insert("isWordGuessed", [].as_slice());
-            rpcs.insert("restart", ["word"].as_slice());
-            rpcs
-        });
-        services.insert("Smithsonian", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getImage", ["id"].as_slice());
-            rpcs.insert("search", ["term", "count", "skip"].as_slice());
-            rpcs.insert("searchImageContent", ["term", "count", "skip"].as_slice());
-            rpcs
-        });
-        services.insert("StarMap", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("arcHourMinSecToDeg", ["arcHour", "arcMin", "arcSec"].as_slice());
-            rpcs.insert("findObject", ["name"].as_slice());
-            rpcs.insert("getImage", ["right_ascension", "declination", "arcseconds_per_pixel", "options", "width", "height"].as_slice());
-            rpcs
-        });
-        services.insert("StudentPerformance", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllGenderValues", [].as_slice());
-            rpcs.insert("getLunch", ["gender"].as_slice());
-            rpcs.insert("getMathScore", ["gender"].as_slice());
-            rpcs.insert("getParentalLevelOfEducation", ["gender"].as_slice());
-            rpcs.insert("getRaceEthnicity", ["gender"].as_slice());
-            rpcs.insert("getReadingScore", ["gender"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getTestPreparationCourse", ["gender"].as_slice());
-            rpcs.insert("getWritingScore", ["gender"].as_slice());
-            rpcs
-        });
-        services.insert("SummerOlympicMedals", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllYearValues", [].as_slice());
-            rpcs.insert("getAthlete", ["Year"].as_slice());
-            rpcs.insert("getCityForYear", ["Year"].as_slice());
-            rpcs.insert("getCountry", ["Year"].as_slice());
-            rpcs.insert("getDiscipline", ["Year"].as_slice());
-            rpcs.insert("getEvent", ["Year"].as_slice());
-            rpcs.insert("getGender", ["Year"].as_slice());
-            rpcs.insert("getMedal", ["Year"].as_slice());
-            rpcs.insert("getSport", ["Year"].as_slice());
-            rpcs
-        });
-        services.insert("TemperatureDatabase", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAerosolsByYear", [].as_slice());
-            rpcs.insert("getAerosolsColumn", [].as_slice());
-            rpcs.insert("getAllByYear", [].as_slice());
-            rpcs.insert("getAllColumn", [].as_slice());
-            rpcs.insert("getAnnualMeanByYear", [].as_slice());
-            rpcs.insert("getAnnualMeanColumn", [].as_slice());
-            rpcs.insert("getGreenhouseGasByYear", [].as_slice());
-            rpcs.insert("getGreenhouseGasColumn", [].as_slice());
-            rpcs.insert("getHumanByYear", [].as_slice());
-            rpcs.insert("getHumanColumn", [].as_slice());
-            rpcs.insert("getLandUseByYear", [].as_slice());
-            rpcs.insert("getLandUseColumn", [].as_slice());
-            rpcs.insert("getNaturalByYear", [].as_slice());
-            rpcs.insert("getNaturalColumn", [].as_slice());
-            rpcs.insert("getOrbitByYear", [].as_slice());
-            rpcs.insert("getOrbitColumn", [].as_slice());
-            rpcs.insert("getOzoneByYear", [].as_slice());
-            rpcs.insert("getOzoneColumn", [].as_slice());
-            rpcs.insert("getSolarByYear", [].as_slice());
-            rpcs.insert("getSolarColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["Year", "column name"].as_slice());
-            rpcs.insert("getVolcanismByYear", [].as_slice());
-            rpcs.insert("getVolcanismColumn", [].as_slice());
-            rpcs.insert("getYearColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("TheMapotakes's First Service", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAwayScoreSum", [].as_slice());
-            rpcs.insert("getDateColumn", [].as_slice());
-            rpcs.insert("getHomeScoreSum", [].as_slice());
-            rpcs
-        });
-        services.insert("Thingspeak", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("channelDetails", ["id"].as_slice());
-            rpcs.insert("channelFeed", ["id", "numResult"].as_slice());
-            rpcs.insert("privateChannelFeed", ["id", "numResult", "apiKey"].as_slice());
-            rpcs.insert("searchByLocation", ["latitude", "longitude", "distance", "limit", "updatedSince"].as_slice());
-            rpcs.insert("searchByTag", ["tag", "limit", "updatedSince"].as_slice());
-            rpcs.insert("searchByTagAndLocation", ["tag", "latitude", "longitude", "distance", "limit", "updatedSince"].as_slice());
-            rpcs
-        });
-        services.insert("ThisXDoesNotExist", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getArtwork", [].as_slice());
-            rpcs.insert("getCat", [].as_slice());
-            rpcs.insert("getCongressPerson", [].as_slice());
-            rpcs.insert("getFursona", [].as_slice());
-            rpcs.insert("getHomeInterior", [].as_slice());
-            rpcs.insert("getHorse", [].as_slice());
-            rpcs.insert("getPerson", [].as_slice());
-            rpcs.insert("getPony", [].as_slice());
-            rpcs.insert("getWaifu", [].as_slice());
-            rpcs
-        });
-        services.insert("Tobacco Consumption", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllMeasureValues", [].as_slice());
-            rpcs.insert("getCountry", ["Measure"].as_slice());
-            rpcs.insert("getValue", ["Measure"].as_slice());
-            rpcs.insert("getYEA", ["Measure"].as_slice());
-            rpcs.insert("getYear", ["Measure"].as_slice());
-            rpcs
-        });
-        services.insert("Translation", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("detectLanguage", ["text"].as_slice());
-            rpcs.insert("getSupportedLanguages", [].as_slice());
-            rpcs.insert("toEnglish", ["text"].as_slice());
-            rpcs.insert("translate", ["text", "from", "to"].as_slice());
-            rpcs
-        });
-        services.insert("Trivia", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getRandomQuestion", [].as_slice());
-            rpcs.insert("random", [].as_slice());
-            rpcs
-        });
-        services.insert("TwentyQuestions", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("answer", ["answer"].as_slice());
-            rpcs.insert("gameStarted", [].as_slice());
-            rpcs.insert("guess", ["guess"].as_slice());
-            rpcs.insert("restart", [].as_slice());
-            rpcs.insert("start", ["answer"].as_slice());
-            rpcs
-        });
-        services.insert("Twitter", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("favorites", ["screenName", "count"].as_slice());
-            rpcs.insert("favoritesCount", ["screenName"].as_slice());
-            rpcs.insert("followers", ["screenName"].as_slice());
-            rpcs.insert("recentTweets", ["screenName", "count"].as_slice());
-            rpcs.insert("search", ["keyword", "count"].as_slice());
-            rpcs.insert("tweets", ["screenName"].as_slice());
-            rpcs.insert("tweetsPerDay", ["screenName"].as_slice());
-            rpcs
-        });
-        services.insert("Vaping", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllMeasureValues", [].as_slice());
-            rpcs.insert("getCountry", ["Measure"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["Measure"].as_slice());
-            rpcs.insert("getYear", ["Measure"].as_slice());
-            rpcs
-        });
-        services.insert("Vostok Temperatures", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllTemperatureValues", [].as_slice());
-            rpcs.insert("getAllYearValues", [].as_slice());
-            rpcs.insert("getRecord", ["Year"].as_slice());
-            rpcs.insert("getTemperature", ["Year"].as_slice());
-            rpcs
-        });
-        services.insert("Water Quality", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAllWellValues", [].as_slice());
-            rpcs.insert("getDate", ["Well"].as_slice());
-            rpcs.insert("getQuality", ["Well"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs
-        });
-        services.insert("WaterWatch", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("gageHeight", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice());
-            rpcs.insert("stop", [].as_slice());
-            rpcs.insert("streamFlow", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice());
-            rpcs.insert("waterTemp", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice());
-            rpcs
-        });
-        services.insert("WaypointList", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getDevices", [].as_slice());
-            rpcs.insert("getNextWaypoint", ["id"].as_slice());
-            rpcs.insert("listen", ["id"].as_slice());
-            rpcs
-        });
-        services.insert("Weather", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("description", ["latitude", "longitude"].as_slice());
-            rpcs.insert("humidity", ["latitude", "longitude"].as_slice());
-            rpcs.insert("icon", ["latitude", "longitude"].as_slice());
-            rpcs.insert("temp", ["latitude", "longitude"].as_slice());
-            rpcs.insert("temperature", ["latitude", "longitude"].as_slice());
-            rpcs.insert("windAngle", ["latitude", "longitude"].as_slice());
-            rpcs.insert("windSpeed", ["latitude", "longitude"].as_slice());
-            rpcs
-        });
-        services.insert("Well Data", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get1222021", ["Well A"].as_slice());
-            rpcs.insert("get172", ["Well A"].as_slice());
-            rpcs.insert("getAllWellAValues", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs
-        });
-        services.insert("Wildcam", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getCameras", ["latitude", "longitude", "radius"].as_slice());
-            rpcs.insert("getImage", ["entry"].as_slice());
-            rpcs.insert("getSpeciesList", [].as_slice());
-            rpcs.insert("search", ["startDate", "stopDate", "species", "latitude", "longitude", "radius"].as_slice());
-            rpcs.insert("searchByCamera", ["startDate", "stopDate", "species", "camera"].as_slice());
-            rpcs
-        });
-        services.insert("WordGuess", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getWordList", ["length"].as_slice());
-            rpcs.insert("giveUp", [].as_slice());
-            rpcs.insert("guess", ["word"].as_slice());
-            rpcs.insert("start", ["length"].as_slice());
-            rpcs
-        });
-        services.insert("brian's First Service", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAwayScoreByDate", [].as_slice());
-            rpcs.insert("getAwayScoreColumn", [].as_slice());
-            rpcs.insert("getAwayTeamByDate", [].as_slice());
-            rpcs.insert("getAwayTeamColumn", [].as_slice());
-            rpcs.insert("getCityByDate", [].as_slice());
-            rpcs.insert("getCityColumn", [].as_slice());
-            rpcs.insert("getCountryColumn", [].as_slice());
-            rpcs.insert("getDateColumn", [].as_slice());
-            rpcs.insert("getHomeScoreByDate", [].as_slice());
-            rpcs.insert("getHomeScoreColumn", [].as_slice());
-            rpcs.insert("getHomeTeamByDate", [].as_slice());
-            rpcs.insert("getHomeTeamColumn", [].as_slice());
-            rpcs
-        });
-        services.insert("brian's soccer service", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAwayScoreByDate", [].as_slice());
-            rpcs.insert("getAwayScoreColumn", [].as_slice());
-            rpcs.insert("getAwayTeamByDate", [].as_slice());
-            rpcs.insert("getAwayTeamColumn", [].as_slice());
-            rpcs.insert("getCityByDate", [].as_slice());
-            rpcs.insert("getCityColumn", [].as_slice());
-            rpcs.insert("getCountryByDate", [].as_slice());
-            rpcs.insert("getCountryColumn", [].as_slice());
-            rpcs.insert("getDateColumn", [].as_slice());
-            rpcs.insert("getHomeScoreByDate", [].as_slice());
-            rpcs.insert("getHomeScoreColumn", [].as_slice());
-            rpcs.insert("getHomeTeamByDate", [].as_slice());
-            rpcs.insert("getHomeTeamColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["date", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("cbradyisTestingFromCSV", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAreaByIndex", [].as_slice());
-            rpcs.insert("getAreaColumn", [].as_slice());
-            rpcs.insert("getIndexColumn", [].as_slice());
-            rpcs.insert("getPerimeterByIndex", [].as_slice());
-            rpcs.insert("getPerimeterColumn", [].as_slice());
-            rpcs.insert("getRadiusByIndex", [].as_slice());
-            rpcs.insert("getRadiusColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["index", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("classhole", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAColumn", [].as_slice());
-            rpcs.insert("getBByA", [].as_slice());
-            rpcs.insert("getBColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["a", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("coreys-soccer-wtih-options", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAwayScoreByDate", [].as_slice());
-            rpcs.insert("getAwayScoreColumn", [].as_slice());
-            rpcs.insert("getAwayTeamByDate", [].as_slice());
-            rpcs.insert("getAwayTeamColumn", [].as_slice());
-            rpcs.insert("getCityByDate", [].as_slice());
-            rpcs.insert("getCityColumn", [].as_slice());
-            rpcs.insert("getCountryByDate", [].as_slice());
-            rpcs.insert("getCountryColumn", [].as_slice());
-            rpcs.insert("getDateColumn", [].as_slice());
-            rpcs.insert("getHomeScoreByDate", [].as_slice());
-            rpcs.insert("getHomeScoreColumn", [].as_slice());
-            rpcs.insert("getHomeTeamByDate", [].as_slice());
-            rpcs.insert("getHomeTeamColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["date", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("dummy", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get12ByA", [].as_slice());
-            rpcs.insert("get12Column", [].as_slice());
-            rpcs.insert("getAColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["A", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("empty service", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get0By0", [].as_slice());
-            rpcs.insert("get0Column", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["0", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("myfirstservice", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAForA", ["a"].as_slice());
-            rpcs.insert("getAllAValues", [].as_slice());
-            rpcs.insert("getBForA", ["a"].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs
-        });
-        services.insert("myservice", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAColumn", [].as_slice());
-            rpcs.insert("getBByA", [].as_slice());
-            rpcs.insert("getBColumn", [].as_slice());
-            rpcs.insert("getCByA", [].as_slice());
-            rpcs.insert("getCColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["a", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("myservice1", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get1ByA", [].as_slice());
-            rpcs.insert("get1Column", [].as_slice());
-            rpcs.insert("getAColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["a", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("soccer", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("getAwayScoreByDate", [].as_slice());
-            rpcs.insert("getAwayScoreColumn", [].as_slice());
-            rpcs.insert("getAwayTeamByDate", [].as_slice());
-            rpcs.insert("getAwayTeamColumn", [].as_slice());
-            rpcs.insert("getCityByDate", [].as_slice());
-            rpcs.insert("getCityColumn", [].as_slice());
-            rpcs.insert("getCountryByDate", [].as_slice());
-            rpcs.insert("getCountryColumn", [].as_slice());
-            rpcs.insert("getDateColumn", [].as_slice());
-            rpcs.insert("getHomeScoreByDate", [].as_slice());
-            rpcs.insert("getHomeScoreColumn", [].as_slice());
-            rpcs.insert("getHomeTeamByDate", [].as_slice());
-            rpcs.insert("getHomeTeamColumn", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["date", "column name"].as_slice());
-            rpcs
-        });
-        services.insert("test1", {
-            let mut rpcs = BTreeMap::new();
-            rpcs.insert("get1Column", [].as_slice());
-            rpcs.insert("get2By1", [].as_slice());
-            rpcs.insert("get2Column", [].as_slice());
-            rpcs.insert("get3By1", [].as_slice());
-            rpcs.insert("get3Column", [].as_slice());
-            rpcs.insert("getTable", [].as_slice());
-            rpcs.insert("getValue", ["1", "column name"].as_slice());
-            rpcs
-        });
-        services
-    };
-}
+pub(crate) const SERVICE_INFO: &'static [(&'static str, &'static [(&'static str, &'static [&'static str])])] = [
+    ("AirQuality", [
+        ("aqi", ["latitude", "longitude"].as_slice()),
+        ("qualityIndex", ["latitude", "longitude"].as_slice()),
+        ("qualityIndexByZipCode", ["zipCode"].as_slice()),
+    ].as_slice()),
+    ("Alcohol Consumption", [
+        ("getAllCountryValues", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValueLitresPerCapita15", ["Country"].as_slice()),
+        ("getYEA", ["Country"].as_slice()),
+        ("getYear", ["Country"].as_slice()),
+    ].as_slice()),
+    ("Alexa", [
+        ("createSkill", ["configuration"].as_slice()),
+        ("deleteSkill", ["ID"].as_slice()),
+        ("getSkill", ["ID"].as_slice()),
+        ("getSkillCategories", [].as_slice()),
+        ("getSlotTypes", [].as_slice()),
+        ("invokeSkill", ["ID", "utterance"].as_slice()),
+        ("listSkills", [].as_slice()),
+        ("updateSkill", ["ID", "configuration"].as_slice()),
+    ].as_slice()),
+    ("Autograders", [
+        ("createAutograder", ["configuration"].as_slice()),
+        ("getAutograderConfig", ["name"].as_slice()),
+        ("getAutograders", [].as_slice()),
+    ].as_slice()),
+    ("Avoidable Death", [
+        ("getAllVariableValues", [].as_slice()),
+        ("getCountry", ["Variable"].as_slice()),
+        ("getDeathPer100000", ["Variable"].as_slice()),
+        ("getMeasure", ["Variable"].as_slice()),
+        ("getYear", ["Variable"].as_slice()),
+    ].as_slice()),
+    ("BaseX", [
+        ("command", ["url", "command", "username", "password"].as_slice()),
+        ("query", ["url", "database", "query", "username", "password"].as_slice()),
+    ].as_slice()),
+    ("Battleship", [
+        ("allShips", [].as_slice()),
+        ("fire", ["row", "column"].as_slice()),
+        ("placeShip", ["ship", "row", "column", "facing"].as_slice()),
+        ("remainingShips", ["roleID"].as_slice()),
+        ("reset", [].as_slice()),
+        ("shipLength", ["ship"].as_slice()),
+        ("start", [].as_slice()),
+    ].as_slice()),
+    ("BingTraffic", [
+        ("search", ["westLongitude", "northLatitude", "eastLongitude", "southLatitude"].as_slice()),
+        ("stop", [].as_slice()),
+    ].as_slice()),
+    ("CARES data", [
+        ("get1222021", ["Well A"].as_slice()),
+        ("get172", ["Well A"].as_slice()),
+        ("getAllWellAValues", [].as_slice()),
+        ("getTable", [].as_slice()),
+    ].as_slice()),
+    ("COVID-19", [
+        ("getConfirmedCounts", ["country", "state", "city"].as_slice()),
+        ("getDeathCounts", ["country", "state", "city"].as_slice()),
+        ("getLocationCoordinates", ["country", "state", "city"].as_slice()),
+        ("getLocationsWithData", [].as_slice()),
+        ("getRecoveredCounts", ["country", "state", "city"].as_slice()),
+        ("getVaccinationCategories", [].as_slice()),
+        ("getVaccinationCountries", [].as_slice()),
+        ("getVaccinationData", ["country", "state", "category", "startDate", "endDate"].as_slice()),
+        ("getVaccinationStates", [].as_slice()),
+    ].as_slice()),
+    ("COVID-19 Estimated ICU Beds", [
+        ("getAllStateValues", [].as_slice()),
+        ("getCollectionDate", ["state"].as_slice()),
+        ("getCountLL", ["state"].as_slice()),
+        ("getCountUL", ["state"].as_slice()),
+        ("getGeocodedStateForState", ["state"].as_slice()),
+        ("getPercentageLL", ["state"].as_slice()),
+        ("getPercentageOfStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice()),
+        ("getPercentageUL", ["state"].as_slice()),
+        ("getStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getTotalLL", ["state"].as_slice()),
+        ("getTotalStaffedAdultICUBeds", ["state"].as_slice()),
+        ("getTotalUL", ["state"].as_slice()),
+    ].as_slice()),
+    ("COVID-19 ICU Bed", [
+        ("getAllStateValues", [].as_slice()),
+        ("getCollectionDate", ["state"].as_slice()),
+        ("getPercentageOfStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice()),
+        ("getStaffedAdultICUBedsOccupiedEstimated", ["state"].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getTotalStaffedAdultICUBeds", ["state"].as_slice()),
+    ].as_slice()),
+    ("CS PhDs By Ethnicity", [
+        ("getAsianByYear", [].as_slice()),
+        ("getAsianColumn", [].as_slice()),
+        ("getBlackByYear", [].as_slice()),
+        ("getBlackColumn", [].as_slice()),
+        ("getHispanicByYear", [].as_slice()),
+        ("getHispanicColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["Year", "column name"].as_slice()),
+        ("getWhiteByYear", [].as_slice()),
+        ("getWhiteColumn", [].as_slice()),
+        ("getYearColumn", [].as_slice()),
+    ].as_slice()),
+    ("Cape Grim CO2", [
+        ("getAllCO2PpmValues", [].as_slice()),
+        ("getAllDATEValues", [].as_slice()),
+        ("getCO2Ppm", ["DATE"].as_slice()),
+        ("getRecord", ["DATE"].as_slice()),
+    ].as_slice()),
+    ("Chart", [
+        ("defaultOptions", [].as_slice()),
+        ("draw", ["lines", "options"].as_slice()),
+        ("drawBarChart", ["dataset", "xAxisTag", "yAxisTag", "datasetTag", "title"].as_slice()),
+        ("drawLineChart", ["dataset", "xAxisTag", "yAxisTag", "datasetTag", "title"].as_slice()),
+    ].as_slice()),
+    ("Climate Forcings", [
+        ("getAerosolsByYear", [].as_slice()),
+        ("getAerosolsColumn", [].as_slice()),
+        ("getAllByYear", [].as_slice()),
+        ("getAllColumn", [].as_slice()),
+        ("getAnnualMeanByYear", [].as_slice()),
+        ("getAnnualMeanColumn", [].as_slice()),
+        ("getGreenhouseGasByYear", [].as_slice()),
+        ("getGreenhouseGasColumn", [].as_slice()),
+        ("getHumanByYear", [].as_slice()),
+        ("getHumanColumn", [].as_slice()),
+        ("getLandUseByYear", [].as_slice()),
+        ("getLandUseColumn", [].as_slice()),
+        ("getNaturalByYear", [].as_slice()),
+        ("getNaturalColumn", [].as_slice()),
+        ("getOrbitByYear", [].as_slice()),
+        ("getOrbitColumn", [].as_slice()),
+        ("getOzoneByYear", [].as_slice()),
+        ("getOzoneColumn", [].as_slice()),
+        ("getSolarByYear", [].as_slice()),
+        ("getSolarColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["Year", "column name"].as_slice()),
+        ("getVolcanismByYear", [].as_slice()),
+        ("getVolcanismColumn", [].as_slice()),
+        ("getYearColumn", [].as_slice()),
+    ].as_slice()),
+    ("CloudVariables", [
+        ("deleteUserVariable", ["name"].as_slice()),
+        ("deleteVariable", ["name", "password"].as_slice()),
+        ("getUserVariable", ["name"].as_slice()),
+        ("getVariable", ["name", "password"].as_slice()),
+        ("listenToUserVariable", ["name", "msgType", "duration"].as_slice()),
+        ("listenToVariable", ["name", "msgType", "password", "duration"].as_slice()),
+        ("lockVariable", ["name", "password"].as_slice()),
+        ("setUserVariable", ["name", "value"].as_slice()),
+        ("setVariable", ["name", "value", "password"].as_slice()),
+        ("unlockVariable", ["name", "password"].as_slice()),
+    ].as_slice()),
+    ("ConnectN", [
+        ("isFullBoard", [].as_slice()),
+        ("isGameOver", [].as_slice()),
+        ("newGame", ["row", "column", "numDotsToConnect"].as_slice()),
+        ("play", ["row", "column"].as_slice()),
+    ].as_slice()),
+    ("Coral Growth Anomaly", [
+        ("getCoralGrowthAnomalyByYEAR", [].as_slice()),
+        ("getCoralGrowthAnomalyColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["YEAR", "column name"].as_slice()),
+        ("getYEARColumn", [].as_slice()),
+    ].as_slice()),
+    ("CoreNLP", [
+        ("annotate", ["text", "annotators"].as_slice()),
+        ("getAnnotators", [].as_slice()),
+    ].as_slice()),
+    ("DailyWordGuess", [
+        ("getWordList", [].as_slice()),
+        ("giveUp", [].as_slice()),
+        ("guess", ["word"].as_slice()),
+        ("timeRemaining", [].as_slice()),
+        ("triesRemaining", [].as_slice()),
+    ].as_slice()),
+    ("DrugOverdose", [
+        ("getNumberAllByYear", [].as_slice()),
+        ("getNumberAllColumn", [].as_slice()),
+        ("getNumberOpioidAnyByYear", [].as_slice()),
+        ("getNumberOpioidAnyColumn", [].as_slice()),
+        ("getNumberOpioidCocaineByYear", [].as_slice()),
+        ("getNumberOpioidCocaineColumn", [].as_slice()),
+        ("getNumberOpioidHeroinByYear", [].as_slice()),
+        ("getNumberOpioidHeroinColumn", [].as_slice()),
+        ("getNumberOpioidPrescriptionByYear", [].as_slice()),
+        ("getNumberOpioidPrescriptionColumn", [].as_slice()),
+        ("getNumberOpioidSyntheticByYear", [].as_slice()),
+        ("getNumberOpioidSyntheticColumn", [].as_slice()),
+        ("getRateAllRaceAmericanIndianOrAlaskaNativeByYear", [].as_slice()),
+        ("getRateAllRaceAmericanIndianOrAlaskaNativeColumn", [].as_slice()),
+        ("getRateAllRaceAsianOrPacificIslanderByYear", [].as_slice()),
+        ("getRateAllRaceAsianOrPacificIslanderColumn", [].as_slice()),
+        ("getRateAllRaceBlackByYear", [].as_slice()),
+        ("getRateAllRaceBlackColumn", [].as_slice()),
+        ("getRateAllRaceHispanicByYear", [].as_slice()),
+        ("getRateAllRaceHispanicColumn", [].as_slice()),
+        ("getRateAllRaceWhiteByYear", [].as_slice()),
+        ("getRateAllRaceWhiteColumn", [].as_slice()),
+        ("getRateAllSexFemaleByYear", [].as_slice()),
+        ("getRateAllSexFemaleColumn", [].as_slice()),
+        ("getRateAllSexMaleByYear", [].as_slice()),
+        ("getRateAllSexMaleColumn", [].as_slice()),
+        ("getRateAllTotalByYear", [].as_slice()),
+        ("getRateAllTotalColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["Year", "column name"].as_slice()),
+        ("getYearColumn", [].as_slice()),
+    ].as_slice()),
+    ("EarthOrbit", [
+        ("getEccentricity", ["startyear", "endyear"].as_slice()),
+        ("getInsolation", ["startyear", "endyear"].as_slice()),
+        ("getLongitude", ["startyear", "endyear"].as_slice()),
+        ("getObliquity", ["startyear", "endyear"].as_slice()),
+        ("getPrecession", ["startyear", "endyear"].as_slice()),
+    ].as_slice()),
+    ("Earthquakes", [
+        ("byRegion", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude", "startTime", "endTime", "minMagnitude", "maxMagnitude"].as_slice()),
+        ("stop", [].as_slice()),
+    ].as_slice()),
+    ("Eclipse2017", [
+        ("availableStations", ["maxReadingMedian", "maxDistanceFromCenter", "latitude", "longitude", "maxDistanceFromPoint"].as_slice()),
+        ("condition", ["stationId"].as_slice()),
+        ("conditionHistory", ["stationId", "limit"].as_slice()),
+        ("conditionHistoryRange", ["stationId", "startTime", "endTime"].as_slice()),
+        ("eclipsePath", [].as_slice()),
+        ("pastCondition", ["stationId", "time"].as_slice()),
+        ("pastTemperature", ["stationId", "time"].as_slice()),
+        ("selectPointBased", [].as_slice()),
+        ("selectSectionBased", ["numSections", "perSection"].as_slice()),
+        ("stationInfo", ["stationId"].as_slice()),
+        ("stations", [].as_slice()),
+        ("stationsInfo", [].as_slice()),
+        ("temperature", ["stationId"].as_slice()),
+        ("temperatureHistory", ["stationId", "limit"].as_slice()),
+        ("temperatureHistoryRange", ["stationId", "startTime", "endTime"].as_slice()),
+    ].as_slice()),
+    ("Execute", [
+        ("call", ["fn"].as_slice()),
+    ].as_slice()),
+    ("Fairbanks Weather", [
+        ("getAllDATEValues", [].as_slice()),
+        ("getAllPRCPValues", [].as_slice()),
+        ("getAllSNOWValues", [].as_slice()),
+        ("getAllTMAXValues", [].as_slice()),
+        ("getAllTMINValues", [].as_slice()),
+        ("getAllTOBSValues", [].as_slice()),
+        ("getPRCP", ["DATE"].as_slice()),
+        ("getRecord", ["DATE"].as_slice()),
+        ("getSNOW", ["DATE"].as_slice()),
+        ("getTMAX", ["DATE"].as_slice()),
+        ("getTMIN", ["DATE"].as_slice()),
+        ("getTOBS", ["DATE"].as_slice()),
+    ].as_slice()),
+    ("Franklin Temperatures", [
+        ("getAllDATEValues", [].as_slice()),
+        ("getAllTMAXValues", [].as_slice()),
+        ("getAllTMINValues", [].as_slice()),
+        ("getAllTOBSValues", [].as_slice()),
+        ("getRecord", ["DATE"].as_slice()),
+        ("getTMAX", ["DATE"].as_slice()),
+        ("getTMIN", ["DATE"].as_slice()),
+        ("getTOBS", ["DATE"].as_slice()),
+    ].as_slice()),
+    ("GDPTrend", [
+        ("getChinaByYear", [].as_slice()),
+        ("getChinaColumn", [].as_slice()),
+        ("getGermanyByYear", [].as_slice()),
+        ("getGermanyColumn", [].as_slice()),
+        ("getJapanByYear", [].as_slice()),
+        ("getJapanColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getUnitedStatesByYear", [].as_slice()),
+        ("getUnitedStatesColumn", [].as_slice()),
+        ("getValue", ["Year", "column name"].as_slice()),
+        ("getYearColumn", [].as_slice()),
+    ].as_slice()),
+    ("Genius", [
+        ("getArtist", ["ID"].as_slice()),
+        ("getSong", ["ID"].as_slice()),
+        ("getSongLyrics", ["ID"].as_slice()),
+        ("getSongsByArtist", ["ID"].as_slice()),
+        ("searchSongs", ["query"].as_slice()),
+    ].as_slice()),
+    ("Geolocation", [
+        ("city", ["latitude", "longitude"].as_slice()),
+        ("country", ["latitude", "longitude"].as_slice()),
+        ("countryCode", ["latitude", "longitude"].as_slice()),
+        ("county*", ["latitude", "longitude"].as_slice()),
+        ("geolocate", ["address"].as_slice()),
+        ("info", ["latitude", "longitude"].as_slice()),
+        ("nearbySearch", ["latitude", "longitude", "keyword", "radius"].as_slice()),
+        ("state*", ["latitude", "longitude"].as_slice()),
+        ("stateCode*", ["latitude", "longitude"].as_slice()),
+        ("streetAddress", ["address"].as_slice()),
+        ("timezone", ["address"].as_slice()),
+    ].as_slice()),
+    ("GlobalLandTemperature", [
+        ("get10YearAverage", ["Date"].as_slice()),
+        ("getAll10YearAverageValues", [].as_slice()),
+        ("getAllAnnualValues", [].as_slice()),
+        ("getAllDateValues", [].as_slice()),
+        ("getAllMonthlyValues", [].as_slice()),
+        ("getAnnual", ["Date"].as_slice()),
+        ("getMonthly", ["Date"].as_slice()),
+        ("getRecord", ["Date"].as_slice()),
+    ].as_slice()),
+    ("GoogleMaps", [
+        ("getDistance", ["startLatitude", "startLongitude", "endLatitude", "endLongitude"].as_slice()),
+        ("getEarthCoordinates", ["x", "y"].as_slice()),
+        ("getImageCoordinates", ["latitude", "longitude"].as_slice()),
+        ("getLatitude", ["y"].as_slice()),
+        ("getLatitudeFromY", ["y"].as_slice()),
+        ("getLongitude", ["x"].as_slice()),
+        ("getLongitudeFromX", ["x"].as_slice()),
+        ("getMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice()),
+        ("getSatelliteMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice()),
+        ("getTerrainMap", ["latitude", "longitude", "width", "height", "zoom"].as_slice()),
+        ("getXFromLongitude", ["longitude"].as_slice()),
+        ("getYFromLatitude", ["latitude"].as_slice()),
+        ("maxLatitude", [].as_slice()),
+        ("maxLongitude", [].as_slice()),
+        ("minLatitude", [].as_slice()),
+        ("minLongitude", [].as_slice()),
+    ].as_slice()),
+    ("GoogleStreetView", [
+        ("getInfo", ["latitude", "longitude", "fieldofview", "heading", "pitch"].as_slice()),
+        ("getInfoFromAddress", ["location", "fieldofview", "heading", "pitch"].as_slice()),
+        ("getView", ["latitude", "longitude", "width", "height", "fieldofview", "heading", "pitch"].as_slice()),
+        ("getViewFromAddress", ["location", "width", "height", "fieldofview", "heading", "pitch"].as_slice()),
+        ("getViewFromLatLong", ["latitude", "longitude", "width", "height", "fieldofview", "heading", "pitch"].as_slice()),
+        ("isAvailable", ["latitude", "longitude", "fieldofview", "heading", "pitch"].as_slice()),
+        ("isAvailableFromAddress", ["location", "fieldofview", "heading", "pitch"].as_slice()),
+    ].as_slice()),
+    ("HPV Vaccination", [
+        ("getAllSexValues", [].as_slice()),
+        ("getAnnualPercentChangeAPC", ["Sex"].as_slice()),
+        ("getAverageAnnualPercentChangeAAPC", ["Sex"].as_slice()),
+        ("getHealthyPeople2020TargetForSex", ["Sex"].as_slice()),
+        ("getPercent", ["Sex"].as_slice()),
+        ("getPercentTrendLine", ["Sex"].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getYear", ["Sex"].as_slice()),
+    ].as_slice()),
+    ("Hangman", [
+        ("getCurrentlyKnownWord", [].as_slice()),
+        ("getWrongCount", [].as_slice()),
+        ("guess", ["letter"].as_slice()),
+        ("isWordGuessed", [].as_slice()),
+        ("setWord", ["word"].as_slice()),
+    ].as_slice()),
+    ("HistoricalTemperature", [
+        ("annualAnomaly", ["region"].as_slice()),
+        ("fiveYearAnomaly", ["region"].as_slice()),
+        ("monthlyAnomaly", ["region"].as_slice()),
+        ("tenYearAnomaly", ["region"].as_slice()),
+        ("twentyYearAnomaly", ["region"].as_slice()),
+    ].as_slice()),
+    ("HumanMortalityDatabase", [
+        ("getAllData", [].as_slice()),
+        ("getAllDataForCountry", ["country"].as_slice()),
+        ("getCategories", [].as_slice()),
+        ("getCountries", [].as_slice()),
+        ("getGenders", [].as_slice()),
+        ("getTimeSeries", ["country", "gender", "category"].as_slice()),
+    ].as_slice()),
+    ("HurricaneData", [
+        ("getHurricaneData", ["name", "year"].as_slice()),
+        ("getHurricanesInYear", ["year"].as_slice()),
+        ("getYearsWithHurricaneNamed", ["name"].as_slice()),
+    ].as_slice()),
+    ("IceCoreData", [
+        ("getCarbonDioxideData", ["core", "startyear", "endyear"].as_slice()),
+        ("getDataAvailability", [].as_slice()),
+        ("getDelta18OData", ["core", "startyear", "endyear"].as_slice()),
+        ("getDeuteriumData", ["core", "startyear", "endyear"].as_slice()),
+        ("getIceCoreMetadata", ["core"].as_slice()),
+        ("getIceCoreNames", [].as_slice()),
+        ("getTemperatureData", ["core", "startyear", "endyear"].as_slice()),
+    ].as_slice()),
+    ("IoTScape", [
+        ("getDevices", ["service"].as_slice()),
+        ("getMessageTypes", ["service"].as_slice()),
+        ("getServices", [].as_slice()),
+        ("send", ["service", "id", "command"].as_slice()),
+    ].as_slice()),
+    ("KeyValueStore", [
+        ("child", ["key", "password"].as_slice()),
+        ("delete", ["key", "password"].as_slice()),
+        ("get", ["key", "password"].as_slice()),
+        ("parent", ["key"].as_slice()),
+        ("put", ["key", "value", "password"].as_slice()),
+    ].as_slice()),
+    ("LIDARSensor", [
+        ("getDevices", [].as_slice()),
+        ("getRange", ["id"].as_slice()),
+        ("listen", ["id"].as_slice()),
+    ].as_slice()),
+    ("LandOceanTemperatureIndex", [
+        ("getAllAprValues", [].as_slice()),
+        ("getAllAugValues", [].as_slice()),
+        ("getAllDJFValues", [].as_slice()),
+        ("getAllDNValues", [].as_slice()),
+        ("getAllDecValues", [].as_slice()),
+        ("getAllFebValues", [].as_slice()),
+        ("getAllJDValues", [].as_slice()),
+        ("getAllJJAValues", [].as_slice()),
+        ("getAllJanValues", [].as_slice()),
+        ("getAllJulValues", [].as_slice()),
+        ("getAllJunValues", [].as_slice()),
+        ("getAllMAMValues", [].as_slice()),
+        ("getAllMarValues", [].as_slice()),
+        ("getAllMayValues", [].as_slice()),
+        ("getAllNovValues", [].as_slice()),
+        ("getAllOctValues", [].as_slice()),
+        ("getAllSONValues", [].as_slice()),
+        ("getAllSepValues", [].as_slice()),
+        ("getAllYearValues", [].as_slice()),
+        ("getApr", ["Year"].as_slice()),
+        ("getAug", ["Year"].as_slice()),
+        ("getDJF", ["Year"].as_slice()),
+        ("getDN", ["Year"].as_slice()),
+        ("getDec", ["Year"].as_slice()),
+        ("getFeb", ["Year"].as_slice()),
+        ("getJD", ["Year"].as_slice()),
+        ("getJJA", ["Year"].as_slice()),
+        ("getJan", ["Year"].as_slice()),
+        ("getJul", ["Year"].as_slice()),
+        ("getJun", ["Year"].as_slice()),
+        ("getMAM", ["Year"].as_slice()),
+        ("getMar", ["Year"].as_slice()),
+        ("getMay", ["Year"].as_slice()),
+        ("getNov", ["Year"].as_slice()),
+        ("getOct", ["Year"].as_slice()),
+        ("getRecord", ["Year"].as_slice()),
+        ("getSON", ["Year"].as_slice()),
+        ("getSep", ["Year"].as_slice()),
+    ].as_slice()),
+    ("MaunaLoaCO2Data", [
+        ("getCO2Trend", ["startyear", "endyear"].as_slice()),
+        ("getRawCO2", ["startyear", "endyear"].as_slice()),
+    ].as_slice()),
+    ("MetMuseum", [
+        ("advancedSearch", ["field", "query", "skip", "limit"].as_slice()),
+        ("fields", [].as_slice()),
+        ("getImageUrls", ["id"].as_slice()),
+        ("getInfo", ["id"].as_slice()),
+        ("searchByArtistDisplayBio", ["query"].as_slice()),
+        ("searchByArtistDisplayName", ["query"].as_slice()),
+        ("searchByClassification", ["query"].as_slice()),
+        ("searchByCountry", ["query"].as_slice()),
+        ("searchByCreditLine", ["query"].as_slice()),
+        ("searchByDepartment", ["query"].as_slice()),
+        ("searchByDimensions", ["query"].as_slice()),
+        ("searchByIsHighlight", ["query"].as_slice()),
+        ("searchByMedium", ["query"].as_slice()),
+        ("searchByObjectDate", ["query"].as_slice()),
+        ("searchByObjectName", ["query"].as_slice()),
+        ("searchByRepository", ["query"].as_slice()),
+        ("searchByTitle", ["query"].as_slice()),
+    ].as_slice()),
+    ("MetalDetector", [
+        ("dig", ["id"].as_slice()),
+        ("getDevices", [].as_slice()),
+        ("getIntensity", ["id"].as_slice()),
+        ("listen", ["id"].as_slice()),
+    ].as_slice()),
+    ("MovieDB", [
+        ("getImage", ["path"].as_slice()),
+        ("movieBackdropPath", ["id"].as_slice()),
+        ("movieBudget", ["id"].as_slice()),
+        ("movieCastCharacters", ["id"].as_slice()),
+        ("movieCastNames", ["id"].as_slice()),
+        ("movieCastPersonIDs", ["id"].as_slice()),
+        ("movieCastProfilePaths", ["id"].as_slice()),
+        ("movieCrewJobs", ["id"].as_slice()),
+        ("movieCrewNames", ["id"].as_slice()),
+        ("movieCrewPersonIDs", ["id"].as_slice()),
+        ("movieCrewProfilePaths", ["id"].as_slice()),
+        ("movieGenres", ["id"].as_slice()),
+        ("movieOriginalLanguage", ["id"].as_slice()),
+        ("movieOriginalTitle", ["id"].as_slice()),
+        ("movieOverview", ["id"].as_slice()),
+        ("moviePopularity", ["id"].as_slice()),
+        ("moviePosterPath", ["id"].as_slice()),
+        ("movieProductionCompanies", ["id"].as_slice()),
+        ("movieProductionCountries", ["id"].as_slice()),
+        ("movieReleaseDate", ["id"].as_slice()),
+        ("movieRevenue", ["id"].as_slice()),
+        ("movieRuntime", ["id"].as_slice()),
+        ("movieSpokenLanguages", ["id"].as_slice()),
+        ("movieTagline", ["id"].as_slice()),
+        ("movieTitle", ["id"].as_slice()),
+        ("movieVoteAverage", ["id"].as_slice()),
+        ("movieVoteCount", ["id"].as_slice()),
+        ("personBiography", ["id"].as_slice()),
+        ("personBirthday", ["id"].as_slice()),
+        ("personCastCharacters", ["id"].as_slice()),
+        ("personCastMovieIDs", ["id"].as_slice()),
+        ("personCastOriginalTitles", ["id"].as_slice()),
+        ("personCastPosterPaths", ["id"].as_slice()),
+        ("personCastReleaseDates", ["id"].as_slice()),
+        ("personCastTitles", ["id"].as_slice()),
+        ("personCrewJobs", ["id"].as_slice()),
+        ("personCrewMovieIDs", ["id"].as_slice()),
+        ("personCrewOriginalTitles", ["id"].as_slice()),
+        ("personCrewPosterPaths", ["id"].as_slice()),
+        ("personCrewReleaseDates", ["id"].as_slice()),
+        ("personCrewTitles", ["id"].as_slice()),
+        ("personDeathday", ["id"].as_slice()),
+        ("personGender", ["id"].as_slice()),
+        ("personImageAspectRatios", ["id"].as_slice()),
+        ("personImageFilePaths", ["id"].as_slice()),
+        ("personImageHeights", ["id"].as_slice()),
+        ("personImageVoteCounts", ["id"].as_slice()),
+        ("personImageWidths", ["id"].as_slice()),
+        ("personName", ["id"].as_slice()),
+        ("personPlaceOfBirth", ["id"].as_slice()),
+        ("personPopularity", ["id"].as_slice()),
+        ("personProfilePath", ["id"].as_slice()),
+        ("searchMovie", ["title"].as_slice()),
+        ("searchPerson", ["name"].as_slice()),
+    ].as_slice()),
+    ("NASA", [
+        ("apod", [].as_slice()),
+        ("apodDetails", [].as_slice()),
+        ("apodMedia", [].as_slice()),
+        ("marsHighTemp", [].as_slice()),
+        ("marsLowTemp", [].as_slice()),
+        ("marsWeather", [].as_slice()),
+    ].as_slice()),
+    ("NPlayer", [
+        ("endTurn", ["next"].as_slice()),
+        ("getActive", [].as_slice()),
+        ("getN", [].as_slice()),
+        ("getNext", [].as_slice()),
+        ("getPrevious", [].as_slice()),
+        ("start", [].as_slice()),
+    ].as_slice()),
+    ("NewYorkPublicLibrary", [
+        ("getDetails", ["uuid"].as_slice()),
+        ("getImage", ["itemID"].as_slice()),
+        ("search", ["term", "perPage", "page"].as_slice()),
+    ].as_slice()),
+    ("NewYorkTimes", [
+        ("getArticleSections", [].as_slice()),
+        ("getArticlesWithConcept", ["concept"].as_slice()),
+        ("getBestSellerLists", [].as_slice()),
+        ("getBestSellers", ["list", "date"].as_slice()),
+        ("getConceptInfo", ["concept"].as_slice()),
+        ("getConceptTypes", [].as_slice()),
+        ("getCriticsPicks", ["offset"].as_slice()),
+        ("getLatestArticles", ["section"].as_slice()),
+        ("getMostEmailedArticles", ["period"].as_slice()),
+        ("getMostSharedArticles", ["period"].as_slice()),
+        ("getMostViewedArticles", ["period"].as_slice()),
+        ("getMovieCriticInfo", ["name"].as_slice()),
+        ("getMovieCritics", [].as_slice()),
+        ("getMovieReviews", ["offset"].as_slice()),
+        ("getMovieReviewsByCritic", ["critic", "offset"].as_slice()),
+        ("getTopBestSellers", ["date"].as_slice()),
+        ("getTopStories", ["section"].as_slice()),
+        ("searchArticles", ["query", "offset"].as_slice()),
+        ("searchBestSellers", ["title", "author", "offset"].as_slice()),
+        ("searchConcepts", ["query"].as_slice()),
+        ("searchMovieReviews", ["query", "offset"].as_slice()),
+    ].as_slice()),
+    ("OceanData", [
+        ("getDeepOceanTemp", ["startYear", "endYear"].as_slice()),
+        ("getOxygenRatio", ["startYear", "endYear"].as_slice()),
+        ("getSeaLevel", ["startYear", "endYear"].as_slice()),
+        ("getSurfaceTemp", ["startYear", "endYear"].as_slice()),
+    ].as_slice()),
+    ("PaleoceanOxygenIsotopes", [
+        ("getAverageSedimentationRates", ["startyear", "endyear"].as_slice()),
+        ("getDelta18O", ["startyear", "endyear"].as_slice()),
+        ("getDelta18OError", ["startyear", "endyear"].as_slice()),
+        ("getNormalizedSedimentationRates", ["startyear", "endyear"].as_slice()),
+    ].as_slice()),
+    ("ParallelDots", [
+        ("getAbuse", ["text"].as_slice()),
+        ("getEmotion", ["text"].as_slice()),
+        ("getIntent", ["text"].as_slice()),
+        ("getKeywords", ["text"].as_slice()),
+        ("getNamedEntities", ["text"].as_slice()),
+        ("getSarcasmProbability", ["text"].as_slice()),
+        ("getSentiment", ["text"].as_slice()),
+        ("getSimilarity", ["text1", "text2"].as_slice()),
+        ("getTaxonomy", ["text"].as_slice()),
+    ].as_slice()),
+    ("People", [
+        ("getAgeByName", [].as_slice()),
+        ("getAgeColumn", [].as_slice()),
+        ("getNameColumn", [].as_slice()),
+        ("getSexByName", [].as_slice()),
+        ("getSexColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["name", "column name"].as_slice()),
+    ].as_slice()),
+    ("PhoneIoT", [
+        ("addButton", ["device", "x", "y", "width", "height", "text", "options"].as_slice()),
+        ("addImageDisplay", ["device", "x", "y", "width", "height", "options"].as_slice()),
+        ("addJoystick", ["device", "x", "y", "width", "options"].as_slice()),
+        ("addLabel", ["device", "x", "y", "text", "options"].as_slice()),
+        ("addRadioButton", ["device", "x", "y", "text", "options"].as_slice()),
+        ("addSlider", ["device", "x", "y", "width", "options"].as_slice()),
+        ("addTextField", ["device", "x", "y", "width", "height", "options"].as_slice()),
+        ("addToggle", ["device", "x", "y", "text", "options"].as_slice()),
+        ("addTouchpad", ["device", "x", "y", "width", "height", "options"].as_slice()),
+        ("authenticate", ["device"].as_slice()),
+        ("clearControls", ["device"].as_slice()),
+        ("getAccelerometer", ["device"].as_slice()),
+        ("getAltitude", ["device"].as_slice()),
+        ("getBearing", ["device"].as_slice()),
+        ("getColor", ["red", "green", "blue", "alpha"].as_slice()),
+        ("getCompassCardinalDirection", ["device"].as_slice()),
+        ("getCompassDirection", ["device"].as_slice()),
+        ("getCompassHeading", ["device"].as_slice()),
+        ("getFacingDirection", ["device"].as_slice()),
+        ("getGPSHeading", ["device"].as_slice()),
+        ("getGameRotation", ["device"].as_slice()),
+        ("getGravity", ["device"].as_slice()),
+        ("getGyroscope", ["device"].as_slice()),
+        ("getImage", ["device", "id"].as_slice()),
+        ("getJoystickVector", ["device", "id"].as_slice()),
+        ("getLevel", ["device", "id"].as_slice()),
+        ("getLightLevel", ["device"].as_slice()),
+        ("getLinearAcceleration", ["device"].as_slice()),
+        ("getLocation", ["device"].as_slice()),
+        ("getMagneticField", ["device"].as_slice()),
+        ("getMicrophoneLevel", ["device"].as_slice()),
+        ("getOrientation", ["device"].as_slice()),
+        ("getPosition", ["device", "id"].as_slice()),
+        ("getPressure", ["device"].as_slice()),
+        ("getProximity", ["device"].as_slice()),
+        ("getRelativeHumidity", ["device"].as_slice()),
+        ("getRotation", ["device"].as_slice()),
+        ("getSensors", [].as_slice()),
+        ("getStepCount", ["device"].as_slice()),
+        ("getTemperature", ["device"].as_slice()),
+        ("getText", ["device", "id"].as_slice()),
+        ("getToggleState", ["device", "id"].as_slice()),
+        ("isPressed", ["device", "id"].as_slice()),
+        ("listenToGUI", ["device"].as_slice()),
+        ("listenToSensors", ["device", "sensors"].as_slice()),
+        ("magnitude", ["vec"].as_slice()),
+        ("normalize", ["vec"].as_slice()),
+        ("removeControl", ["device", "id"].as_slice()),
+        ("setCredentials", ["device", "password"].as_slice()),
+        ("setImage", ["device", "id", "img"].as_slice()),
+        ("setLevel", ["device", "id", "value"].as_slice()),
+        ("setText", ["device", "id", "text"].as_slice()),
+        ("setToggleState", ["device", "id", "state"].as_slice()),
+        ("stopSensors", ["device"].as_slice()),
+    ].as_slice()),
+    ("Pixabay", [
+        ("getImage", ["url"].as_slice()),
+        ("searchAll", ["keywords", "maxHeight", "minHeight"].as_slice()),
+        ("searchIllustration", ["keywords", "maxHeight", "minHeight"].as_slice()),
+        ("searchPhoto", ["keywords", "maxHeight", "minHeight"].as_slice()),
+    ].as_slice()),
+    ("PositionSensor", [
+        ("getDevices", [].as_slice()),
+        ("getHeading", ["id"].as_slice()),
+        ("getPosition", ["id"].as_slice()),
+        ("getX", ["id"].as_slice()),
+        ("getY", ["id"].as_slice()),
+        ("getZ", ["id"].as_slice()),
+        ("listen", ["id"].as_slice()),
+    ].as_slice()),
+    ("ProjectGutenberg", [
+        ("getInfo", ["ID"].as_slice()),
+        ("getText", ["ID"].as_slice()),
+        ("search", ["field", "text"].as_slice()),
+    ].as_slice()),
+    ("PublicRoles", [
+        ("getPublicRoleId", [].as_slice()),
+        ("requestPublicRoleId", [].as_slice()),
+    ].as_slice()),
+    ("RainViewer", [
+        ("getColorSchemes", [].as_slice()),
+        ("getOverlay", ["latitude", "longitude", "width", "height", "zoom", "timeOffset", "options"].as_slice()),
+        ("getTimeOffsets", [].as_slice()),
+    ].as_slice()),
+    ("RoboScape", [
+        ("eavesdrop", ["robots"].as_slice()),
+        ("getRobots", [].as_slice()),
+        ("listen", ["robots"].as_slice()),
+        ("send", ["robot", "command"].as_slice()),
+    ].as_slice()),
+    ("S1", [
+        ("get1222021", ["Well A"].as_slice()),
+        ("get172", ["Well A"].as_slice()),
+        ("getAllWellAValues", [].as_slice()),
+        ("getTable", [].as_slice()),
+    ].as_slice()),
+    ("ServiceCreation", [
+        ("createServiceFromTable", ["name", "data", "options"].as_slice()),
+        ("deleteService", ["name"].as_slice()),
+        ("getCreateFromTableOptions", ["data"].as_slice()),
+    ].as_slice()),
+    ("SimpleHangman", [
+        ("getCurrentlyKnownWord", [].as_slice()),
+        ("getWrongCount", [].as_slice()),
+        ("guess", ["letter"].as_slice()),
+        ("isWordGuessed", [].as_slice()),
+        ("restart", ["word"].as_slice()),
+    ].as_slice()),
+    ("Smithsonian", [
+        ("getImage", ["id"].as_slice()),
+        ("search", ["term", "count", "skip"].as_slice()),
+        ("searchImageContent", ["term", "count", "skip"].as_slice()),
+    ].as_slice()),
+    ("StarMap", [
+        ("arcHourMinSecToDeg", ["arcHour", "arcMin", "arcSec"].as_slice()),
+        ("findObject", ["name"].as_slice()),
+        ("getImage", ["right_ascension", "declination", "arcseconds_per_pixel", "options", "width", "height"].as_slice()),
+    ].as_slice()),
+    ("StudentPerformance", [
+        ("getAllGenderValues", [].as_slice()),
+        ("getLunch", ["gender"].as_slice()),
+        ("getMathScore", ["gender"].as_slice()),
+        ("getParentalLevelOfEducation", ["gender"].as_slice()),
+        ("getRaceEthnicity", ["gender"].as_slice()),
+        ("getReadingScore", ["gender"].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getTestPreparationCourse", ["gender"].as_slice()),
+        ("getWritingScore", ["gender"].as_slice()),
+    ].as_slice()),
+    ("SummerOlympicMedals", [
+        ("getAllYearValues", [].as_slice()),
+        ("getAthlete", ["Year"].as_slice()),
+        ("getCityForYear", ["Year"].as_slice()),
+        ("getCountry", ["Year"].as_slice()),
+        ("getDiscipline", ["Year"].as_slice()),
+        ("getEvent", ["Year"].as_slice()),
+        ("getGender", ["Year"].as_slice()),
+        ("getMedal", ["Year"].as_slice()),
+        ("getSport", ["Year"].as_slice()),
+    ].as_slice()),
+    ("TemperatureDatabase", [
+        ("getAerosolsByYear", [].as_slice()),
+        ("getAerosolsColumn", [].as_slice()),
+        ("getAllByYear", [].as_slice()),
+        ("getAllColumn", [].as_slice()),
+        ("getAnnualMeanByYear", [].as_slice()),
+        ("getAnnualMeanColumn", [].as_slice()),
+        ("getGreenhouseGasByYear", [].as_slice()),
+        ("getGreenhouseGasColumn", [].as_slice()),
+        ("getHumanByYear", [].as_slice()),
+        ("getHumanColumn", [].as_slice()),
+        ("getLandUseByYear", [].as_slice()),
+        ("getLandUseColumn", [].as_slice()),
+        ("getNaturalByYear", [].as_slice()),
+        ("getNaturalColumn", [].as_slice()),
+        ("getOrbitByYear", [].as_slice()),
+        ("getOrbitColumn", [].as_slice()),
+        ("getOzoneByYear", [].as_slice()),
+        ("getOzoneColumn", [].as_slice()),
+        ("getSolarByYear", [].as_slice()),
+        ("getSolarColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["Year", "column name"].as_slice()),
+        ("getVolcanismByYear", [].as_slice()),
+        ("getVolcanismColumn", [].as_slice()),
+        ("getYearColumn", [].as_slice()),
+    ].as_slice()),
+    ("TheMapotakes's First Service", [
+        ("getAwayScoreSum", [].as_slice()),
+        ("getDateColumn", [].as_slice()),
+        ("getHomeScoreSum", [].as_slice()),
+    ].as_slice()),
+    ("Thingspeak", [
+        ("channelDetails", ["id"].as_slice()),
+        ("channelFeed", ["id", "numResult"].as_slice()),
+        ("privateChannelFeed", ["id", "numResult", "apiKey"].as_slice()),
+        ("searchByLocation", ["latitude", "longitude", "distance", "limit", "updatedSince"].as_slice()),
+        ("searchByTag", ["tag", "limit", "updatedSince"].as_slice()),
+        ("searchByTagAndLocation", ["tag", "latitude", "longitude", "distance", "limit", "updatedSince"].as_slice()),
+    ].as_slice()),
+    ("ThisXDoesNotExist", [
+        ("getArtwork", [].as_slice()),
+        ("getCat", [].as_slice()),
+        ("getCongressPerson", [].as_slice()),
+        ("getFursona", [].as_slice()),
+        ("getHomeInterior", [].as_slice()),
+        ("getHorse", [].as_slice()),
+        ("getPerson", [].as_slice()),
+        ("getPony", [].as_slice()),
+        ("getWaifu", [].as_slice()),
+    ].as_slice()),
+    ("Tobacco Consumption", [
+        ("getAllMeasureValues", [].as_slice()),
+        ("getCountry", ["Measure"].as_slice()),
+        ("getValue", ["Measure"].as_slice()),
+        ("getYEA", ["Measure"].as_slice()),
+        ("getYear", ["Measure"].as_slice()),
+    ].as_slice()),
+    ("Translation", [
+        ("detectLanguage", ["text"].as_slice()),
+        ("getSupportedLanguages", [].as_slice()),
+        ("toEnglish", ["text"].as_slice()),
+        ("translate", ["text", "from", "to"].as_slice()),
+    ].as_slice()),
+    ("Trivia", [
+        ("getRandomQuestion", [].as_slice()),
+        ("random", [].as_slice()),
+    ].as_slice()),
+    ("TwentyQuestions", [
+        ("answer", ["answer"].as_slice()),
+        ("gameStarted", [].as_slice()),
+        ("guess", ["guess"].as_slice()),
+        ("restart", [].as_slice()),
+        ("start", ["answer"].as_slice()),
+    ].as_slice()),
+    ("Twitter", [
+        ("favorites", ["screenName", "count"].as_slice()),
+        ("favoritesCount", ["screenName"].as_slice()),
+        ("followers", ["screenName"].as_slice()),
+        ("recentTweets", ["screenName", "count"].as_slice()),
+        ("search", ["keyword", "count"].as_slice()),
+        ("tweets", ["screenName"].as_slice()),
+        ("tweetsPerDay", ["screenName"].as_slice()),
+    ].as_slice()),
+    ("Vaping", [
+        ("getAllMeasureValues", [].as_slice()),
+        ("getCountry", ["Measure"].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["Measure"].as_slice()),
+        ("getYear", ["Measure"].as_slice()),
+    ].as_slice()),
+    ("Vostok Temperatures", [
+        ("getAllTemperatureValues", [].as_slice()),
+        ("getAllYearValues", [].as_slice()),
+        ("getRecord", ["Year"].as_slice()),
+        ("getTemperature", ["Year"].as_slice()),
+    ].as_slice()),
+    ("Water Quality", [
+        ("getAllWellValues", [].as_slice()),
+        ("getDate", ["Well"].as_slice()),
+        ("getQuality", ["Well"].as_slice()),
+        ("getTable", [].as_slice()),
+    ].as_slice()),
+    ("WaterWatch", [
+        ("gageHeight", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice()),
+        ("stop", [].as_slice()),
+        ("streamFlow", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice()),
+        ("waterTemp", ["minLatitude", "maxLatitude", "minLongitude", "maxLongitude"].as_slice()),
+    ].as_slice()),
+    ("WaypointList", [
+        ("getDevices", [].as_slice()),
+        ("getNextWaypoint", ["id"].as_slice()),
+        ("listen", ["id"].as_slice()),
+    ].as_slice()),
+    ("Weather", [
+        ("description", ["latitude", "longitude"].as_slice()),
+        ("humidity", ["latitude", "longitude"].as_slice()),
+        ("icon", ["latitude", "longitude"].as_slice()),
+        ("temp", ["latitude", "longitude"].as_slice()),
+        ("temperature", ["latitude", "longitude"].as_slice()),
+        ("windAngle", ["latitude", "longitude"].as_slice()),
+        ("windSpeed", ["latitude", "longitude"].as_slice()),
+    ].as_slice()),
+    ("Well Data", [
+        ("get1222021", ["Well A"].as_slice()),
+        ("get172", ["Well A"].as_slice()),
+        ("getAllWellAValues", [].as_slice()),
+        ("getTable", [].as_slice()),
+    ].as_slice()),
+    ("Wildcam", [
+        ("getCameras", ["latitude", "longitude", "radius"].as_slice()),
+        ("getImage", ["entry"].as_slice()),
+        ("getSpeciesList", [].as_slice()),
+        ("search", ["startDate", "stopDate", "species", "latitude", "longitude", "radius"].as_slice()),
+        ("searchByCamera", ["startDate", "stopDate", "species", "camera"].as_slice()),
+    ].as_slice()),
+    ("WordGuess", [
+        ("getWordList", ["length"].as_slice()),
+        ("giveUp", [].as_slice()),
+        ("guess", ["word"].as_slice()),
+        ("start", ["length"].as_slice()),
+    ].as_slice()),
+    ("brian's First Service", [
+        ("getAwayScoreByDate", [].as_slice()),
+        ("getAwayScoreColumn", [].as_slice()),
+        ("getAwayTeamByDate", [].as_slice()),
+        ("getAwayTeamColumn", [].as_slice()),
+        ("getCityByDate", [].as_slice()),
+        ("getCityColumn", [].as_slice()),
+        ("getCountryColumn", [].as_slice()),
+        ("getDateColumn", [].as_slice()),
+        ("getHomeScoreByDate", [].as_slice()),
+        ("getHomeScoreColumn", [].as_slice()),
+        ("getHomeTeamByDate", [].as_slice()),
+        ("getHomeTeamColumn", [].as_slice()),
+    ].as_slice()),
+    ("brian's soccer service", [
+        ("getAwayScoreByDate", [].as_slice()),
+        ("getAwayScoreColumn", [].as_slice()),
+        ("getAwayTeamByDate", [].as_slice()),
+        ("getAwayTeamColumn", [].as_slice()),
+        ("getCityByDate", [].as_slice()),
+        ("getCityColumn", [].as_slice()),
+        ("getCountryByDate", [].as_slice()),
+        ("getCountryColumn", [].as_slice()),
+        ("getDateColumn", [].as_slice()),
+        ("getHomeScoreByDate", [].as_slice()),
+        ("getHomeScoreColumn", [].as_slice()),
+        ("getHomeTeamByDate", [].as_slice()),
+        ("getHomeTeamColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["date", "column name"].as_slice()),
+    ].as_slice()),
+    ("cbradyisTestingFromCSV", [
+        ("getAreaByIndex", [].as_slice()),
+        ("getAreaColumn", [].as_slice()),
+        ("getIndexColumn", [].as_slice()),
+        ("getPerimeterByIndex", [].as_slice()),
+        ("getPerimeterColumn", [].as_slice()),
+        ("getRadiusByIndex", [].as_slice()),
+        ("getRadiusColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["index", "column name"].as_slice()),
+    ].as_slice()),
+    ("classhole", [
+        ("getAColumn", [].as_slice()),
+        ("getBByA", [].as_slice()),
+        ("getBColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["a", "column name"].as_slice()),
+    ].as_slice()),
+    ("coreys-soccer-wtih-options", [
+        ("getAwayScoreByDate", [].as_slice()),
+        ("getAwayScoreColumn", [].as_slice()),
+        ("getAwayTeamByDate", [].as_slice()),
+        ("getAwayTeamColumn", [].as_slice()),
+        ("getCityByDate", [].as_slice()),
+        ("getCityColumn", [].as_slice()),
+        ("getCountryByDate", [].as_slice()),
+        ("getCountryColumn", [].as_slice()),
+        ("getDateColumn", [].as_slice()),
+        ("getHomeScoreByDate", [].as_slice()),
+        ("getHomeScoreColumn", [].as_slice()),
+        ("getHomeTeamByDate", [].as_slice()),
+        ("getHomeTeamColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["date", "column name"].as_slice()),
+    ].as_slice()),
+    ("dummy", [
+        ("get12ByA", [].as_slice()),
+        ("get12Column", [].as_slice()),
+        ("getAColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["A", "column name"].as_slice()),
+    ].as_slice()),
+    ("empty service", [
+        ("get0By0", [].as_slice()),
+        ("get0Column", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["0", "column name"].as_slice()),
+    ].as_slice()),
+    ("myfirstservice", [
+        ("getAForA", ["a"].as_slice()),
+        ("getAllAValues", [].as_slice()),
+        ("getBForA", ["a"].as_slice()),
+        ("getTable", [].as_slice()),
+    ].as_slice()),
+    ("myservice", [
+        ("getAColumn", [].as_slice()),
+        ("getBByA", [].as_slice()),
+        ("getBColumn", [].as_slice()),
+        ("getCByA", [].as_slice()),
+        ("getCColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["a", "column name"].as_slice()),
+    ].as_slice()),
+    ("myservice1", [
+        ("get1ByA", [].as_slice()),
+        ("get1Column", [].as_slice()),
+        ("getAColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["a", "column name"].as_slice()),
+    ].as_slice()),
+    ("soccer", [
+        ("getAwayScoreByDate", [].as_slice()),
+        ("getAwayScoreColumn", [].as_slice()),
+        ("getAwayTeamByDate", [].as_slice()),
+        ("getAwayTeamColumn", [].as_slice()),
+        ("getCityByDate", [].as_slice()),
+        ("getCityColumn", [].as_slice()),
+        ("getCountryByDate", [].as_slice()),
+        ("getCountryColumn", [].as_slice()),
+        ("getDateColumn", [].as_slice()),
+        ("getHomeScoreByDate", [].as_slice()),
+        ("getHomeScoreColumn", [].as_slice()),
+        ("getHomeTeamByDate", [].as_slice()),
+        ("getHomeTeamColumn", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["date", "column name"].as_slice()),
+    ].as_slice()),
+    ("test1", [
+        ("get1Column", [].as_slice()),
+        ("get2By1", [].as_slice()),
+        ("get2Column", [].as_slice()),
+        ("get3By1", [].as_slice()),
+        ("get3Column", [].as_slice()),
+        ("getTable", [].as_slice()),
+        ("getValue", ["1", "column name"].as_slice()),
+    ].as_slice()),
+].as_slice();
