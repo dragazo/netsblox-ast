@@ -1826,9 +1826,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
         }
 
-        let prev_in_autofill_mode = self.in_autofill_mode;
-        let prev_autofill_args_len = self.autofill_args.len();
-        self.in_autofill_mode = params.is_empty() && !inline_script;
+        let prev_in_autofill_mode = mem::replace(&mut self.in_autofill_mode, params.is_empty() && !inline_script);
+        let prev_autofill_args = mem::take(&mut self.autofill_args);
 
         self.locals.push((params.clone(), Default::default()));
         let locals_len = self.locals.len();
@@ -1846,13 +1845,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             self.reference_var(&var.name, location).unwrap();
         }
 
-        for autofill_arg in &self.autofill_args[prev_autofill_args_len..] {
-            define_param(&mut params, autofill_arg.clone(), location)?;
-        }
-
         self.in_autofill_mode = prev_in_autofill_mode;
-        if !self.in_autofill_mode {
-            self.autofill_args.drain(prev_autofill_args_len..);
+        for autofill_arg in mem::replace(&mut self.autofill_args, prev_autofill_args) {
+            define_param(&mut params, autofill_arg.clone(), location)?;
         }
 
         Ok(Box::new_with(|| Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, kind, stmts }, info }))
