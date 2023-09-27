@@ -1828,7 +1828,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let prev_in_autofill_mode = self.in_autofill_mode;
         let prev_autofill_args_len = self.autofill_args.len();
-        self.in_autofill_mode = params.is_empty();
+        self.in_autofill_mode = params.is_empty() && !inline_script;
 
         self.locals.push((params.clone(), Default::default()));
         let locals_len = self.locals.len();
@@ -1852,7 +1852,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         self.in_autofill_mode = prev_in_autofill_mode;
         if !self.in_autofill_mode {
-            self.autofill_args.clear();
+            self.autofill_args.drain(prev_autofill_args_len..);
         }
 
         Ok(Box::new_with(|| Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, kind, stmts }, info }))
