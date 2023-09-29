@@ -19,11 +19,16 @@ fn base64_decode(content: &str) -> Result<Vec<u8>, Base64Error> {
 
 trait BoxExt<T> {
     fn new_with<F: FnOnce() -> T>(f: F) -> Self;
+    fn try_new_with<E, F: FnOnce() -> Result<T, E>>(f: F) -> Result<Self, E> where Self: Sized;
 }
 impl<T> BoxExt<T> for Box<T> {
     #[inline(never)]
     fn new_with<F: FnOnce() -> T>(f: F) -> Self {
         Box::new(f())
+    }
+    #[inline(never)]
+    fn try_new_with<E, F: FnOnce() -> Result<T, E>>(f: F) -> Result<Self, E> {
+        f().map(Box::new)
     }
 }
 
@@ -1065,7 +1070,7 @@ struct ScriptInfo<'a, 'b, 'c> {
     role: &'c RoleInfo<'a>,
     entity: &'c EntityInfo<'a, 'b>,
     locals: Vec<(SymbolTable<'a>, Vec<VariableRef>)>, // tuples of (locals, captures)
-    autofill_args: Option<Vec<String>>,
+    autofill_args: Option<Vec<VariableRef>>,
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn new(entity: &'c EntityInfo<'a, 'b>) -> Box<Self> {
@@ -1846,14 +1851,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         match prev_autofill_args {
             Some(prev_autofill_args) => for autofill_arg in mem::replace(&mut self.autofill_args, prev_autofill_args).unwrap_or_default() {
-                define_param(&mut params, autofill_arg, location)?;
+                define_param(&mut params, autofill_arg.name, location)?;
             }
             None => for autofill_arg in self.autofill_args.as_deref().map(|x| &x[prev_autofill_args_len..]).unwrap_or_default() {
-                let trans_name = match self.parser.name_transformer.as_ref()(&autofill_arg) {
-                    Ok(x) => x,
-                    Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name: autofill_arg.clone() }.into(), location: location.to_owned() })),
-                };
-                captures.push(VariableRef { name: autofill_arg.clone(), trans_name, location: VarLocation::Local });
+                captures.push(autofill_arg.clone());
             }
         }
 
@@ -1873,19 +1874,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Some(child) if child.name == "bool" => self.parse_bool(&child.text, &location),
                 _ => match self.autofill_args.as_mut() {
                     Some(autofill_args) if expr.text.is_empty() => {
-                        let input = autofill_args.len() + 1;
-                        let name = match self.parser.autofill_generator.as_ref()(input) {
-                            Ok(x) => x,
-                            Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::AutofillGenerateError { input }.into(), location: location.to_owned() })),
-                        };
+                        let var = Box::try_new_with(|| {
+                            let input = autofill_args.len() + 1;
+                            let name = match self.parser.autofill_generator.as_ref()(input) {
+                                Ok(x) => x,
+                                Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::AutofillGenerateError { input }.into(), location: location.to_owned() })),
+                            };
+                            let trans_name = match self.parser.name_transformer.as_ref()(&name) {
+                                Ok(x) => x,
+                                Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                            };
+                            Ok(VariableRef { name, trans_name, location: VarLocation::Local })
+                        })?;
 
-                        autofill_args.push(name.clone());
+                        autofill_args.push_with(|| (*var).clone());
 
-                        let trans_name = match self.parser.name_transformer.as_ref()(&name) {
-                            Ok(x) => x,
-                            Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
-                        };
-                        Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var: VariableRef { name, trans_name, location: VarLocation::Local } }, info: BlockInfo::none() }))
+                        Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var: *var }, info: BlockInfo::none() }))
                     }
                     _ => Ok(Box::new_with(|| expr.text.clone().into())),
                 }
