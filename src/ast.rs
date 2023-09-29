@@ -1065,9 +1065,7 @@ struct ScriptInfo<'a, 'b, 'c> {
     role: &'c RoleInfo<'a>,
     entity: &'c EntityInfo<'a, 'b>,
     locals: Vec<(SymbolTable<'a>, Vec<VariableRef>)>, // tuples of (locals, captures)
-
-    autofill_args: Vec<String>,
-    in_autofill_mode: bool,
+    autofill_args: Option<Vec<String>>,
 }
 impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn new(entity: &'c EntityInfo<'a, 'b>) -> Box<Self> {
@@ -1076,9 +1074,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             role: entity.role,
             entity,
             locals: vec![(SymbolTable::new(entity.parser), Default::default())],
-
-            autofill_args: vec![],
-            in_autofill_mode: false,
+            autofill_args: None,
         })
     }
     #[inline(never)]
@@ -1826,8 +1822,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
         }
 
-        let prev_in_autofill_mode = mem::replace(&mut self.in_autofill_mode, params.is_empty() && !inline_script);
-        let prev_autofill_args = mem::take(&mut self.autofill_args);
+        let prev_autofill_args_len = self.autofill_args.as_ref().map(|x| x.len()).unwrap_or_default();
+        let prev_autofill_args = match params.is_empty() && !inline_script {
+            true => Some(mem::replace(&mut self.autofill_args, Some(vec![]))),
+            false => None,
+        };
 
         self.locals.push((params.clone(), Default::default()));
         let locals_len = self.locals.len();
@@ -1840,14 +1839,22 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
         };
         assert_eq!(locals_len, self.locals.len());
-        let (_, captures) = self.locals.pop().unwrap();
+        let (_, mut captures) = self.locals.pop().unwrap();
         for var in captures.iter() {
-            self.reference_var(&var.name, location).unwrap();
+            self.reference_var(&var.name, location)?;
         }
 
-        self.in_autofill_mode = prev_in_autofill_mode;
-        for autofill_arg in mem::replace(&mut self.autofill_args, prev_autofill_args) {
-            define_param(&mut params, autofill_arg.clone(), location)?;
+        match prev_autofill_args {
+            Some(prev_autofill_args) => for autofill_arg in mem::replace(&mut self.autofill_args, prev_autofill_args).unwrap_or_default() {
+                define_param(&mut params, autofill_arg, location)?;
+            }
+            None => for autofill_arg in self.autofill_args.as_deref().map(|x| &x[prev_autofill_args_len..]).unwrap_or_default() {
+                let trans_name = match self.parser.name_transformer.as_ref()(&autofill_arg) {
+                    Ok(x) => x,
+                    Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name: autofill_arg.clone() }.into(), location: location.to_owned() })),
+                };
+                captures.push(VariableRef { name: autofill_arg.clone(), trans_name, location: VarLocation::Local });
+            }
         }
 
         Ok(Box::new_with(|| Expr { kind: ExprKind::Closure { params: params.into_defs(), captures, kind, stmts }, info }))
@@ -1864,16 +1871,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
                 Some(child) if child.name == "bool" => self.parse_bool(&child.text, &location),
-                _ => match !expr.text.is_empty() || !self.in_autofill_mode {
-                    true => Ok(Box::new_with(|| expr.text.clone().into())),
-                    false => {
-                        let input = self.autofill_args.len() + 1;
+                _ => match self.autofill_args.as_mut() {
+                    Some(autofill_args) if expr.text.is_empty() => {
+                        let input = autofill_args.len() + 1;
                         let name = match self.parser.autofill_generator.as_ref()(input) {
                             Ok(x) => x,
                             Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::AutofillGenerateError { input }.into(), location: location.to_owned() })),
                         };
 
-                        self.autofill_args.push(name.clone());
+                        autofill_args.push(name.clone());
 
                         let trans_name = match self.parser.name_transformer.as_ref()(&name) {
                             Ok(x) => x,
@@ -1881,6 +1887,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var: VariableRef { name, trans_name, location: VarLocation::Local } }, info: BlockInfo::none() }))
                     }
+                    _ => Ok(Box::new_with(|| expr.text.clone().into())),
                 }
             }
             "bool" => self.parse_bool(&expr.text, &location),
