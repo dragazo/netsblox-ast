@@ -914,7 +914,7 @@ pub enum ExprKind {
     CopyList { list: Box<Expr> },
     ListCat { lists: Box<Expr> },
 
-    ListLength { value: Box<Expr> },
+    ListLen { value: Box<Expr> },
     ListRank { value: Box<Expr> },
     ListDims { value: Box<Expr> },
     ListFlatten { value: Box<Expr> },
@@ -1773,13 +1773,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => Err(Box::new_with(|| Error { kind: CompileError::UndefinedFn { name: name.into() }.into(), location: location.to_owned() }))
         }
     }
-    #[inline(never)]
-    fn cnd_adjust_index(&self, index: Box<Expr>, condition: bool, delta: f64) -> Box<Expr> {
-        match condition {
-            true => Box::new_with(|| Expr { kind: ExprKind::Add { values: Box::new_with(|| Expr { kind: ExprKind::MakeList { values: vec![*index, delta.into()] }, info: BlockInfo::none() }) }, info: BlockInfo::none() }),
-            false => index,
-        }
-    }
     #[inline(always)]
     fn parse_0_args(&mut self, expr: &Xml, location: &LocationRef) -> Result<Box<BlockInfo>, Box<Error>> {
         self.check_children_get_info(expr, 0, location)
@@ -1984,7 +1977,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "reportNot" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Not { value }, info })),
                     "reportRound" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::Round { value }, info })),
 
-                    "reportListLength" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
+                    "reportListLength" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListLen { value }, info })),
                     "reportListIsEmpty" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::ListIsEmpty { value }, info })),
 
                     "reportStringSize" => self.parse_1_args(expr, &location).map(|(value, info)| Box::new_with(|| Expr { kind: ExprKind::StrLen { value }, info })),
@@ -2054,10 +2047,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         })
                     }
 
-                    "reportListIndex" => {
-                        let index = self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info }))?;
-                        Ok(self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, 1.0))
-                    }
+                    "reportListIndex" => self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info })),
                     "reportListItem" => {
                         let info = self.check_children_get_info(expr, 2, &location)?;
                         let list = self.parse_expr(&expr.children[1], &location)?.into();
@@ -2070,7 +2060,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                             None => {
                                 let index = self.parse_expr(&expr.children[0], &location)?;
-                                let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Ok(Box::new_with(|| Expr { kind: ExprKind::ListGet { list, index }, info }))
                             }
                         }
@@ -2087,7 +2076,6 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             }
                             None => {
                                 let index = self.parse_expr(&expr.children[0], &location)?;
-                                let index = self.cnd_adjust_index(index, self.parser.adjust_to_zero_index, -1.0).into();
                                 Ok(Box::new_with(|| Expr { kind: ExprKind::StrGet { string, index }, info }))
                             }
                         }
@@ -2152,7 +2140,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         let func = self.grab_option(&expr.children[0], &location)?;
                         let value = self.parse_expr(&expr.children[1], &location)?;
                         match func {
-                            "length" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListLength { value }, info })),
+                            "length" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListLen { value }, info })),
                             "rank" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListRank { value }, info })),
                             "dimensions" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListDims { value }, info })),
                             "flatten" => Ok(Box::new_with(|| Expr { kind: ExprKind::ListFlatten { value }, info })),
@@ -2773,21 +2761,11 @@ impl<'a> RoleInfo<'a> {
 }
 
 pub struct Parser {
-    /// If `true`, the emitted syntax tree will be processed by static optimizations.
-    /// Defaults to `false`.
-    pub optimize: bool,
-
     /// If `true`, the parser will skip script blocks that lack a hat block.
     /// This is typically desirable since free floating blocks are never automatically executed,
     /// and thus are typically not needed for translation efforts.
     /// Defaults to `true`.
     pub omit_nonhat_scripts: bool,
-
-    /// If `true`, the emitted syntax tree will be automatically adjusted to support
-    /// convenient translation into languages with zero-based indexing.
-    /// For instance, with this enabled, an `item X of _` block will emit `X-1` as the index rather than `X`, and similar for other list-based blocks.
-    /// Defaults to `false`.
-    pub adjust_to_zero_index: bool,
 
     /// All symbol names in the program will be passed through this function,
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
@@ -2805,18 +2783,13 @@ pub struct Parser {
 impl Default for Parser {
     fn default() -> Self {
         Self {
-            optimize: false,
             omit_nonhat_scripts: true,
-            adjust_to_zero_index: false,
             name_transformer: Rc::new(|v| Ok(v.into())),
             autofill_generator: Rc::new(|v| Ok(format!("%{}", v))),
         }
     }
 }
 impl Parser {
-    fn opt(&self, project: Project) -> Result<Project, Box<Error>> {
-        Ok(project)
-    }
     pub fn parse(&self, xml: &str) -> Result<Project, Box<Error>> {
         let location = Box::new_with(|| LocationRef {
             role: None,
@@ -2880,9 +2853,7 @@ impl Parser {
                     _ => continue,
                 };
 
-                let mut project = Some(Project { name: proj_name, roles });
-                if self.optimize { project = Some(self.opt(mem::take(&mut project).unwrap())?) }
-                return Ok(project.unwrap())
+                return Ok(Project { name: proj_name, roles })
             }
         }
         Err(Box::new_with(|| Error { kind: ProjectError::NoRoot.into(), location: location.to_owned() }))
