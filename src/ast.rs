@@ -958,6 +958,7 @@ pub enum ExprKind {
     Not { value: Box<Expr> },
     Neg { value: Box<Expr> },
     Abs { value: Box<Expr> },
+    Sign { value: Box<Expr> },
     Sqrt { value: Box<Expr> },
 
     Floor { value: Box<Expr> },
@@ -2112,6 +2113,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                             "neg" => Ok(Box::new_with(|| Expr { kind: ExprKind::Neg { value }, info })),
                             "abs" => Ok(Box::new_with(|| Expr { kind: ExprKind::Abs { value }, info })),
+                            "sign" => Ok(Box::new_with(|| Expr { kind: ExprKind::Sign { value }, info })),
                             "sqrt" => Ok(Box::new_with(|| Expr { kind: ExprKind::Sqrt { value }, info })),
                             "floor" => Ok(Box::new_with(|| Expr { kind: ExprKind::Floor { value }, info })),
                             "ceiling" => Ok(Box::new_with(|| Expr { kind: ExprKind::Ceil { value }, info })),
