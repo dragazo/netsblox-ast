@@ -680,7 +680,7 @@ fn test_inline_rpc_metadata() {
     assert_eq!(stmts.len(), 3);
 
     match &stmts[0].kind {
-        StmtKind::RunRpc { service, rpc, args } => {
+        StmtKind::CallRpc { service, rpc, args } => {
             assert_eq!(service, "TheCatApi");
             assert_eq!(rpc, "getCatBreeds");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &[] as &[&str]);
@@ -688,7 +688,7 @@ fn test_inline_rpc_metadata() {
         x => panic!("{:?}", x),
     }
     match &stmts[1].kind {
-        StmtKind::RunRpc { service, rpc, args } => {
+        StmtKind::CallRpc { service, rpc, args } => {
             assert_eq!(service, "TimeSync");
             assert_eq!(rpc, "prepare");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["sleepTime"]);
@@ -696,7 +696,7 @@ fn test_inline_rpc_metadata() {
         x => panic!("{:?}", x),
     }
     match &stmts[2].kind {
-        StmtKind::RunRpc { service, rpc, args } => {
+        StmtKind::CallRpc { service, rpc, args } => {
             assert_eq!(service, "Wildcam");
             assert_eq!(rpc, "search");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["startDate", "stopDate", "species", "latitude", "longitude", "radius"]);
@@ -751,7 +751,7 @@ fn test_run_call_lambdas() {
         x => panic!("{:?}", x),
     }
     match &stmts[3].kind {
-        StmtKind::RunClosure { closure, args, .. } => match &**closure {
+        StmtKind::CallClosure { closure, args, .. } => match &**closure {
             Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), Vec::<&str>::new());
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a"]);
@@ -763,7 +763,7 @@ fn test_run_call_lambdas() {
         x => panic!("{:?}", x),
     }
     match &stmts[4].kind {
-        StmtKind::RunClosure { closure, args, .. } => match &**closure {
+        StmtKind::CallClosure { closure, args, .. } => match &**closure {
             Expr { kind: ExprKind::Closure { kind: _, params, captures, stmts }, .. } => {
                 assert_eq!(params.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["val", "rgt"]);
                 assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);

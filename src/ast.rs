@@ -770,9 +770,9 @@ pub enum StmtKind {
     ChangePenSize { delta: Box<Expr> },
     SetPenSize { value: Box<Expr> },
 
-    RunRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
+    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef> },
-    RunClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
+    CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
     ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
 
     Clone { target: Box<Expr> },
@@ -806,7 +806,7 @@ pub enum StmtKind {
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
         let Rpc { service, rpc, args, info } = rpc;
-        Stmt { kind: StmtKind::RunRpc { service, rpc, args }, info }
+        Stmt { kind: StmtKind::CallRpc { service, rpc, args }, info }
     }
 }
 
@@ -975,6 +975,7 @@ pub enum ExprKind {
 
     CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef>, },
+    CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
     StageWidth,
     StageHeight,
@@ -1008,7 +1009,6 @@ pub enum ExprKind {
     RpcError,
 
     Closure { kind: ClosureKind, params: Vec<VariableDef>, captures: Vec<VariableRef>, stmts: Vec<Stmt> },
-    CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
     TextSplit { text: Box<Expr>, mode: TextSplitMode },
 
@@ -1656,7 +1656,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     args.push_boxed(self.parse_expr(arg, &location)?);
                 }
                 match is_run {
-                    true => Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: None, closure, args }, info })),
+                    true => Ok(Box::new_with(|| Stmt { kind: StmtKind::CallClosure { new_entity: None, closure, args }, info })),
                     false => Ok(Box::new_with(|| Stmt { kind: StmtKind::ForkClosure { closure, args }, info })),
                 }
             }
@@ -1668,7 +1668,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[2].children.iter() {
                     args.push_boxed(self.parse_expr(arg, &location)?);
                 }
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::RunClosure { new_entity: Some(entity), closure, args }, info }))
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
             }
             "setEffect" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
