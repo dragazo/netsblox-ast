@@ -650,11 +650,11 @@ pub struct FnRef {
     pub trans_name: String,
     pub location: FnLocation,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VarLocation {
     Global, Field, Local,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FnLocation {
     Global, Method,
 }
@@ -1756,17 +1756,29 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
     fn reference_var(&mut self, name: &str, location: &LocationRef) -> Result<Box<VariableRef>, Box<Error>> {
         for (i, locals) in self.locals.iter().rev().enumerate() {
             if let Some(x) = locals.0.get(name) {
-                let res = x.def.ref_at(VarLocation::Local);
+                let local_ref = x.def.ref_at(VarLocation::Local);
                 if i != 0 {
                     let (locals, captures) = self.locals.last_mut().unwrap();
-                    locals.define(res.name.clone(), 0.0.into()).unwrap();
-                    captures.push_boxed(res.clone());
+                    locals.define(local_ref.name.clone(), 0.0.into()).unwrap();
+                    captures.push_boxed(local_ref.clone());
                 }
-                return Ok(res)
+                return Ok(local_ref);
             }
         }
-        if let Some(x) = self.entity.fields.get(name) { return Ok(x.def.ref_at(VarLocation::Field)) }
-        if let Some(x) = self.role.globals.get(name) { return Ok(x.def.ref_at(VarLocation::Global)) }
+        if let Some(x) = self.entity.fields.get(name) {
+            let field_ref = x.def.ref_at(VarLocation::Field);
+            if self.locals.len() >= 2 {
+                let (locals, captures) = self.locals.last_mut().unwrap();
+                locals.define(field_ref.name.clone(), 0.0.into()).unwrap();
+                captures.push_boxed(field_ref);
+                return Ok(x.def.ref_at(VarLocation::Local));
+            } else {
+                return Ok(field_ref);
+            }
+        }
+        if let Some(x) = self.role.globals.get(name) {
+            return Ok(x.def.ref_at(VarLocation::Global));
+        }
         Err(Box::new_with(|| Error { kind: CompileError::UndefinedVariable { name: name.into() }.into(), location: location.to_owned() }))
     }
     #[inline(never)]

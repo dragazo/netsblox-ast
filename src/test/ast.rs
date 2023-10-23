@@ -1309,6 +1309,70 @@ fn test_field_refs() {
 }
 
 #[test]
+fn test_capture_scopes() {
+    let res = Parser::default().parse(include_str!("projects/capture-scopes.xml")).unwrap();
+    assert_eq!(res.roles.len(), 1);
+    let role = &res.roles[0];
+    assert_eq!(role.entities.len(), 1);
+    let stage = &role.entities[0];
+
+    assert_eq!(role.globals.len(), 1);
+    assert_eq!(role.globals[0].def.name, "my global var");
+
+    assert_eq!(stage.fields.len(), 1);
+    assert_eq!(stage.fields[0].def.name, "my field var");
+
+    assert_eq!(stage.scripts.len(), 1);
+    let script = &stage.scripts[0];
+    assert_eq!(script.stmts.len(), 2);
+    match &script.stmts[0].kind {
+        StmtKind::DeclareLocals { vars } => match vars.as_slice() {
+            [a, b] => assert_eq!((a.name.as_str(), b.name.as_str()), ("my local var", "res")),
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &script.stmts[1].kind {
+        StmtKind::Assign { var, value } => {
+            assert_eq!(var.name, "res");
+            match &value.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Reporter);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["my field var", "my local var"]);
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Return { value } => match &value.kind {
+                            ExprKind::Add { values } => match &values.kind {
+                                ExprKind::MakeList { values } => match values.as_slice() {
+                                    [a, b, c, d, e, f] => match (&a.kind, &b.kind, &c.kind, &d.kind, &e.kind, &f.kind) {
+                                        (ExprKind::Variable { var: a }, ExprKind::Variable { var: b }, ExprKind::Variable { var: c }, ExprKind::Variable { var: d }, ExprKind::Variable { var: e }, ExprKind::Variable { var: f }) => {
+                                            assert_eq!((a.name.as_str(), a.location), ("my global var", VarLocation::Global));
+                                            assert_eq!((b.name.as_str(), b.location), ("my global var", VarLocation::Global));
+                                            assert_eq!((c.name.as_str(), c.location), ("my field var", VarLocation::Local)); // local cause it was captured
+                                            assert_eq!((d.name.as_str(), d.location), ("my field var", VarLocation::Local)); // local cause it was captured
+                                            assert_eq!((e.name.as_str(), e.location), ("my local var", VarLocation::Local));
+                                            assert_eq!((f.name.as_str(), f.location), ("my local var", VarLocation::Local));
+                                        }
+                                        x => panic!("{x:?}"),
+                                    }
+                                    x => panic!("{x:?}"),
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 fn test_unevaluated_inputs() {
     let res = Parser::default().parse(include_str!("projects/unevaluated.xml")).unwrap();
     assert_eq!(res.roles.len(), 1);
