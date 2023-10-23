@@ -1309,6 +1309,149 @@ fn test_field_refs() {
 }
 
 #[test]
+fn test_unevaluated_inputs() {
+    let res = Parser::default().parse(include_str!("projects/unevaluated.xml")).unwrap();
+    assert_eq!(res.roles.len(), 1);
+    let role = &res.roles[0];
+    assert_eq!(role.entities.len(), 1);
+    let stage = &role.entities[0];
+    assert_eq!(stage.scripts.len(), 1);
+    let script = &stage.scripts[0];
+    assert_eq!(script.stmts.len(), 3);
+    match &script.stmts[1].kind {
+        StmtKind::CallFn { function, args, upvars } => {
+            assert_eq!(function.name, "my loop thing \t \t \t \t");
+            assert_eq!(upvars.len(), 0);
+            assert_eq!(args.len(), 4);
+            match &args[0].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                x => panic!("{x:?}"),
+            }
+            match &args[1].kind {
+                ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                x => panic!("{x:?}"),
+            }
+            match &args[2].kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Reporter);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Return { value } => match &value.kind {
+                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+            match &args[3].kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Reporter);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Return { value } => match &value.kind {
+                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &script.stmts[2].kind {
+        StmtKind::CallFn { function, args, upvars } => {
+            assert_eq!(function.name, "my loop thing \t \t \t \t");
+            assert_eq!(upvars.len(), 0);
+            assert_eq!(args.len(), 4);
+            match &args[0].kind {
+                ExprKind::Add { values } => match &values.kind {
+                    ExprKind::Value(Value::List(x, None)) => match x.as_slice() {
+                        [Value::String(a), Value::String(b)] => assert_eq!((a.as_str(), b.as_str()), ("1", "2")),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+                x => panic!("{x:?}"),
+            }
+            match &args[1].kind {
+                ExprKind::And { left, right } => match (&left.kind, &right.kind) {
+                    (ExprKind::Value(Value::Bool(true)), ExprKind::Value(Value::Bool(false))) => (),
+                    x => panic!("{x:?}"),
+                }
+                x => panic!("{x:?}"),
+            }
+            match &args[2].kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Reporter);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 1);
+                    assert_eq!(captures[0].name, "barb");
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Return { value } => match &value.kind {
+                            ExprKind::Add { values } => match &values.kind {
+                                ExprKind::MakeList { values } => match values.as_slice() {
+                                    [a, b] => {
+                                        match &a.kind {
+                                            ExprKind::Variable { var } => assert_eq!(var.name, "barb"),
+                                            x => panic!("{x:?}"),
+                                        }
+                                        match &b.kind {
+                                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                                            x => panic!("{x:?}"),
+                                        }
+                                    }
+                                    x => panic!("{x:?}"),
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+            match &args[3].kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Reporter);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 1);
+                    assert_eq!(captures[0].name, "barb");
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Return { value } => match &value.kind {
+                            ExprKind::Less { left, right } => {
+                                match &left.kind {
+                                    ExprKind::Variable { var } => assert_eq!(var.name, "barb"),
+                                    x => panic!("{x:?}"),
+                                }
+                                match &right.kind {
+                                    ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                                    x => panic!("{x:?}"),
+                                }
+                            }
+                            x => panic!("{x:?}"),
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 fn test_list_ctor_opt() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",

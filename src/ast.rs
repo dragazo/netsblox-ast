@@ -848,7 +848,7 @@ pub enum EffectKind {
 pub enum PenAttribute {
     Size, Hue, Saturation, Brightness, Transparency,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClosureKind {
     Command, Reporter, Predicate,
 }
@@ -1340,7 +1340,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
         let mut upvars = vec![];
         for upvar in block_info.upvars.iter() {
-            let i = match block_info.params.iter().position(|x| x == upvar) {
+            let i = match block_info.params.iter().position(|x| x.0 == *upvar) {
                 Some(x) => x,
                 None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
             };
@@ -1353,8 +1353,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
 
         let mut args = Vec::with_capacity(argc);
-        for expr in stmt.children[..argc].iter() {
-            args.push_boxed(self.parse_expr(expr, &location)?);
+        for (param, expr) in iter::zip(&block_info.params, &stmt.children[..argc]) {
+            match param.1 {
+                ParamType::Evaluated => args.push_boxed(self.parse_expr(expr, &location)?),
+                ParamType::Unevaluated => args.push_boxed(self.parse_closure(expr, ClosureKind::Reporter, true, &location)?),
+            }
         }
 
         Ok(Box::new_with(|| FnCall { function: function.0, args, upvars, info }))
@@ -1832,8 +1835,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let stmts = match kind {
             ClosureKind::Command => self.parse(script)?.stmts,
             ClosureKind::Reporter | ClosureKind::Predicate => {
-                let _ = self.check_children_get_info(script, 1, location)?;
-                let value = self.parse_expr(&script.children[0], location)?;
+                let value = match script.name.as_str() {
+                    "autolambda" => {
+                        let _ = self.check_children_get_info(script, 1, location)?;
+                        self.parse_expr(&script.children[0], location)?
+                    }
+                    _ => self.parse_expr(script, location)?,
+                };
                 vec![Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() }]
             }
         };
@@ -2427,10 +2435,13 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
     }
 }
 
+enum ParamType {
+    Evaluated, Unevaluated,
+}
 struct BlockHeaderInfo<'a> {
     s: &'a str,
     returns: bool,
-    params: Vec<String>,
+    params: Vec<(String, ParamType)>,
     upvars: Vec<String>,
 }
 
@@ -2440,10 +2451,31 @@ fn get_block_info(value: &Value) -> Box<BlockHeaderInfo> {
     match value {
         Value::List(vals, _) => {
             assert_eq!(vals.len(), 4);
-            let s = match &vals[0] { Value::String(v) => v.as_str(), _ => panic!() };
-            let returns = match &vals[1] { Value::Bool(v) => *v, _ => panic!() };
-            let params = match &vals[2] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
-            let upvars = match &vals[3] { Value::List(x, None) => x.iter().map(|x| match x { Value::String(x) => x.clone(), _ => panic!() }).collect(), _ => panic!() };
+            let s = match &vals[0] {
+                Value::String(v) => v.as_str(),
+                _ => panic!(),
+            };
+            let returns = match &vals[1] {
+                Value::Bool(v) => *v,
+                _ => panic!(),
+            };
+            let params = match &vals[2] {
+                Value::List(x, None) => x.iter().map(|x| match x {
+                    Value::List(x, None) => match x.as_slice() {
+                        [Value::String(v1), Value::Bool(v2)] => (v1.clone(), if *v2 { ParamType::Evaluated } else { ParamType::Unevaluated }),
+                        _ => panic!(),
+                    }
+                    _ => panic!(),
+                }).collect(),
+                _ => panic!(),
+            };
+            let upvars = match &vals[3] {
+                Value::List(x, None) => x.iter().map(|x| match x {
+                    Value::String(x) => x.clone(),
+                    _ => panic!(),
+                }).collect(),
+                _ => panic!(),
+            };
             Box::new_with(|| BlockHeaderInfo { s, returns, params, upvars })
         }
         _ => panic!(), // header parser would never do this
@@ -2508,28 +2540,36 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location:
         }
         None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutType.into(), location: location.to_owned() })),
     };
-    let params: Vec<_> = ParamIter::new(s).map(|(a, b)| s[a+2..b-1].to_owned()).collect();
-    let upvars = match block.get(&["inputs"]) {
+
+    let (params, upvars) = match block.get(&["inputs"]) {
         Some(inputs) => {
-            let mut res = vec![];
-            if params.len() != inputs.children.len() {
+            let mut params = vec![];
+            let mut upvars = vec![];
+
+            let param_names: Vec<_> = ParamIter::new(s).map(|(a, b)| &s[a+2..b-1]).collect();
+            if param_names.len() != inputs.children.len() {
                 return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() }));
             }
-            for (param, input) in iter::zip(&params, &inputs.children) {
+            for (param, input) in iter::zip(param_names, &inputs.children) {
                 let t = match input.attr("type") {
                     Some(x) if !x.value.is_empty() => x.value.as_str(),
                     _ => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockInputsMetaCorrupted.into(), location: location.to_owned() })),
                 };
-                match t {
-                    "%upvar" => res.push(Value::String(param.clone())),
-                    _ => (),
+                let evaluated = match t {
+                    "%anyUE" | "%boolUE" => false,
+                    _ => true,
+                };
+
+                params.push(Value::List(vec![param.to_owned().into(), evaluated.into()], None));
+                if t == "%upvar" {
+                    upvars.push(Value::String(param.to_owned()));
                 }
             }
-            res
+
+            (params, upvars)
         }
         None => return Err(Box::new_with(|| Error { kind: ProjectError::CustomBlockWithoutInputsMeta.into(), location: location.to_owned() })),
     };
-    let params = params.into_iter().map(Value::String).collect();
 
     let name = block_name_from_def(s);
     match funcs.define(name, Value::List(vec![Value::from(s), Value::from(returns), Value::List(params, None), Value::List(upvars, None)], None)) {
@@ -2555,7 +2595,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
     let finalize = |entity_info: &EntityInfo| {
         let mut script_info = ScriptInfo::new(entity_info);
         for param in block_header.params {
-            script_info.decl_local(param, 0f64.into(), &location)?;
+            script_info.decl_local(param.0, 0f64.into(), &location)?;
         }
         debug_assert_eq!(script_info.locals.len(), 1);
         debug_assert_eq!(script_info.locals[0].1.len(), 0);
