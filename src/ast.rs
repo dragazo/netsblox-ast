@@ -819,7 +819,7 @@ pub enum Value {
     Number(f64),
     Constant(Constant),
     String(String),
-    Image(Rc<Vec<u8>>),
+    Image(Rc<(Vec<u8>, Option<(f64, f64)>)>),
     List(Vec<Value>, Option<RefId>),
     Ref(RefId),
 }
@@ -2345,12 +2345,12 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                 }
                 let name = &ident[self.name.len() + 5..];
 
-                let content = match self.role.images.get(ident) {
+                let img = match self.role.images.get(ident) {
                     Some(x) => x.clone(),
                     None => return Err(Box::new_with(|| Error { kind: ProjectError::CostumeUndefinedRef { id: ident.into() }.into(), location: location.to_owned() })),
                 };
 
-                match self.costumes.define(name.into(), Value::Image(content)) {
+                match self.costumes.define(name.into(), Value::Image(img)) {
                     Ok(None) => (),
                     Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::CostumesWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
                     Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
@@ -2653,7 +2653,7 @@ struct RoleInfo<'a> {
     globals: SymbolTable<'a>,
     entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
-    images: VecMap<&'a str, Rc<Vec<u8>>>,
+    images: VecMap<&'a str, Rc<(Vec<u8>, Option<(f64, f64)>)>>,
     msg_types: VecMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
@@ -2728,6 +2728,11 @@ impl<'a> RoleInfo<'a> {
                 None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutId.into(), location: location.to_owned() })),
             };
 
+            let center = match (entry.attr("center-x").and_then(|x| x.value.parse().ok()), entry.attr("center-y").and_then(|y| y.value.parse().ok())) {
+                (Some(x), Some(y)) => Some((x, y)),
+                _ => None,
+            };
+
             let content = match entry.attr("image") {
                 Some(x) => match x.value.as_str().strip_prefix("data:image/png;base64,") {
                     Some(x) => match base64_decode(x) {
@@ -2739,7 +2744,7 @@ impl<'a> RoleInfo<'a> {
                 None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
             };
 
-            if self.images.insert(id, Rc::new(content)).is_some() {
+            if self.images.insert(id, Rc::new((content, center))).is_some() {
                 return Err(Box::new_with(|| Error { kind: ProjectError::ImagesWithSameId { id: id.into() }.into(), location: location.to_owned() }));
             }
         }
