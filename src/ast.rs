@@ -386,9 +386,18 @@ pub enum ProjectError {
     ImageWithoutContent { id: String },
     ImageUnknownFormat { id: String, content: String },
 
+    SoundWithoutId,
+    SoundsWithSameId { id: String },
+    SoundWithoutContent { id: String },
+    SoundUnknownFormat { id: String, content: String },
+
     CostumeIdFormat { id: String },
     CostumeUndefinedRef { id: String },
     CostumesWithSameName { name: String },
+
+    SoundIdFormat { id: String },
+    SoundUndefinedRef { id: String },
+    SoundsWithSameName { name: String },
 
     BoolNoValue,
     BoolUnknownValue { got: String },
@@ -432,6 +441,7 @@ pub enum CompileError {
     FieldsWithSameTransName { trans_name: String, names: (String, String) },
     LocalsWithSameTransName { trans_name: String, names: (String, String) },
     CostumesWithSameTransName { trans_name: String, names: (String, String) },
+    SoundsWithSameTransName { trans_name: String, names: (String, String) },
     BlocksWithSameTransName { trans_name: String, names: (String, String) },
 
     InputsWithSameName { name: String },
@@ -608,6 +618,7 @@ pub struct Entity {
     pub trans_name: String,
     pub fields: Vec<VariableDefInit>,
     pub costumes: Vec<VariableDefInit>,
+    pub sounds: Vec<VariableDefInit>,
     pub funcs: Vec<Function>,
     pub scripts: Vec<Script>,
 
@@ -820,6 +831,7 @@ pub enum Value {
     Constant(Constant),
     String(String),
     Image(Rc<(Vec<u8>, Option<(f64, f64)>)>),
+    Audio(Rc<Vec<u8>>),
     List(Vec<Value>, Option<RefId>),
     Ref(RefId),
 }
@@ -2316,6 +2328,7 @@ struct EntityInfo<'a, 'b> {
     fields: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
     costumes: SymbolTable<'a>,
+    sounds: SymbolTable<'a>,
 }
 impl<'a, 'b> EntityInfo<'a, 'b> {
     fn new(role: &'b RoleInfo<'a>, name: VariableRef) -> Box<Self> {
@@ -2327,6 +2340,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             fields: SymbolTable::new(role.parser),
             funcs: SymbolTable::new(role.parser),
             costumes: SymbolTable::new(role.parser),
+            sounds: SymbolTable::new(role.parser),
         })
     }
     fn parse(mut self, entity: &'a Xml) -> Result<Entity, Box<Error>> {
@@ -2338,7 +2352,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         });
 
         for costume in entity.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
-            if let Some(ident) = costume.get(&["ref"]).map(|r| r.attr("mediaID")).flatten() {
+            if let Some(ident) = costume.get(&["ref"]).and_then(|r| r.attr("mediaID")) {
                 let ident = ident.value.as_str();
                 if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_cst_") {
                     return Err(Box::new_with(|| Error { kind: ProjectError::CostumeIdFormat { id: ident.into() }.into(), location: location.to_owned() }));
@@ -2355,6 +2369,28 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                     Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::CostumesWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
                     Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
                     Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::CostumesWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
+                }
+            }
+        }
+
+        for sound in entity.get(&["sounds", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
+            if let Some(ident) = sound.get(&["ref"]).and_then(|r| r.attr("mediaID")) {
+                let ident = ident.value.as_str();
+                if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_snd_") {
+                    return Err(Box::new_with(|| Error { kind: ProjectError::SoundIdFormat { id: ident.into() }.into(), location: location.to_owned() }));
+                }
+                let name = &ident[self.name.len() + 5..];
+
+                let sound = match self.role.sounds.get(ident) {
+                    Some(x) => x.clone(),
+                    None => return Err(Box::new_with(|| Error { kind: ProjectError::SoundUndefinedRef { id: ident.into() }.into(), location: location.to_owned() })),
+                };
+
+                match self.sounds.define(name.into(), Value::Audio(sound)) {
+                    Ok(None) => (),
+                    Ok(Some(prev)) => return Err(Box::new_with(|| Error { kind: ProjectError::SoundsWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::NameTransformError { name }) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+                    Err(SymbolError::ConflictingTrans { trans_name, names }) => return Err(Box::new_with(|| Error { kind: CompileError::SoundsWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
                 }
             }
         }
@@ -2434,6 +2470,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
             trans_name: self.trans_name,
             fields: self.fields.into_def_inits(),
             costumes: self.costumes.into_def_inits(),
+            sounds: self.sounds.into_def_inits(),
             funcs,
             scripts,
 
@@ -2654,6 +2691,7 @@ struct RoleInfo<'a> {
     entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
     images: VecMap<&'a str, Rc<(Vec<u8>, Option<(f64, f64)>)>>,
+    sounds: VecMap<&'a str, Rc<Vec<u8>>>,
     msg_types: VecMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
@@ -2665,6 +2703,7 @@ impl<'a> RoleInfo<'a> {
             entities: SymbolTable::new(parser),
             funcs: SymbolTable::new(parser),
             images: Default::default(),
+            sounds: Default::default(),
             msg_types: Default::default(),
         })
     }
@@ -2722,30 +2761,55 @@ impl<'a> RoleInfo<'a> {
         }
 
         for entry in role_root.get(&["media"]).map(|v| v.children.as_slice()).unwrap_or(&[]) {
-            if entry.name != "costume" { continue }
-            let id = match entry.attr("mediaID") {
-                Some(x) => x.value.as_str(),
-                None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutId.into(), location: location.to_owned() })),
-            };
+            match entry.name.as_str() {
+                "costume" => {
+                    let id = match entry.attr("mediaID") {
+                        Some(x) => x.value.as_str(),
+                        None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutId.into(), location: location.to_owned() })),
+                    };
 
-            let center = match (entry.attr("center-x").and_then(|x| x.value.parse().ok()), entry.attr("center-y").and_then(|y| y.value.parse().ok())) {
-                (Some(x), Some(y)) => Some((x, y)),
-                _ => None,
-            };
+                    let center = match (entry.attr("center-x").and_then(|x| x.value.parse().ok()), entry.attr("center-y").and_then(|y| y.value.parse().ok())) {
+                        (Some(x), Some(y)) => Some((x, y)),
+                        _ => None,
+                    };
 
-            let content = match entry.attr("image") {
-                Some(x) => match x.value.as_str().strip_prefix("data:image/png;base64,") {
-                    Some(x) => match base64_decode(x) {
-                        Ok(x) => x,
-                        Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                    let content = match entry.attr("image") {
+                        Some(x) => match x.value.as_str().starts_with("data:image/").then(|| x.value.as_str().split(";base64,").nth(1)).flatten() {
+                            Some(x) => match base64_decode(x) {
+                                Ok(x) => x,
+                                Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                            }
+                            _ => return Err(Box::new_with(|| Error { kind: ProjectError::ImageUnknownFormat { id: id.into(), content: x.value.clone() }.into(), location: location.to_owned() })),
+                        }
+                        None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
+                    };
+
+                    if self.images.insert(id, Rc::new((content, center))).is_some() {
+                        return Err(Box::new_with(|| Error { kind: ProjectError::ImagesWithSameId { id: id.into() }.into(), location: location.to_owned() }));
                     }
-                    _ => return Err(Box::new_with(|| Error { kind: ProjectError::ImageUnknownFormat { id: id.into(), content: x.value.clone() }.into(), location: location.to_owned() })),
                 }
-                None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
-            };
+                "sound" => {
+                    let id = match entry.attr("mediaID") {
+                        Some(x) => x.value.as_str(),
+                        None => return Err(Box::new_with(|| Error { kind: ProjectError::SoundWithoutId.into(), location: location.to_owned() })),
+                    };
 
-            if self.images.insert(id, Rc::new((content, center))).is_some() {
-                return Err(Box::new_with(|| Error { kind: ProjectError::ImagesWithSameId { id: id.into() }.into(), location: location.to_owned() }));
+                    let content = match entry.attr("sound") {
+                        Some(x) => match x.value.as_str().starts_with("data:audio/").then(|| x.value.as_str().split(";base64,").nth(1)).flatten() {
+                            Some(x) => match base64_decode(x) {
+                                Ok(x) => x,
+                                Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
+                            }
+                            _ => return Err(Box::new_with(|| Error { kind: ProjectError::SoundUnknownFormat { id: id.into(), content: x.value.clone() }.into(), location: location.to_owned() })),
+                        }
+                        None => return Err(Box::new_with(|| Error { kind: ProjectError::SoundWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
+                    };
+
+                    if self.sounds.insert(id, Rc::new(content)).is_some() {
+                        return Err(Box::new_with(|| Error { kind: ProjectError::SoundsWithSameId { id: id.into() }.into(), location: location.to_owned() }));
+                    }
+                }
+                _ => (),
             }
         }
 

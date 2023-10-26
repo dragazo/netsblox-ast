@@ -706,6 +706,44 @@ fn test_inline_rpc_metadata() {
 }
 
 #[test]
+fn test_media() {
+    let ast = Parser::default().parse(include_str!("projects/media.xml")).unwrap();
+    assert_eq!(ast.roles.len(), 1);
+    let role = &ast.roles[0];
+    assert_eq!(role.entities.len(), 2);
+    let stage = &role.entities[0];
+    let sprite = &role.entities[1];
+
+    assert_eq!(stage.costumes.len(), 0);
+    assert_eq!(stage.active_costume, None);
+
+    assert_eq!(sprite.costumes.len(), 1);
+    assert_eq!(sprite.active_costume, Some(0));
+    let img = &sprite.costumes[0];
+    assert_eq!(img.def.name, "airplane2");
+    match &img.init {
+        Value::Image(x) => {
+            let (content, center) = &**x;
+            assert!((center.unwrap().0 - 100.0).abs() < 1e-5);
+            assert!((center.unwrap().1 - 32.0).abs() < 1e-5);
+            assert_eq!(content.len(), 13296);
+        }
+        x => panic!("{x:?}"),
+    }
+
+    assert_eq!(stage.sounds.len(), 0);
+    assert_eq!(sprite.sounds.len(), 1);
+    let audio = &sprite.sounds[0];
+    assert_eq!(audio.def.name, "Dog 2");
+    match &audio.init {
+        Value::Audio(x) => {
+            assert_eq!(x.len(), 6380);
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 fn test_run_call_lambdas() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",
