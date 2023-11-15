@@ -812,6 +812,8 @@ pub enum StmtKind {
     SetPenAttr { attr: PenAttribute, value: Box<Expr> },
     ChangePenAttr { attr: PenAttribute, delta: Box<Expr> },
 
+    Stop { mode: StopMode },
+
     UnknownBlock { name: String, args: Vec<Expr> },
 }
 impl From<Rpc> for Stmt {
@@ -872,6 +874,11 @@ pub enum ValueType {
 pub enum TimeQuery {
     Year, Month, Date, DayOfWeek, Hour, Minute, Second, UnixTimestampMs,
 }
+#[derive(Debug, Clone)]
+pub enum StopMode {
+    All, AllScenes, ThisScript, ThisBlock, AllButThisScript, OtherScriptsInSprite,
+}
+
 #[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
@@ -1577,6 +1584,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssign { list, value, index }, info }))
                     }
                 }
+            }
+            "doStopThis" => {
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                let mode = match self.grab_option(&stmt.children[0], &location)? {
+                    "all" => StopMode::All,
+                    "all scenes" => StopMode::AllScenes,
+                    "this script" => StopMode::ThisScript,
+                    "this block" => StopMode::ThisBlock,
+                    "all but this script" => StopMode::AllButThisScript,
+                    "other scripts in sprite" => StopMode::OtherScriptsInSprite,
+                    x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with stop mode {x:?} is currently not supported") }.into(), location: location.to_owned() })),
+                };
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::Stop { mode }, info }))
             }
             "doSwitchToCostume" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
