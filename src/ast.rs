@@ -787,6 +787,7 @@ pub enum StmtKind {
     ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
 
     Clone { target: Box<Expr> },
+    DeleteClone,
 
     /// Sends a message to local entities (not over the network).
     /// If `target` is `None`, this should broadcast to all entities.
@@ -1758,6 +1759,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "doThrow" => self.parse_1_args(stmt, &location).map(|(error, info)| Box::new_with(|| Stmt { kind: StmtKind::Throw { error }, info })),
             "hide" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: false }, info })),
             "show" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: true }, info })),
+            "removeClone" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::DeleteClone, info })),
             "doWaitUntil" => self.parse_1_args(stmt, &location).map(|(condition, info)| Box::new_with(|| Stmt { kind: StmtKind::WaitUntil { condition, }, info })),
             "changeSize" => self.parse_1_args(stmt, &location).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangePenSize { delta, }, info })),
             "setSize" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetPenSize { value }, info })),
