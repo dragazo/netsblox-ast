@@ -681,24 +681,24 @@ fn test_inline_rpc_metadata() {
 
     match &stmts[0].kind {
         StmtKind::CallRpc { service, rpc, args } => {
-            assert_eq!(service, "TheCatApi");
-            assert_eq!(rpc, "getCatBreeds");
+            assert_eq!(service.as_str(), "TheCatApi");
+            assert_eq!(rpc.as_str(), "getCatBreeds");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &[] as &[&str]);
         }
         x => panic!("{:?}", x),
     }
     match &stmts[1].kind {
         StmtKind::CallRpc { service, rpc, args } => {
-            assert_eq!(service, "TimeSync");
-            assert_eq!(rpc, "prepare");
+            assert_eq!(service.as_str(), "TimeSync");
+            assert_eq!(rpc.as_str(), "prepare");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["sleepTime"]);
         }
         x => panic!("{:?}", x),
     }
     match &stmts[2].kind {
         StmtKind::CallRpc { service, rpc, args } => {
-            assert_eq!(service, "Wildcam");
-            assert_eq!(rpc, "search");
+            assert_eq!(service.as_str(), "Wildcam");
+            assert_eq!(rpc.as_str(), "search");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["startDate", "stopDate", "species", "latitude", "longitude", "radius"]);
         }
         x => panic!("{:?}", x),
@@ -838,11 +838,11 @@ fn test_auto_fill_lambda_args() {
                         x => panic!("{x:?}"),
                     };
                     match &left.kind {
-                        ExprKind::Value(Value::String(x)) => assert_eq!(x, expect_left),
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), expect_left),
                         x => panic!("{x:?}"),
                     }
                     match &right.kind {
-                        ExprKind::Value(Value::String(x)) => assert_eq!(x, expect_right),
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), expect_right),
                         x => panic!("{x:?}"),
                     }
                 }
@@ -869,11 +869,11 @@ fn test_auto_fill_lambda_args() {
                                 x => panic!("{x:?}"),
                             };
                             match &left.kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "6"),
                                 x => panic!("{x:?}"),
                             }
                             match &right.kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "7"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "7"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -904,7 +904,7 @@ fn test_auto_fill_lambda_args() {
                                 x => panic!("{x:?}"),
                             };
                             match &left.kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "6"),
                                 x => panic!("{x:?}"),
                             }
                             match &right.kind {
@@ -943,7 +943,7 @@ fn test_auto_fill_lambda_args() {
                                 x => panic!("{x:?}"),
                             }
                             match &right.kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "7"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "7"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -1220,19 +1220,19 @@ fn test_ref_inits() {
                 Value::List(values, ref_id) => {
                     assert_eq!(values.len(), 4);
                     match &values[0] {
-                        Value::String(x) => assert_eq!(x, "1"),
+                        Value::String(x) => assert_eq!(x.as_str(), "1"),
                         x => panic!("{x:?}"),
                     }
                     match &values[1] {
-                        Value::String(x) => assert_eq!(x, "5"),
+                        Value::String(x) => assert_eq!(x.as_str(), "5"),
                         x => panic!("{x:?}"),
                     }
                     match &values[2] {
-                        Value::String(x) => assert_eq!(x, "text"),
+                        Value::String(x) => assert_eq!(x.as_str(), "text"),
                         x => panic!("{x:?}"),
                     }
                     match &values[3] {
-                        Value::String(x) => assert_eq!(x, "3"),
+                        Value::String(x) => assert_eq!(x.as_str(), "3"),
                         x => panic!("{x:?}"),
                     }
                     assert_eq!(ref_id.as_ref().unwrap().0, 50);
@@ -1247,15 +1247,15 @@ fn test_ref_inits() {
                 Value::List(values, ref_id) => {
                     assert_eq!(values.len(), 4);
                     match &values[0] {
-                        Value::String(x) => assert_eq!(x, "1"),
+                        Value::String(x) => assert_eq!(x.as_str(), "1"),
                         x => panic!("{x:?}"),
                     }
                     match &values[1] {
-                        Value::String(x) => assert_eq!(x, "5"),
+                        Value::String(x) => assert_eq!(x.as_str(), "5"),
                         x => panic!("{x:?}"),
                     }
                     match &values[2] {
-                        Value::String(x) => assert_eq!(x, "text"),
+                        Value::String(x) => assert_eq!(x.as_str(), "text"),
                         x => panic!("{x:?}"),
                     }
                     match &values[3] {
@@ -1311,7 +1311,7 @@ fn test_crlf() {
 
     match &stmts[1].kind {
         StmtKind::Assign { value, .. } => match &value.kind {
-            ExprKind::Value(Value::String(x)) => assert_eq!(x, "hello,\"one\ntwo\nthree\"\nworld,test,\"one\ntwo\n\"\nagain,\"\ntwo\",\"\ntwo\n\""),
+            ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello,\"one\ntwo\nthree\"\nworld,test,\"one\ntwo\n\"\nagain,\"\ntwo\",\"\ntwo\n\""),
             x => panic!("{x:?}"),
         }
         x => panic!("{x:?}"),
@@ -1426,11 +1426,11 @@ fn test_unevaluated_inputs() {
             assert_eq!(upvars.len(), 0);
             assert_eq!(args.len(), 4);
             match &args[0].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                 x => panic!("{x:?}"),
             }
             match &args[1].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                 x => panic!("{x:?}"),
             }
             match &args[2].kind {
@@ -1441,7 +1441,7 @@ fn test_unevaluated_inputs() {
                     assert_eq!(stmts.len(), 1);
                     match &stmts[0].kind {
                         StmtKind::Return { value } => match &value.kind {
-                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                            ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                             x => panic!("{x:?}"),
                         }
                         x => panic!("{x:?}"),
@@ -1457,7 +1457,7 @@ fn test_unevaluated_inputs() {
                     assert_eq!(stmts.len(), 1);
                     match &stmts[0].kind {
                         StmtKind::Return { value } => match &value.kind {
-                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                            ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                             x => panic!("{x:?}"),
                         }
                         x => panic!("{x:?}"),
@@ -1507,7 +1507,7 @@ fn test_unevaluated_inputs() {
                                             x => panic!("{x:?}"),
                                         }
                                         match &b.kind {
-                                            ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                                            ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                                             x => panic!("{x:?}"),
                                         }
                                     }
@@ -1537,7 +1537,7 @@ fn test_unevaluated_inputs() {
                                     x => panic!("{x:?}"),
                                 }
                                 match &right.kind {
-                                    ExprKind::Value(Value::String(x)) => assert_eq!(x, ""),
+                                    ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), ""),
                                     x => panic!("{x:?}"),
                                 }
                             }
@@ -1634,10 +1634,10 @@ fn test_unknown_blocks() {
 
     match &stmts[0].kind {
         StmtKind::UnknownBlock { name, args } => {
-            assert_eq!(name, "tuneScopeSetInstrument");
+            assert_eq!(name.as_str(), "tuneScopeSetInstrument");
             assert_eq!(args.len(), 1);
             match &args[0].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Clarinet"),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "Clarinet"),
                 x => panic!("{x:?}"),
             }
         }
@@ -1645,10 +1645,10 @@ fn test_unknown_blocks() {
     }
     match &stmts[1].kind {
         StmtKind::UnknownBlock { name, args } => {
-            assert_eq!(name, "tuneScopeSetVolume");
+            assert_eq!(name.as_str(), "tuneScopeSetVolume");
             assert_eq!(args.len(), 1);
             match &args[0].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, "1337"),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "1337"),
                 x => panic!("{x:?}"),
             }
         }
@@ -1656,17 +1656,17 @@ fn test_unknown_blocks() {
     }
     match &stmts[2].kind {
         StmtKind::UnknownBlock { name, args } => {
-            assert_eq!(name, "tuneScopePlayChordForDuration");
+            assert_eq!(name.as_str(), "tuneScopePlayChordForDuration");
             assert_eq!(args.len(), 2);
             match &args[0].kind {
                 ExprKind::MakeList { values } => {
                     assert_eq!(values.len(), 2);
                     match &values[0].kind {
                         ExprKind::UnknownBlock { name, args } => {
-                            assert_eq!(name, "tuneScopeNote");
+                            assert_eq!(name.as_str(), "tuneScopeNote");
                             assert_eq!(args.len(), 1);
                             match &args[0].kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "A3"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "A3"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -1674,10 +1674,10 @@ fn test_unknown_blocks() {
                     }
                     match &values[1].kind {
                         ExprKind::UnknownBlock { name, args } => {
-                            assert_eq!(name, "tuneScopeNote");
+                            assert_eq!(name.as_str(), "tuneScopeNote");
                             assert_eq!(args.len(), 1);
                             match &args[0].kind {
-                                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Fb3"),
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "Fb3"),
                                 x => panic!("{x:?}"),
                             }
                         }
@@ -1687,7 +1687,7 @@ fn test_unknown_blocks() {
                 x => panic!("{x:?}"),
             }
             match &args[1].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, "Quarter"),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "Quarter"),
                 x => panic!("{x:?}"),
             }
         }
@@ -1695,10 +1695,10 @@ fn test_unknown_blocks() {
     }
     match &stmts[3].kind {
         StmtKind::UnknownBlock { name, args } => {
-            assert_eq!(name, "tuneScopePlayTracks");
+            assert_eq!(name.as_str(), "tuneScopePlayTracks");
             assert_eq!(args.len(), 2);
             match &args[0].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, "4/4"),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "4/4"),
                 x => panic!("{x:?}"),
             }
             match &args[1].kind {
@@ -1717,11 +1717,11 @@ fn test_unknown_blocks() {
                             ExprKind::Value(Value::List(values, None)) => {
                                 assert_eq!(values.len(), 2);
                                 match &values[0] {
-                                    Value::String(x) => assert_eq!(x, "1"),
+                                    Value::String(x) => assert_eq!(x.as_str(), "1"),
                                     x => panic!("{x:?}"),
                                 }
                                 match &values[1] {
-                                    Value::String(x) => assert_eq!(x, "2"),
+                                    Value::String(x) => assert_eq!(x.as_str(), "2"),
                                     x => panic!("{x:?}"),
                                 }
                             }
@@ -1737,25 +1737,25 @@ fn test_unknown_blocks() {
     }
     match &stmts[4].kind {
         StmtKind::UnknownBlock { name, args } => {
-            assert_eq!(name, "tuneScopePlayTracks");
+            assert_eq!(name.as_str(), "tuneScopePlayTracks");
             assert_eq!(args.len(), 2);
             match &args[0].kind {
-                ExprKind::Value(Value::String(x)) => assert_eq!(x, "6/8"),
+                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "6/8"),
                 x => panic!("{x:?}"),
             }
             match &args[1].kind {
                 ExprKind::UnknownBlock { name, args } => {
-                    assert_eq!(name, "tuneScopeSection");
+                    assert_eq!(name.as_str(), "tuneScopeSection");
                     assert_eq!(args.len(), 1);
                     match &args[0].kind {
                         ExprKind::MakeList { values } => {
                             assert_eq!(values.len(), 2);
                             match &values[0].kind {
                                 ExprKind::UnknownBlock { name, args } => {
-                                    assert_eq!(name, "tuneScopeNote");
+                                    assert_eq!(name.as_str(), "tuneScopeNote");
                                     assert_eq!(args.len(), 1);
                                     match &args[0].kind {
-                                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "C4"),
+                                        ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "C4"),
                                         x => panic!("{x:?}"),
                                     }
                                 }
@@ -1763,10 +1763,10 @@ fn test_unknown_blocks() {
                             }
                             match &values[1].kind {
                                 ExprKind::UnknownBlock { name, args } => {
-                                    assert_eq!(name, "tuneScopeDuration");
+                                    assert_eq!(name.as_str(), "tuneScopeDuration");
                                     assert_eq!(args.len(), 1);
                                     match &args[0].kind {
-                                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "Half"),
+                                        ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "Half"),
                                         x => panic!("{x:?}"),
                                     }
                                 }

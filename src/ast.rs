@@ -1,9 +1,10 @@
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::borrow::ToOwned;
 use core::{mem, iter, fmt};
+
+use compact_str::CompactString;
 
 use base64::engine::Engine as Base64Engine;
 use base64::DecodeError as Base64Error;
@@ -110,9 +111,9 @@ impl<'a> InlineListIter<'a> {
     }
 }
 impl<'a> Iterator for InlineListIter<'a> {
-    type Item = String;
+    type Item = CompactString;
     fn next(&mut self) -> Option<Self::Item> {
-        let mut res = String::new();
+        let mut res = CompactString::default();
         let mut in_quote = false;
         while let Some(ch) = self.0.next() {
             if ch == '"' {
@@ -128,12 +129,12 @@ impl<'a> Iterator for InlineListIter<'a> {
                 }
             }
             else if ch == ',' && !in_quote {
-                return Some(res);
+                return Some(res.into());
             } else {
                 res.push(ch);
             }
         }
-        if !res.is_empty() { Some(res) } else { None }
+        if !res.is_empty() { Some(res.into()) } else { None }
     }
 }
 #[test]
@@ -147,8 +148,8 @@ fn test_inline_list_iter() {
 }
 
 #[inline(never)]
-fn clean_newlines(s: &str) -> String {
-    let mut res = String::with_capacity(s.len());
+fn clean_newlines(s: &str) -> CompactString {
+    let mut res = alloc::string::String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     loop {
         match chars.next() {
@@ -161,7 +162,7 @@ fn clean_newlines(s: &str) -> String {
             None => break,
         }
     }
-    res
+    res.into()
 }
 #[test]
 fn test_clean_newlines() {
@@ -184,8 +185,8 @@ fn get_collab_id(block: &Xml) -> Option<&str> {
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
 #[cfg(test)]
-fn xml_escape(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
+fn xml_escape(input: &str) -> CompactString {
+    let mut result = alloc::string::String::with_capacity(input.len());
     for c in input.chars() {
         match c {
             '&' => result.push_str("&amp;"),
@@ -196,14 +197,14 @@ fn xml_escape(input: &str) -> String {
             o => result.push(o),
         }
     }
-    result
+    result.into()
 }
 
 // source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
 // note: modified to suite our needs
 #[inline(never)]
-fn xml_unescape(input: &str) -> Result<String, XmlError> {
-    let mut result = String::with_capacity(input.len());
+fn xml_unescape(input: &str) -> Result<CompactString, XmlError> {
+    let mut result = alloc::string::String::with_capacity(input.len());
 
     let mut it = input.split('&');
     if let Some(sub) = it.next() {
@@ -230,17 +231,17 @@ fn xml_unescape(input: &str) -> Result<String, XmlError> {
                         };
                         match val.and_then(char::from_u32) {
                             Some(c) => result.push(c),
-                            None => return Err(XmlError::IllegalSequence { sequence: format!("&{};", ent) }),
+                            None => return Err(XmlError::IllegalSequence { sequence: format!("&{};", ent).into() }),
                         }
                     }
                 }
                 result.push_str(&sub[idx + 1..]);
             }
-            None => return Err(XmlError::IllegalSequence { sequence: format!("&{}", sub) }),
+            None => return Err(XmlError::IllegalSequence { sequence: format!("&{}", sub).into() }),
         }
     }
 
-    Ok(result)
+    Ok(result.into())
 }
 
 #[cfg(test)]
@@ -255,13 +256,13 @@ proptest! {
 
 #[derive(Debug)]
 struct XmlAttr {
-    name: String,
-    value: String,
+    name: CompactString,
+    value: CompactString,
 }
 #[derive(Debug)]
 struct Xml {
-    name: String,
-    text: String,
+    name: CompactString,
+    text: CompactString,
     attrs: Vec<XmlAttr>,
     children: Vec<Xml>,
 }
@@ -277,7 +278,7 @@ impl Xml {
     }
 }
 fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) -> Result<Xml, XmlError> {
-    let mut stack = vec![Xml { name: root_name.into(), text: String::new(), attrs: vec![], children: vec![] }];
+    let mut stack = vec![Xml { name: root_name.into(), text: CompactString::default(), attrs: vec![], children: vec![] }];
     loop {
         match xml.next() {
             Some(e) => match e {
@@ -285,7 +286,7 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
                 Ok(e) => match e {
                     xmlparser::Token::Attribute { local, value, .. } => stack.last_mut().unwrap().attrs.push(XmlAttr { name: xml_unescape(local.as_str())?, value: xml_unescape(value.as_str())? }),
                     xmlparser::Token::Text { text: t } => stack.last_mut().unwrap().text.push_str(&xml_unescape(t.as_str())?),
-                    xmlparser::Token::ElementStart { local, .. } => stack.push(Xml { name: local.as_str().into(), text: String::new(), attrs: vec![], children: vec![] }),
+                    xmlparser::Token::ElementStart { local, .. } => stack.push(Xml { name: local.as_str().into(), text: CompactString::default(), attrs: vec![], children: vec![] }),
                     xmlparser::Token::ElementEnd { end, .. } => match end {
                         xmlparser::ElementEnd::Close(_, _) | xmlparser::ElementEnd::Empty => {
                             let mut res = stack.pop().unwrap();
@@ -313,10 +314,10 @@ pub struct Error {
 
 #[derive(Debug)]
 pub struct Location {
-    pub role: Option<String>,
-    pub entity: Option<String>,
-    pub collab_id: Option<String>,
-    pub block_type: Option<String>,
+    pub role: Option<CompactString>,
+    pub entity: Option<CompactString>,
+    pub collab_id: Option<CompactString>,
+    pub block_type: Option<CompactString>,
 }
 
 struct LocationRef<'a> {
@@ -328,10 +329,10 @@ struct LocationRef<'a> {
 impl LocationRef<'_> {
     fn to_owned(&self) -> Location {
         Location {
-            role: self.role.map(ToOwned::to_owned),
-            entity: self.entity.map(ToOwned::to_owned),
-            collab_id: self.collab_id.map(ToOwned::to_owned),
-            block_type: self.block_type.map(ToOwned::to_owned),
+            role: self.role.map(CompactString::new),
+            entity: self.entity.map(CompactString::new),
+            collab_id: self.collab_id.map(CompactString::new),
+            block_type: self.block_type.map(CompactString::new),
         }
     }
 }
@@ -351,7 +352,7 @@ impl From<CompileError> for ErrorKind { fn from(e: CompileError) -> Self { Self:
 #[derive(Debug)]
 pub enum XmlError {
     Read { error: xmlparser::Error },
-    IllegalSequence { sequence: String },
+    IllegalSequence { sequence: CompactString },
     UnexpectedEof,
 }
 
@@ -366,94 +367,94 @@ pub enum ProjectError {
     UpvarNotConst,
 
     UnnamedGlobal,
-    GlobalsWithSameName { name: String },
+    GlobalsWithSameName { name: CompactString },
 
     UnnamedEntity,
-    EntitiesWithSameName { name: String },
+    EntitiesWithSameName { name: CompactString },
 
     UnnamedField,
-    FieldNoValue { name: String },
-    FieldsWithSameName { name: String },
+    FieldNoValue { name: CompactString },
+    FieldsWithSameName { name: CompactString },
 
     BlockWithoutType,
     BlockUnknownType,
     BlockChildCount { needed: usize, got: usize },
     BlockMissingOption,
-    BlockOptionUnknown { got: String },
+    BlockOptionUnknown { got: CompactString },
 
     ImageWithoutId,
-    ImagesWithSameId { id: String },
-    ImageWithoutContent { id: String },
-    ImageUnknownFormat { id: String, content: String },
+    ImagesWithSameId { id: CompactString },
+    ImageWithoutContent { id: CompactString },
+    ImageUnknownFormat { id: CompactString, content: CompactString },
 
     SoundWithoutId,
-    SoundsWithSameId { id: String },
-    SoundWithoutContent { id: String },
-    SoundUnknownFormat { id: String, content: String },
+    SoundsWithSameId { id: CompactString },
+    SoundWithoutContent { id: CompactString },
+    SoundUnknownFormat { id: CompactString, content: CompactString },
 
-    CostumeIdFormat { id: String },
-    CostumeUndefinedRef { id: String },
-    CostumesWithSameName { name: String },
+    CostumeIdFormat { id: CompactString },
+    CostumeUndefinedRef { id: CompactString },
+    CostumesWithSameName { name: CompactString },
 
-    SoundIdFormat { id: String },
-    SoundUndefinedRef { id: String },
-    SoundsWithSameName { name: String },
+    SoundIdFormat { id: CompactString },
+    SoundUndefinedRef { id: CompactString },
+    SoundsWithSameName { name: CompactString },
 
     BoolNoValue,
-    BoolUnknownValue { got: String },
+    BoolUnknownValue { got: CompactString },
 
-    ColorUnknownValue { color: String },
+    ColorUnknownValue { color: CompactString },
 
     CustomBlockWithoutName,
     CustomBlockWithoutInputsMeta,
     CustomBlockInputsMetaCorrupted,
     CustomBlockWithoutType,
-    CustomBlockUnknownType { ty: String },
+    CustomBlockUnknownType { ty: CompactString },
 
     MessageTypeMissingName,
-    MessageTypeMissingFields { msg_type: String },
-    MessageTypeFieldEmpty { msg_type: String },
-    MessageTypeMultiplyDefined { msg_type: String },
+    MessageTypeMissingFields { msg_type: CompactString },
+    MessageTypeFieldEmpty { msg_type: CompactString },
+    MessageTypeMultiplyDefined { msg_type: CompactString },
 }
 
 #[derive(Debug)]
 pub enum CompileError {
     AutofillGenerateError { input: usize },
-    NameTransformError { name: String},
+    NameTransformError { name: CompactString},
     UnknownBlockType,
     DerefAssignment,
-    UndefinedVariable { name: String },
-    UndefinedFn { name: String },
+    UndefinedVariable { name: CompactString },
+    UndefinedFn { name: CompactString },
     BlockOptionNotConst,
     BlockOptionNotSelected,
-    UnknownEntity { unknown: String },
-    UnknownEffect { effect: String },
-    UnknownPenAttr { attr: String },
+    UnknownEntity { unknown: CompactString },
+    UnknownEffect { effect: CompactString },
+    UnknownPenAttr { attr: CompactString },
 
-    UnknownMessageType { msg_type: String },
-    MessageTypeWrongNumberArgs { msg_type: String, got: usize, expected: usize },
+    UnknownMessageType { msg_type: CompactString },
+    MessageTypeWrongNumberArgs { msg_type: CompactString, got: usize, expected: usize },
 
-    UnknownService { service: String },
-    UnknownRPC { service: String, rpc: String },
+    UnknownService { service: CompactString },
+    UnknownRPC { service: CompactString, rpc: CompactString },
 
-    GlobalsWithSameTransName { trans_name: String, names: (String, String) },
-    EntitiesWithSameTransName { trans_name: String, names: (String, String) },
-    FieldsWithSameTransName { trans_name: String, names: (String, String) },
-    LocalsWithSameTransName { trans_name: String, names: (String, String) },
-    CostumesWithSameTransName { trans_name: String, names: (String, String) },
-    SoundsWithSameTransName { trans_name: String, names: (String, String) },
-    BlocksWithSameTransName { trans_name: String, names: (String, String) },
+    GlobalsWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    EntitiesWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    FieldsWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    LocalsWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    CostumesWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    SoundsWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
+    BlocksWithSameTransName { trans_name: CompactString, names: (CompactString, CompactString) },
 
-    InputsWithSameName { name: String },
-    BlocksWithSameName { name: String, sigs: (String, String) },
+    InputsWithSameName { name: CompactString },
+    BlocksWithSameName { name: CompactString, sigs: (CompactString, CompactString) },
 
-    CurrentlyUnsupported { msg: String },
+    CurrentlyUnsupported { msg: CompactString },
 }
 
 #[derive(Debug)]
 pub enum SymbolError {
-    NameTransformError { name: String },
-    ConflictingTrans { trans_name: String, names: (String, String) },
+    NameTransformError { name: CompactString },
+    ConflictingTrans { trans_name: CompactString, names: (CompactString, CompactString) },
 }
 
 #[derive(Clone)]
@@ -498,8 +499,8 @@ impl<K, V> VecMap<K, V> {
 #[derive(Clone)]
 struct SymbolTable<'a> {
     parser: &'a Parser,
-    orig_to_def: VecMap<String, VariableDefInit>,
-    trans_to_orig: VecMap<String, String>,
+    orig_to_def: VecMap<CompactString, VariableDefInit>,
+    trans_to_orig: VecMap<CompactString, CompactString>,
 }
 impl fmt::Debug for SymbolTable<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -510,7 +511,7 @@ impl<'a> SymbolTable<'a> {
     fn new(parser: &'a Parser) -> Self {
         Self { parser, orig_to_def: Default::default(), trans_to_orig: Default::default() }
     }
-    fn transform_name(&self, name: &str) -> Result<String, SymbolError> {
+    fn transform_name(&self, name: &str) -> Result<CompactString, SymbolError> {
         match self.parser.name_transformer.as_ref()(name) {
             Ok(v) => Ok(v),
             Err(()) => Err(SymbolError::NameTransformError { name: name.into() }),
@@ -520,7 +521,7 @@ impl<'a> SymbolTable<'a> {
     /// Fails if the name cannot be properly transformed or the transformed name already exists.
     /// On success, returns the previous definition (if one existed).
     /// On failure, the symbol table is not modified, and an error context object is returned.
-    fn define(&mut self, name: String, value: Value) -> Result<Option<VariableDefInit>, SymbolError> {
+    fn define(&mut self, name: CompactString, value: Value) -> Result<Option<VariableDefInit>, SymbolError> {
         let trans_name = self.transform_name(&name)?;
         if let Some(orig) = self.trans_to_orig.get(&trans_name) {
             let def = self.orig_to_def.get(orig).unwrap();
@@ -560,14 +561,14 @@ fn test_sym_tab() {
     assert!(sym.define("hello world!".into(), 0f64.into()).unwrap().is_none());
     assert_eq!(sym.orig_to_def.get("hello world!").unwrap().def.name, "hello world!");
     assert_eq!(sym.orig_to_def.get("hello world!").unwrap().def.trans_name, "hello_world");
-    assert_eq!(sym.trans_to_orig.get("hello_world").unwrap(), "hello world!");
+    assert_eq!(sym.trans_to_orig.get("hello_world").unwrap().as_str(), "hello world!");
 }
 
 #[derive(Debug)]
 struct Rpc {
-    service: String,
-    rpc: String,
-    args: Vec<(String, Expr)>,
+    service: CompactString,
+    rpc: CompactString,
+    args: Vec<(CompactString, Expr)>,
     info: Box<BlockInfo>,
 }
 #[derive(Debug)]
@@ -580,8 +581,8 @@ struct FnCall {
 
 #[derive(Debug, Clone)]
 pub struct BlockInfo {
-    pub comment: Option<String>,
-    pub location: Option<String>,
+    pub comment: Option<CompactString>,
+    pub location: Option<CompactString>,
 }
 impl BlockInfo {
     fn none() -> Box<Self> {
@@ -591,13 +592,13 @@ impl BlockInfo {
 
 #[derive(Debug, Clone)]
 pub struct Project {
-    pub name: String,
+    pub name: CompactString,
     pub roles: Vec<Role>,
 }
 #[derive(Debug, Clone)]
 pub struct Role {
-    pub name: String,
-    pub notes: String,
+    pub name: CompactString,
+    pub notes: CompactString,
     pub stage_size: (usize, usize),
     pub globals: Vec<VariableDefInit>,
     pub funcs: Vec<Function>,
@@ -605,8 +606,8 @@ pub struct Role {
 }
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub name: String,
-    pub trans_name: String,
+    pub name: CompactString,
+    pub trans_name: CompactString,
     pub params: Vec<VariableDef>,
     pub upvars: Vec<VariableRef>, // refer into params
     pub returns: bool,
@@ -614,8 +615,8 @@ pub struct Function {
 }
 #[derive(Debug, Clone)]
 pub struct Entity {
-    pub name: String,
-    pub trans_name: String,
+    pub name: CompactString,
+    pub trans_name: CompactString,
     pub fields: Vec<VariableDefInit>,
     pub costumes: Vec<VariableDefInit>,
     pub sounds: Vec<VariableDefInit>,
@@ -636,8 +637,8 @@ pub struct VariableDefInit {
 }
 #[derive(Debug, Clone)]
 pub struct VariableDef {
-    pub name: String,
-    pub trans_name: String,
+    pub name: CompactString,
+    pub trans_name: CompactString,
 }
 impl VariableDef {
     #[inline(always)]
@@ -651,14 +652,14 @@ impl VariableDef {
 }
 #[derive(Debug, Clone)]
 pub struct VariableRef {
-    pub name: String,
-    pub trans_name: String,
+    pub name: CompactString,
+    pub trans_name: CompactString,
     pub location: VarLocation,
 }
 #[derive(Debug, Clone)]
 pub struct FnRef {
-    pub name: String,
-    pub trans_name: String,
+    pub name: CompactString,
+    pub trans_name: CompactString,
     pub location: FnLocation,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -683,7 +684,7 @@ pub struct Hat {
 pub enum HatKind {
     OnFlag,
     OnClone,
-    OnKey { key: String },
+    OnKey { key: CompactString },
     MouseDown,
     MouseUp,
     MouseEnter,
@@ -693,9 +694,9 @@ pub enum HatKind {
     Dropped,
     Stopped,
     When { condition: Box<Expr> },
-    LocalMessage { msg_type: Option<String> },
-    NetworkMessage { msg_type: String, fields: Vec<VariableRef> },
-    Unknown { name: String, fields: Vec<VariableRef> },
+    LocalMessage { msg_type: Option<CompactString> },
+    NetworkMessage { msg_type: CompactString, fields: Vec<VariableRef> },
+    Unknown { name: CompactString, fields: Vec<VariableRef> },
 }
 #[derive(Debug, Clone)]
 pub struct Stmt {
@@ -781,7 +782,7 @@ pub enum StmtKind {
     ChangePenSize { delta: Box<Expr> },
     SetPenSize { value: Box<Expr> },
 
-    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
+    CallRpc { service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef> },
     CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
     ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
@@ -796,7 +797,7 @@ pub enum StmtKind {
     SendLocalMessage { target: Option<Box<Expr>>, msg_type: Box<Expr>, wait: bool },
     /// Sends a message over the network to the specified targets.
     /// `target` may be a single target or a list of targets.
-    SendNetworkMessage { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)> },
+    SendNetworkMessage { target: Box<Expr>, msg_type: CompactString, values: Vec<(CompactString, Expr)> },
     /// Sends a reply from a received message that was blocking (sender's `wait` flag was `true`).
     SendNetworkReply { value: Box<Expr> },
 
@@ -815,7 +816,7 @@ pub enum StmtKind {
 
     Stop { mode: StopMode },
 
-    UnknownBlock { name: String, args: Vec<Expr> },
+    UnknownBlock { name: CompactString, args: Vec<Expr> },
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
@@ -832,7 +833,7 @@ pub enum Value {
     Bool(bool),
     Number(f64),
     Constant(Constant),
-    String(String),
+    String(CompactString),
     Image(Rc<(Vec<u8>, Option<(f64, f64)>)>),
     Audio(Rc<Vec<u8>>),
     List(Vec<Value>, Option<RefId>),
@@ -842,7 +843,7 @@ pub enum Value {
 impl From<f64> for Value { fn from(v: f64) -> Value { Value::Number(v) } }
 impl From<&str> for Value { fn from(v: &str) -> Value { Value::String(v.into()) } }
 impl From<bool> for Value { fn from(v: bool) -> Value { Value::Bool(v) } }
-impl From<String> for Value { fn from(v: String) -> Value { Value::String(v) } }
+impl From<CompactString> for Value { fn from(v: CompactString) -> Value { Value::String(v) } }
 impl From<Constant> for Value { fn from(v: Constant) -> Value { Value::Constant(v) } }
 
 #[derive(Debug, Clone, Copy)]
@@ -993,7 +994,7 @@ pub enum ExprKind {
     Acos { value: Box<Expr> },
     Atan { value: Box<Expr> },
 
-    CallRpc { service: String, rpc: String, args: Vec<(String, Expr)> },
+    CallRpc { service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef>, },
     CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
@@ -1016,7 +1017,7 @@ pub enum ExprKind {
     IsVisible,
 
     This,
-    Entity { name: String, trans_name: String },
+    Entity { name: CompactString, trans_name: CompactString },
 
     ImageOfEntity { entity: Box<Expr> },
     ImageOfDrawings,
@@ -1042,7 +1043,7 @@ pub enum ExprKind {
     FindFirst { f: Box<Expr>, list: Box<Expr> },
     Combine { f: Box<Expr>, list: Box<Expr> },
 
-    NetworkMessageReply { target: Box<Expr>, msg_type: String, values: Vec<(String, Expr)> },
+    NetworkMessageReply { target: Box<Expr>, msg_type: CompactString, values: Vec<(CompactString, Expr)> },
 
     Effect { kind: EffectKind },
     PenAttr { attr: PenAttribute },
@@ -1056,7 +1057,7 @@ pub enum ExprKind {
     TypeQuery { value: Box<Expr>, ty: ValueType },
     RealTime { query: TimeQuery },
 
-    UnknownBlock { name: String, args: Vec<Expr> },
+    UnknownBlock { name: CompactString, args: Vec<Expr> },
 }
 impl<T: Into<Value>> From<T> for Expr {
     fn from(v: T) -> Expr {
@@ -1081,8 +1082,8 @@ fn parse_color(value: &str) -> Option<(u8, u8, u8, u8)> {
 
 struct NetworkMessage {
     target: Box<Expr>,
-    msg_type: String,
-    values: Vec<(String, Expr)>,
+    msg_type: CompactString,
+    values: Vec<(CompactString, Expr)>,
     info: Box<BlockInfo>,
 }
 
@@ -1112,10 +1113,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             Some(comment) => if comment.name == "comment" { Some(comment.text.clone()) } else { None },
             None => None,
         };
-        Ok(Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) }))
+        Ok(Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(CompactString::new) }))
     }
     #[inline(never)]
-    fn decl_local(&mut self, name: String, value: Value, location: &LocationRef) -> Result<&VariableDefInit, Box<Error>> {
+    fn decl_local(&mut self, name: CompactString, value: Value, location: &LocationRef) -> Result<&VariableDefInit, Box<Error>> {
         let locals = &mut self.locals.last_mut().unwrap().0;
         match locals.define(name.clone(), value) {
             Ok(_) => (), // redefining locals is fine
@@ -1199,7 +1200,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
         location.block_type = Some(s);
 
-        fn parse_fields(script: &mut ScriptInfo, children: &[Xml], location: &LocationRef) -> Result<(Vec<VariableRef>, Option<String>), Box<Error>> {
+        fn parse_fields(script: &mut ScriptInfo, children: &[Xml], location: &LocationRef) -> Result<(Vec<VariableRef>, Option<CompactString>), Box<Error>> {
             let mut fields = vec![];
             let mut comment = None;
             for child in children {
@@ -1258,7 +1259,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         }
                         None => return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                     }
-                    x => Some(x.to_owned()),
+                    x => Some(CompactString::new(x)),
                 };
                 Box::new_with(|| Hat { kind: HatKind::LocalMessage { msg_type }, info })
             }
@@ -1268,16 +1269,16 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 let msg_type = match stmt.children[0].text.as_str() {
                     "" => return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
-                    x => x.to_owned(),
+                    x => CompactString::new(x),
                 };
 
                 let (fields, comment) = parse_fields(self, &stmt.children[1..], &location)?;
-                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) });
+                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(CompactString::new) });
                 Box::new_with(|| Hat { kind: HatKind::NetworkMessage { msg_type, fields }, info })
             }
             x if x.starts_with("receive") => {
                 let (fields, comment) = parse_fields(self, &stmt.children, &location)?;
-                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(ToOwned::to_owned) });
+                let info = Box::new_with(|| BlockInfo { comment, location: location.collab_id.map(CompactString::new) });
                 Box::new_with(|| Hat { kind: HatKind::Unknown { fields, name: x.into() }, info })
             }
             _ => return Ok(None),
@@ -1295,7 +1296,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "pixelate" => EffectKind::Pixelate,
             "mosaic" => EffectKind::Mosaic,
             "negative" => EffectKind::Negative,
-            x => return Err(Box::new_with(|| Error { kind: CompileError::UnknownEffect { effect: x.to_owned() }.into(), location: location.to_owned() })),
+            x => return Err(Box::new_with(|| Error { kind: CompileError::UnknownEffect { effect: CompactString::new(x) }.into(), location: location.to_owned() })),
         })
     }
     #[inline(never)]
@@ -1306,7 +1307,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             "saturation" => PenAttribute::Saturation,
             "brightness" => PenAttribute::Brightness,
             "transparency" => PenAttribute::Transparency,
-            x => return Err(Box::new_with(|| Error { kind: CompileError::UnknownPenAttr { attr: x.to_owned() }.into(), location: location.to_owned() })),
+            x => return Err(Box::new_with(|| Error { kind: CompileError::UnknownPenAttr { attr: CompactString::new(x) }.into(), location: location.to_owned() })),
         })
     }
     #[inline(never)]
@@ -1334,7 +1335,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let mut args = Vec::with_capacity(arg_names.len());
         for (&arg_name, child) in arg_names.iter().zip(&stmt.children[2 .. 2 + arg_names.len()]) {
             let val = self.parse_expr(child, location)?;
-            args.push_with(|| (arg_name.to_owned(), *val));
+            args.push_with(|| (CompactString::new(arg_name), *val));
         }
         Ok(Box::new_with(|| Rpc { service, rpc, args, info }))
     }
@@ -1410,8 +1411,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             None => self.parse_expr(target_xml, location)?,
         };
 
-        let info = Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.collab_id.map(ToOwned::to_owned) });
-        Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| x.to_owned()).zip(values.into_iter().map(|x| *x)).collect(), info }))
+        let info = Box::new_with(|| BlockInfo { comment: comment.map(CompactString::new), location: location.collab_id.map(CompactString::new) });
+        Ok(Box::new_with(|| NetworkMessage { target, msg_type: msg_type.into(), values: fields.iter().map(|&x| CompactString::new(x)).zip(values.into_iter().map(|x| *x)).collect(), info }))
     }
     #[inline(never)]
     fn parse_unknown_common(&mut self, stmt: &Xml, location: &LocationRef) -> Result<(Vec<Expr>, Box<BlockInfo>), Box<Error>> {
@@ -1420,7 +1421,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         for arg in stmt.children[..argc].iter() {
             args.push_boxed(self.parse_expr(arg, &location)?);
         }
-        Ok((args, Box::new_with(|| BlockInfo { comment: comment.map(ToOwned::to_owned), location: location.collab_id.map(ToOwned::to_owned) })))
+        Ok((args, Box::new_with(|| BlockInfo { comment: comment.map(CompactString::new), location: location.collab_id.map(CompactString::new) })))
     }
     #[inline(never)]
     fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
@@ -1480,7 +1481,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let start = self.parse_expr(&stmt.children[1], &location)?;
                 let stop = self.parse_expr(&stmt.children[2], &location)?;
-                let var = self.decl_local(var.to_owned(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts }, info }))
@@ -1493,7 +1494,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error { kind: ProjectError::UpvarNotConst.into(), location: location.to_owned() })),
                 };
                 let items = self.parse_expr(&stmt.children[1], &location)?;
-                let var = self.decl_local(var.to_owned(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
+                let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts }, info }))
@@ -1595,7 +1596,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "this block" => StopMode::ThisBlock,
                     "all but this script" => StopMode::AllButThisScript,
                     "other scripts in sprite" => StopMode::OtherScriptsInSprite,
-                    x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with stop mode {x:?} is currently not supported") }.into(), location: location.to_owned() })),
+                    x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with stop mode {x:?} is currently not supported").into() }.into(), location: location.to_owned() })),
                 };
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::Stop { mode }, info }))
             }
@@ -1606,7 +1607,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if val.name == "l" && val.get(&["option"]).is_some() {
                     match self.grab_option(val, &location)? {
                         "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: None }, info })),
-                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with project costume ({x}) currently not supported") }.into(), location: location.to_owned() })),
+                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with project costume ({x}) currently not supported").into() }.into(), location: location.to_owned() })),
                     }
                 } else if val.name == "l" {
                     match val.text.as_str() {
@@ -1856,7 +1857,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         };
 
         let mut params = SymbolTable::new(self.parser);
-        fn define_param(params: &mut SymbolTable, name: String, location: &LocationRef) -> Result<(), Box<Error>> {
+        fn define_param(params: &mut SymbolTable, name: CompactString, location: &LocationRef) -> Result<(), Box<Error>> {
             match params.define(name, 0.0.into()) {
                 Ok(None) => Ok(()),
                 Ok(Some(prev)) => Err(Box::new_with(|| Error { kind: CompileError::InputsWithSameName { name: prev.def.name }.into(), location: location.to_owned() })),
@@ -2289,7 +2290,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         match self.grab_option(&expr.children[0], &location)? {
                             "costumes" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeList, info })),
                             "costume" => Ok(Box::new_with(|| Expr { kind: ExprKind::Costume, info })),
-                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option {m} is currently not supported") }.into(), location: location.to_owned() })),
+                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option {m} is currently not supported").into() }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportObject" => {
@@ -2345,8 +2346,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 struct EntityInfo<'a, 'b> {
     parser: &'a Parser,
     role: &'b RoleInfo<'a>,
-    name: String,
-    trans_name: String,
+    name: CompactString,
+    trans_name: CompactString,
     fields: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
     costumes: SymbolTable<'a>,
@@ -2376,7 +2377,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         for costume in entity.get(&["costumes", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
             if let Some(ident) = costume.get(&["ref"]).and_then(|r| r.attr("mediaID")) {
                 let ident = ident.value.as_str();
-                if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_cst_") {
+                if !ident.starts_with(self.name.as_str()) || !ident[self.name.len()..].starts_with("_cst_") {
                     return Err(Box::new_with(|| Error { kind: ProjectError::CostumeIdFormat { id: ident.into() }.into(), location: location.to_owned() }));
                 }
                 let name = &ident[self.name.len() + 5..];
@@ -2398,7 +2399,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
         for sound in entity.get(&["sounds", "list"]).map(|c| c.children.as_slice()).unwrap_or(&[]) {
             if let Some(ident) = sound.get(&["ref"]).and_then(|r| r.attr("mediaID")) {
                 let ident = ident.value.as_str();
-                if !ident.starts_with(&self.name) || !ident[self.name.len()..].starts_with("_snd_") {
+                if !ident.starts_with(self.name.as_str()) || !ident[self.name.len()..].starts_with("_snd_") {
                     return Err(Box::new_with(|| Error { kind: ProjectError::SoundIdFormat { id: ident.into() }.into(), location: location.to_owned() }));
                 }
                 let name = &ident[self.name.len() + 5..];
@@ -2512,8 +2513,8 @@ enum ParamType {
 struct BlockHeaderInfo<'a> {
     s: &'a str,
     returns: bool,
-    params: Vec<(String, ParamType)>,
-    upvars: Vec<String>,
+    params: Vec<(CompactString, ParamType)>,
+    upvars: Vec<CompactString>,
 }
 
 // returns the signature and returns flag of the block header value
@@ -2553,8 +2554,8 @@ fn get_block_info(value: &Value) -> Box<BlockHeaderInfo> {
     }
 }
 
-fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Iterator<Item = (usize, usize)>{
-    let mut res = String::with_capacity(s.len());
+fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> CompactString where It: Iterator<Item = (usize, usize)>{
+    let mut res = alloc::string::String::with_capacity(s.len());
     let mut last_stop = 0;
     for (a, b) in ranges {
         res += &s[last_stop..a];
@@ -2562,15 +2563,15 @@ fn replace_ranges<It>(s: &str, ranges: It, with: &str) -> String where It: Itera
         res += with;
     }
     res += &s[last_stop..];
-    res
+    res.into()
 }
 
 #[inline(never)]
-fn block_name_from_def(s: &str) -> String {
+fn block_name_from_def(s: &str) -> CompactString {
     replace_ranges(s, ParamIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
 #[inline(never)]
-fn block_name_from_ref(s: &str) -> String {
+fn block_name_from_ref(s: &str) -> CompactString {
     replace_ranges(s, ArgIter::new(s), "\t") // tabs leave a marker for args which disappears after ident renaming
 }
 
@@ -2631,9 +2632,9 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location:
                     _ => true,
                 };
 
-                params.push(Value::List(vec![param.to_owned().into(), evaluated.into()], None));
+                params.push(Value::List(vec![CompactString::new(param).into(), evaluated.into()], None));
                 if t == "%upvar" {
-                    upvars.push(Value::String(param.to_owned()));
+                    upvars.push(Value::String(CompactString::new(param)));
                 }
             }
 
@@ -2708,7 +2709,7 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
 
 struct RoleInfo<'a> {
     parser: &'a Parser,
-    name: String,
+    name: CompactString,
     globals: SymbolTable<'a>,
     entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
@@ -2717,7 +2718,7 @@ struct RoleInfo<'a> {
     msg_types: VecMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
-    fn new(parser: &'a Parser, name: String) -> Box<Self> {
+    fn new(parser: &'a Parser, name: CompactString) -> Box<Self> {
         Box::new_with(|| Self {
             parser,
             name,
@@ -2748,7 +2749,7 @@ impl<'a> RoleInfo<'a> {
             None => return Err(Box::new_with(|| Error { kind: ProjectError::RoleNoContent.into(), location: location.to_owned() })),
             Some(x) => x,
         };
-        let notes = content.get(&["notes"]).map(|v| v.text.as_str()).unwrap_or("").to_owned();
+        let notes = CompactString::new(content.get(&["notes"]).map(|v| v.text.as_str()).unwrap_or(""));
         let stage = match content.get(&["stage"]) {
             None => return Err(Box::new_with(|| Error { kind: ProjectError::NoStage.into(), location: location.to_owned() })),
             Some(x) => x,
@@ -2916,21 +2917,21 @@ pub struct Parser {
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
     /// The default operation performs no conversion.
     /// Note that non-default transform strategies may also require a custom [`Parser::autofill_generator`].
-    pub name_transformer: Rc<dyn Fn(&str) -> Result<String, ()>>,
+    pub name_transformer: Rc<dyn Fn(&str) -> Result<CompactString, ()>>,
 
     /// A generator used to produce symbol names for auto-fill closure arguments.
     /// The function receives a number that can be used to differentiate different generated arguments.
     /// It is expected that multiple calls to this function with the same input will produce the same output symbol name.
     /// The default is to produce a string of format `%n` where `n` is the input number.
     /// Note that, after generation, symbol names are still passed through [`Parser::name_transformer`] as usual.
-    pub autofill_generator: Rc<dyn Fn(usize) -> Result<String, ()>>,
+    pub autofill_generator: Rc<dyn Fn(usize) -> Result<CompactString, ()>>,
 }
 impl Default for Parser {
     fn default() -> Self {
         Self {
             omit_nonhat_scripts: true,
             name_transformer: Rc::new(|v| Ok(v.into())),
-            autofill_generator: Rc::new(|v| Ok(format!("%{}", v))),
+            autofill_generator: Rc::new(|v| Ok(format!("%{}", v).into())),
         }
     }
 }
@@ -2952,7 +2953,7 @@ impl Parser {
                             Ok(x) => x,
                             Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
                         };
-                        let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+                        let proj_name = CompactString::new(project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled"));
 
                         let mut roles = Vec::with_capacity(project_xml.children.len());
                         for child in project_xml.children.iter() {
@@ -2972,7 +2973,7 @@ impl Parser {
                             Ok(x) => x,
                             Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
                         };
-                        let proj_name = role_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+                        let proj_name = CompactString::new(role_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled"));
 
                         let role = RoleInfo::new(self, proj_name.clone()).parse(&role_xml)?;
 
@@ -2983,7 +2984,7 @@ impl Parser {
                             Ok(x) => x,
                             Err(e) => return Err(Box::new_with(|| Error { kind: e.into(), location: location.to_owned() })),
                         };
-                        let proj_name = project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned();
+                        let proj_name = CompactString::new(project_xml.attr("name").map(|v| v.value.as_str()).unwrap_or("untitled").to_owned());
 
                         let role_xml = Xml {
                             name: "role".into(),

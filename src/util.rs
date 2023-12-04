@@ -1,5 +1,7 @@
 use core::fmt::{self, Debug, Display};
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
+
+use compact_str::CompactString;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
 macro_rules! impl_punctuated {
@@ -21,8 +23,8 @@ macro_rules! impl_punctuated {
 impl_punctuated! { Debug => "{:?}", Display => "{}" }
 
 /// Returns a new string which is indented by 4 spaces.
-pub fn indent(code: &str) -> String {
-    Punctuated(code.lines().map(|s| format!("    {}", s)), "\n").to_string()
+pub fn indent(code: &str) -> CompactString {
+    Punctuated(code.lines().map(|s| format!("    {}", s)), "\n").to_string().into()
 }
 #[test]
 fn test_indent() {
@@ -33,8 +35,8 @@ fn test_indent() {
 
 /// Returns a new string which encodes special characters as the typical backslash escape sequences.
 /// Notably, this includes single and double quotes, so you can safely translate a string literal by wrapping the result in quotes.
-pub fn escape(raw: &str) -> String {
-    let mut res = String::with_capacity(raw.len());
+pub fn escape(raw: &str) -> CompactString {
+    let mut res = alloc::string::String::with_capacity(raw.len());
     for c in raw.chars() {
         match c {
             '\"' => res += "\\\"",
@@ -46,7 +48,7 @@ pub fn escape(raw: &str) -> String {
             _ => res.push(c),
         }
     }
-    res
+    res.into()
 }
 #[test]
 fn test_escape() {
@@ -54,8 +56,8 @@ fn test_escape() {
     assert_eq!(escape("hello\n\r\t\\'\"world"), "hello\\n\\r\\t\\\\\\'\\\"world");
 }
 
-pub fn normalize_space(raw: &str) -> String {
-    let mut res = String::new();
+pub fn normalize_space(raw: &str) -> CompactString {
+    let mut res = CompactString::default();
     let mut chars = raw.trim().chars();
     while let Some(c) = chars.next() {
         if c.is_whitespace() {
@@ -77,15 +79,15 @@ fn test_normalize_space() {
 }
 
 /// Converts a Snap! identifier into a valid C-like identifier.
-pub fn c_ident(raw: &str) -> Result<String, ()> {
-    let cleaned: String = raw.chars().map(|ch| match ch {
+pub fn c_ident(raw: &str) -> Result<CompactString, ()> {
+    let cleaned: CompactString = raw.chars().map(|ch| match ch {
         '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' => ch,
         _ => ' ',
     }).collect();
-    let res = Punctuated(cleaned.split_ascii_whitespace(), "_").to_string();
+    let res: CompactString = Punctuated(cleaned.split_ascii_whitespace(), "_").to_string().into();
     match res.chars().next() {
         None => Err(()),
-        Some(v) => Ok(if ('0'..='9').contains(&v) { format!("var_{}", res) } else { res })
+        Some(v) => Ok(if ('0'..='9').contains(&v) { format!("var_{}", res).into() } else { res })
     }
 }
 #[test]
