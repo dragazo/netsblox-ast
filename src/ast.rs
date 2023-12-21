@@ -743,8 +743,10 @@ pub enum StmtKind {
     Sleep { seconds: Box<Expr> },
     WaitUntil { condition: Box<Expr> },
 
-    SetCostume { costume: Option<Box<Expr>> },
+    SetCostume { costume: Box<Expr> },
     NextCostume,
+
+    PlaySound { sound: Box<Expr>, blocking: bool },
 
     Forward { distance: Box<Expr> },
     SetX { value: Box<Expr> },
@@ -1051,6 +1053,8 @@ pub enum ExprKind {
     CostumeList,
     Costume,
     CostumeNumber,
+
+    SoundList,
 
     Clone { target: Box<Expr> },
 
@@ -1606,18 +1610,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 if val.name == "l" && val.get(&["option"]).is_some() {
                     match self.grab_option(val, &location)? {
-                        "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: None }, info })),
-                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with project costume ({x}) currently not supported").into() }.into(), location: location.to_owned() })),
-                    }
-                } else if val.name == "l" {
-                    match val.text.as_str() {
-                        "" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: None }, info })),
-                        x => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Some(Box::new_with(|| x.into())) }, info })),
+                        "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Box::new_with(|| "".into()) }, info })),
+                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with builtin project costume ({x}) currently not supported").into() }.into(), location: location.to_owned() })),
                     }
                 } else {
                     let costume = self.parse_expr(val, &location)?;
-                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Some(costume) }, info }))
+                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume }, info }))
                 }
+            }
+            "playSound" | "doPlaySoundUntilDone" => {
+                let blocking = s == "doPlaySoundUntilDone";
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                let sound = self.parse_expr(&stmt.children[0], &location)?;
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::PlaySound { sound, blocking }, info }))
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
@@ -2290,7 +2295,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         match self.grab_option(&expr.children[0], &location)? {
                             "costumes" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeList, info })),
                             "costume" => Ok(Box::new_with(|| Expr { kind: ExprKind::Costume, info })),
-                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option {m} is currently not supported").into() }.into(), location: location.to_owned() })),
+                            "sounds" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundList, info })),
+                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option '{m}' is currently not supported").into() }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportObject" => {
