@@ -747,6 +747,7 @@ pub enum StmtKind {
     NextCostume,
 
     PlaySound { sound: Box<Expr>, blocking: bool },
+    StopSounds,
 
     Forward { distance: Box<Expr> },
     SetX { value: Box<Expr> },
@@ -1751,6 +1752,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let target = Some(self.grab_entity(&stmt.children[1], BlockInfo::none(), &location)?);
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target, wait: false }, info }))
             }
+            "doStopAllSounds" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::StopSounds, info })),
             "doBroadcast" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
             "doBroadcastAndWait" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })),
             "doPauseAll" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::Pause, info })),
