@@ -747,6 +747,8 @@ pub enum StmtKind {
     NextCostume,
 
     PlaySound { sound: Box<Expr>, blocking: bool },
+    PlayNotes { notes: Box<Expr>, duration: Box<Expr>, blocking: bool },
+    Rest { duration: Box<Expr> },
     StopSounds,
 
     Forward { distance: Box<Expr> },
@@ -1624,6 +1626,17 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let sound = self.parse_expr(&stmt.children[0], &location)?;
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::PlaySound { sound, blocking }, info }))
+            }
+            "doPlayNote" => {
+                let info = self.check_children_get_info(stmt, 2, &location)?;
+                let notes = self.parse_expr(&stmt.children[0], &location)?;
+                let duration = self.parse_expr(&stmt.children[1], &location)?;
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::PlayNotes { notes, duration, blocking: true }, info }))
+            }
+            "doRest" => {
+                let info = self.check_children_get_info(stmt, 1, &location)?;
+                let duration = self.parse_expr(&stmt.children[0], &location)?;
+                Ok(Box::new_with(|| Stmt { kind: StmtKind::Rest { duration }, info }))
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
