@@ -566,6 +566,7 @@ fn test_sym_tab() {
 
 #[derive(Debug)]
 struct Rpc {
+    host: Option<CompactString>,
     service: CompactString,
     rpc: CompactString,
     args: Vec<(CompactString, Expr)>,
@@ -787,7 +788,7 @@ pub enum StmtKind {
     ChangePenSize { delta: Box<Expr> },
     SetPenSize { value: Box<Expr> },
 
-    CallRpc { service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
+    CallRpc { host: Option<CompactString>, service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef> },
     CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
     ForkClosure { closure: Box<Expr>, args: Vec<Expr> },
@@ -825,8 +826,8 @@ pub enum StmtKind {
 }
 impl From<Rpc> for Stmt {
     fn from(rpc: Rpc) -> Stmt {
-        let Rpc { service, rpc, args, info } = rpc;
-        Stmt { kind: StmtKind::CallRpc { service, rpc, args }, info }
+        let Rpc { host, service, rpc, args, info } = rpc;
+        Stmt { kind: StmtKind::CallRpc { host, service, rpc, args }, info }
     }
 }
 
@@ -999,7 +1000,7 @@ pub enum ExprKind {
     Acos { value: Box<Expr> },
     Atan { value: Box<Expr> },
 
-    CallRpc { service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
+    CallRpc { host: Option<CompactString>, service: CompactString, rpc: CompactString, args: Vec<(CompactString, Expr)> },
     CallFn { function: FnRef, args: Vec<Expr>, upvars: Vec<VariableRef>, },
     CallClosure { new_entity: Option<Box<Expr>>, closure: Box<Expr>, args: Vec<Expr> },
 
@@ -1073,8 +1074,8 @@ impl<T: Into<Value>> From<T> for Expr {
 }
 impl From<Rpc> for Expr {
     fn from(rpc: Rpc) -> Expr {
-        let Rpc { service, rpc, args, info } = rpc;
-        Expr { kind: ExprKind::CallRpc { service, rpc, args }, info }
+        let Rpc { host, service, rpc, args, info } = rpc;
+        Expr { kind: ExprKind::CallRpc { host, service, rpc, args }, info }
     }
 }
 
@@ -1324,7 +1325,10 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             if child.name != "l" || child.text.is_empty() { return Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotConst.into(), location: location.to_owned() })) }
         }
 
-        let service = stmt.children[0].text.clone();
+        let (host, service) = match stmt.children[0].text.rsplit_once('/') {
+            Some((host, service)) => (Some(CompactString::new(host)), CompactString::new(service)),
+            None => (None, stmt.children[0].text.clone()),
+        };
         let rpc = stmt.children[1].text.clone();
 
         let arg_names = match stmt.attr("inputNames").map(|x| x.value.split(';').map(str::trim).filter(|v| !v.is_empty()).collect::<Vec<_>>()) {
@@ -1344,7 +1348,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             let val = self.parse_expr(child, location)?;
             args.push_with(|| (CompactString::new(arg_name), *val));
         }
-        Ok(Box::new_with(|| Rpc { service, rpc, args, info }))
+        Ok(Box::new_with(|| Rpc { host, service, rpc, args, info }))
     }
     #[inline(never)]
     fn parse_fn_call(&mut self, stmt: &Xml, location: &LocationRef) -> Result<Box<FnCall>, Box<Error>> {

@@ -24,6 +24,7 @@
         "collab",
         "Crossproduct",
         "Peekable",
+        "rsplit",
         "Syscall",
         "upvars",
         "varargs"

@@ -672,15 +672,16 @@ fn test_inline_rpc_metadata() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",
         funcs = "", methods = "",
-        scripts = r##"<script x="15.384615384615383" y="15.384615384615383"><block collabId="item_11" s="doRunRPC" inputNames=""><l>TheCatApi</l><l>getCatBreeds</l></block><block collabId="item_14" s="doRunRPC" inputNames="sleepTime"><l>TimeSync</l><l>prepare</l><l></l></block><block collabId="item_17" s="doRunRPC" inputNames="startDate;stopDate;species;latitude;longitude;radius"><l>Wildcam</l><l>search</l><l></l><l></l><l></l><l></l><l></l><l></l></block></script>"##,
+        scripts = r##"<script x="15.384615384615383" y="15.384615384615383"><block collabId="item_11" s="doRunRPC" inputNames=""><l>TheCatApi</l><l>getCatBreeds</l></block><block collabId="item_14" s="doRunRPC" inputNames="sleepTime"><l>TimeSync</l><l>prepare</l><l></l></block><block collabId="item_17" s="doRunRPC" inputNames="startDate;stopDate;species;latitude;longitude;radius"><l>Wildcam</l><l>search</l><l></l><l></l><l></l><l></l><l></l><l></l></block><block collabId="item_198" s="doRunRPC" inputNames="foo;bar;whatever"><l>https://some.rpc.provider.com/FancyService</l><l>testThingy</l><l></l><l></l><l></l></block></script>"##,
     );
     let parser = Parser { omit_nonhat_scripts: false, ..Default::default() };
     let ast = parser.parse(&script).unwrap();
     let stmts = &ast.roles[0].entities[0].scripts[0].stmts;
-    assert_eq!(stmts.len(), 3);
+    assert_eq!(stmts.len(), 4);
 
     match &stmts[0].kind {
-        StmtKind::CallRpc { service, rpc, args } => {
+        StmtKind::CallRpc { host, service, rpc, args } => {
+            assert_eq!(host.as_ref().map(|s| s.as_str()), None);
             assert_eq!(service.as_str(), "TheCatApi");
             assert_eq!(rpc.as_str(), "getCatBreeds");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &[] as &[&str]);
@@ -688,7 +689,8 @@ fn test_inline_rpc_metadata() {
         x => panic!("{:?}", x),
     }
     match &stmts[1].kind {
-        StmtKind::CallRpc { service, rpc, args } => {
+        StmtKind::CallRpc { host, service, rpc, args } => {
+            assert_eq!(host.as_ref().map(|s| s.as_str()), None);
             assert_eq!(service.as_str(), "TimeSync");
             assert_eq!(rpc.as_str(), "prepare");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["sleepTime"]);
@@ -696,10 +698,20 @@ fn test_inline_rpc_metadata() {
         x => panic!("{:?}", x),
     }
     match &stmts[2].kind {
-        StmtKind::CallRpc { service, rpc, args } => {
+        StmtKind::CallRpc { host, service, rpc, args } => {
+            assert_eq!(host.as_ref().map(|s| s.as_str()), None);
             assert_eq!(service.as_str(), "Wildcam");
             assert_eq!(rpc.as_str(), "search");
             assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["startDate", "stopDate", "species", "latitude", "longitude", "radius"]);
+        }
+        x => panic!("{:?}", x),
+    }
+    match &stmts[3].kind {
+        StmtKind::CallRpc { host, service, rpc, args } => {
+            assert_eq!(host.as_ref().map(|s| s.as_str()), Some("https://some.rpc.provider.com"));
+            assert_eq!(service.as_str(), "FancyService");
+            assert_eq!(rpc.as_str(), "testThingy");
+            assert_eq!(args.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), &["foo", "bar", "whatever"]);
         }
         x => panic!("{:?}", x),
     }
