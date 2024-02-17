@@ -735,10 +735,11 @@ fn test_media() {
     assert_eq!(img.def.name, "airplane2");
     match &img.init {
         Value::Image(x) => {
-            let (content, center) = &**x;
+            let (content, center, name) = &**x;
             assert!((center.unwrap().0 - 100.0).abs() < 1e-5);
             assert!((center.unwrap().1 - 32.0).abs() < 1e-5);
             assert_eq!(content.len(), 13296);
+            assert_eq!(name.as_str(), "airplane2");
         }
         x => panic!("{x:?}"),
     }
@@ -749,7 +750,9 @@ fn test_media() {
     assert_eq!(audio.def.name, "Dog 2");
     match &audio.init {
         Value::Audio(x) => {
-            assert_eq!(x.len(), 6380);
+            let (content, name) = &**x;
+            assert_eq!(content.len(), 6380);
+            assert_eq!(name.as_str(), "Dog 2");
         }
         x => panic!("{x:?}"),
     }

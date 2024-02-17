@@ -4,15 +4,14 @@ use alloc::boxed::Box;
 use alloc::borrow::ToOwned;
 use core::{mem, iter, fmt};
 
-use compact_str::CompactString;
+use compact_str::{CompactString, format_compact};
 
 use base64::engine::Engine as Base64Engine;
 use base64::DecodeError as Base64Error;
 
 use crate::rpcs::*;
 
-#[cfg(test)]
-use proptest::prelude::*;
+use crate::util::xml_unescape;
 
 fn base64_decode(content: &str) -> Result<Vec<u8>, Base64Error> {
     base64::engine::general_purpose::STANDARD.decode(content)
@@ -181,77 +180,6 @@ fn test_clean_newlines() {
 #[inline(never)]
 fn get_collab_id(block: &Xml) -> Option<&str> {
     block.attr("collabId").map(|x| x.value.as_str()).filter(|x| !x.is_empty())
-}
-
-// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
-#[cfg(test)]
-fn xml_escape(input: &str) -> CompactString {
-    let mut result = alloc::string::String::with_capacity(input.len());
-    for c in input.chars() {
-        match c {
-            '&' => result.push_str("&amp;"),
-            '<' => result.push_str("&lt;"),
-            '>' => result.push_str("&gt;"),
-            '\'' => result.push_str("&apos;"),
-            '"' => result.push_str("&quot;"),
-            o => result.push(o),
-        }
-    }
-    result.into()
-}
-
-// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
-// note: modified to suite our needs
-#[inline(never)]
-fn xml_unescape(input: &str) -> Result<CompactString, XmlError> {
-    let mut result = alloc::string::String::with_capacity(input.len());
-
-    let mut it = input.split('&');
-    if let Some(sub) = it.next() {
-        result.push_str(sub); // Push everything before the first '&'
-    }
-
-    for sub in it {
-        match sub.find(';') {
-            Some(idx) => {
-                let ent = &sub[..idx];
-                match ent {
-                    "quot" => result.push('"'),
-                    "apos" => result.push('\''),
-                    "gt" => result.push('>'),
-                    "lt" => result.push('<'),
-                    "amp" => result.push('&'),
-                    ent => {
-                        let val = if ent.starts_with("#x") {
-                            u32::from_str_radix(&ent[2..], 16).ok()
-                        } else if ent.starts_with('#') {
-                            u32::from_str_radix(&ent[1..], 10).ok()
-                        } else {
-                            None
-                        };
-                        match val.and_then(char::from_u32) {
-                            Some(c) => result.push(c),
-                            None => return Err(XmlError::IllegalSequence { sequence: format!("&{};", ent).into() }),
-                        }
-                    }
-                }
-                result.push_str(&sub[idx + 1..]);
-            }
-            None => return Err(XmlError::IllegalSequence { sequence: format!("&{}", sub).into() }),
-        }
-    }
-
-    Ok(result.into())
-}
-
-#[cfg(test)]
-proptest! {
-    #[test]
-    fn test_xml_enc_dec(raw in r".*") {
-        let encoded = xml_escape(&raw);
-        let back = xml_unescape(&encoded).unwrap();
-        prop_assert_eq!(raw, back);
-    }
 }
 
 #[derive(Debug)]
@@ -840,8 +768,8 @@ pub enum Value {
     Number(f64),
     Constant(Constant),
     String(CompactString),
-    Image(Rc<(Vec<u8>, Option<(f64, f64)>)>),
-    Audio(Rc<Vec<u8>>),
+    Image(Rc<(Vec<u8>, Option<(f64, f64)>, CompactString)>),
+    Audio(Rc<(Vec<u8>, CompactString)>),
     List(Vec<Value>, Option<RefId>),
     Ref(RefId),
 }
@@ -1057,6 +985,10 @@ pub enum ExprKind {
     CostumeList,
     Costume,
     CostumeNumber,
+    CostumeName { costume: Box<Expr> },
+    CostumeWidth { costume: Box<Expr> },
+    CostumeHeight { costume: Box<Expr> },
+    CostumePixels { costume: Box<Expr> },
 
     SoundList,
 
@@ -1607,7 +1539,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "this block" => StopMode::ThisBlock,
                     "all but this script" => StopMode::AllButThisScript,
                     "other scripts in sprite" => StopMode::OtherScriptsInSprite,
-                    x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with stop mode {x:?} is currently not supported").into() }.into(), location: location.to_owned() })),
+                    x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("{s} with stop mode {x:?} is currently not supported") }.into(), location: location.to_owned() })),
                 };
                 Ok(Box::new_with(|| Stmt { kind: StmtKind::Stop { mode }, info }))
             }
@@ -1618,7 +1550,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if val.name == "l" && val.get(&["option"]).is_some() {
                     match self.grab_option(val, &location)? {
                         "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Box::new_with(|| "".into()) }, info })),
-                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("{s} with builtin project costume ({x}) currently not supported").into() }.into(), location: location.to_owned() })),
+                        x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("{s} with builtin project costume ({x}) currently not supported") }.into(), location: location.to_owned() })),
                     }
                 } else {
                     let costume = self.parse_expr(val, &location)?;
@@ -2127,6 +2059,26 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         })
                     }
 
+                    "reportGetImageAttribute" => {
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let costume = if expr.children[1].name == "l" && expr.children[1].get(&["option"]).is_some() {
+                            match self.grab_option(&expr.children[1], &location)? {
+                                "Turtle" => Box::new_with(|| Expr { kind: ExprKind::Value(Value::String(CompactString::default())), info: BlockInfo::none() }),
+                                "current" => Box::new_with(|| Expr { kind: ExprKind::Costume, info: BlockInfo::none() }),
+                                x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("{s} with builtin project costume ({x}) currently not supported") }.into(), location: location.to_owned() })),
+                            }
+                        } else {
+                            self.parse_expr(&expr.children[1], &location)?
+                        };
+                        match self.grab_option(&expr.children[0], &location)? {
+                            "name" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeName { costume }, info })),
+                            "width" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeWidth { costume }, info })),
+                            "height" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeHeight { costume }, info })),
+                            "pixels" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumePixels { costume }, info })),
+                            x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
+                        }
+                    }
+
                     "reportListIndex" => self.parse_2_args(expr, &location).map(|(value, list, info)| Box::new_with(|| Expr { kind: ExprKind::ListFind { value, list }, info })),
                     "reportListItem" => {
                         let info = self.check_children_get_info(expr, 2, &location)?;
@@ -2315,7 +2267,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "costumes" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeList, info })),
                             "costume" => Ok(Box::new_with(|| Expr { kind: ExprKind::Costume, info })),
                             "sounds" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundList, info })),
-                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format!("the {s} block with option '{m}' is currently not supported").into() }.into(), location: location.to_owned() })),
+                            m => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("the {s} block with option '{m}' is currently not supported") }.into(), location: location.to_owned() })),
                         }
                     }
                     "reportObject" => {
@@ -2738,8 +2690,8 @@ struct RoleInfo<'a> {
     globals: SymbolTable<'a>,
     entities: SymbolTable<'a>,
     funcs: SymbolTable<'a>,
-    images: VecMap<&'a str, Rc<(Vec<u8>, Option<(f64, f64)>)>>,
-    sounds: VecMap<&'a str, Rc<Vec<u8>>>,
+    images: VecMap<&'a str, Rc<(Vec<u8>, Option<(f64, f64)>, CompactString)>>,
+    sounds: VecMap<&'a str, Rc<(Vec<u8>, CompactString)>>,
     msg_types: VecMap<&'a str, Vec<&'a str>>,
 }
 impl<'a> RoleInfo<'a> {
@@ -2816,6 +2768,11 @@ impl<'a> RoleInfo<'a> {
                         None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutId.into(), location: location.to_owned() })),
                     };
 
+                    let name = match entry.attr("name") {
+                        Some(x) => x.value.clone(),
+                        None => "untitled".into(),
+                    };
+
                     let center = match (entry.attr("center-x").and_then(|x| x.value.parse().ok()), entry.attr("center-y").and_then(|y| y.value.parse().ok())) {
                         (Some(x), Some(y)) => Some((x, y)),
                         _ => None,
@@ -2832,7 +2789,7 @@ impl<'a> RoleInfo<'a> {
                         None => return Err(Box::new_with(|| Error { kind: ProjectError::ImageWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
                     };
 
-                    if self.images.insert(id, Rc::new((content, center))).is_some() {
+                    if self.images.insert(id, Rc::new((content, center, name))).is_some() {
                         return Err(Box::new_with(|| Error { kind: ProjectError::ImagesWithSameId { id: id.into() }.into(), location: location.to_owned() }));
                     }
                 }
@@ -2840,6 +2797,11 @@ impl<'a> RoleInfo<'a> {
                     let id = match entry.attr("mediaID") {
                         Some(x) => x.value.as_str(),
                         None => return Err(Box::new_with(|| Error { kind: ProjectError::SoundWithoutId.into(), location: location.to_owned() })),
+                    };
+
+                    let name = match entry.attr("name") {
+                        Some(x) => x.value.clone(),
+                        None => "untitled".into(),
                     };
 
                     let content = match entry.attr("sound") {
@@ -2853,7 +2815,7 @@ impl<'a> RoleInfo<'a> {
                         None => return Err(Box::new_with(|| Error { kind: ProjectError::SoundWithoutContent { id: id.into() }.into(), location: location.to_owned() })),
                     };
 
-                    if self.sounds.insert(id, Rc::new(content)).is_some() {
+                    if self.sounds.insert(id, Rc::new((content, name))).is_some() {
                         return Err(Box::new_with(|| Error { kind: ProjectError::SoundsWithSameId { id: id.into() }.into(), location: location.to_owned() }));
                     }
                 }
@@ -2956,7 +2918,7 @@ impl Default for Parser {
         Self {
             omit_nonhat_scripts: true,
             name_transformer: Rc::new(|v| Ok(v.into())),
-            autofill_generator: Rc::new(|v| Ok(format!("%{}", v).into())),
+            autofill_generator: Rc::new(|v| Ok(format_compact!("%{}", v))),
         }
     }
 }

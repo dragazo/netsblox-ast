@@ -1,7 +1,12 @@
 use core::fmt::{self, Debug, Display};
 use alloc::string::ToString;
 
-use compact_str::CompactString;
+use compact_str::{CompactString, format_compact};
+
+#[cfg(test)]
+use proptest::prelude::*;
+
+use super::XmlError;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
 macro_rules! impl_punctuated {
@@ -106,4 +111,75 @@ fn test_c_ident() {
     assert_eq!(c_ident("6foo").unwrap(), "var_6foo");
     assert_eq!(c_ident("[6foo").unwrap(), "var_6foo");
     assert_eq!(c_ident("[ 6foo").unwrap(), "var_6foo");
+}
+
+// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#41-55
+#[inline(never)]
+pub fn xml_escape(input: &str) -> CompactString {
+    let mut result = alloc::string::String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '&' => result.push_str("&amp;"),
+            '<' => result.push_str("&lt;"),
+            '>' => result.push_str("&gt;"),
+            '\'' => result.push_str("&apos;"),
+            '"' => result.push_str("&quot;"),
+            o => result.push(o),
+        }
+    }
+    result.into()
+}
+
+// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
+// note: modified to suite our needs
+#[inline(never)]
+pub fn xml_unescape(input: &str) -> Result<CompactString, XmlError> {
+    let mut result = alloc::string::String::with_capacity(input.len());
+
+    let mut it = input.split('&');
+    if let Some(sub) = it.next() {
+        result.push_str(sub); // Push everything before the first '&'
+    }
+
+    for sub in it {
+        match sub.find(';') {
+            Some(idx) => {
+                let ent = &sub[..idx];
+                match ent {
+                    "quot" => result.push('"'),
+                    "apos" => result.push('\''),
+                    "gt" => result.push('>'),
+                    "lt" => result.push('<'),
+                    "amp" => result.push('&'),
+                    ent => {
+                        let val = if ent.starts_with("#x") {
+                            u32::from_str_radix(&ent[2..], 16).ok()
+                        } else if ent.starts_with('#') {
+                            u32::from_str_radix(&ent[1..], 10).ok()
+                        } else {
+                            None
+                        };
+                        match val.and_then(char::from_u32) {
+                            Some(c) => result.push(c),
+                            None => return Err(XmlError::IllegalSequence { sequence: format_compact!("&{};", ent) }),
+                        }
+                    }
+                }
+                result.push_str(&sub[idx + 1..]);
+            }
+            None => return Err(XmlError::IllegalSequence { sequence: format_compact!("&{}", sub) }),
+        }
+    }
+
+    Ok(result.into())
+}
+
+#[cfg(test)]
+proptest! {
+    #[test]
+    fn test_xml_enc_dec(raw in r".*") {
+        let encoded = xml_escape(&raw);
+        let back = xml_unescape(&encoded).unwrap();
+        prop_assert_eq!(raw, back);
+    }
 }
