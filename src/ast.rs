@@ -991,6 +991,12 @@ pub enum ExprKind {
     CostumePixels { costume: Box<Expr> },
 
     SoundList,
+    SoundName { sound: Box<Expr> },
+    SoundDuration { sound: Box<Expr> },
+    SoundSampleRate { sound: Box<Expr> },
+    SoundSamples { sound: Box<Expr> },
+    SoundSamplesLength { sound: Box<Expr> },
+    SoundChannelCount { sound: Box<Expr> },
 
     Clone { target: Box<Expr> },
 
@@ -2075,6 +2081,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                             "width" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeWidth { costume }, info })),
                             "height" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumeHeight { costume }, info })),
                             "pixels" => Ok(Box::new_with(|| Expr { kind: ExprKind::CostumePixels { costume }, info })),
+                            x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
+                        }
+                    }
+                    "reportGetSoundAttribute" => {
+                        let info = self.check_children_get_info(expr, 2, &location)?;
+                        let sound = self.parse_expr(&expr.children[1], &location)?;
+                        match self.grab_option(&expr.children[0], &location)? {
+                            "name" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundName { sound }, info })),
+                            "duration" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundDuration { sound }, info })),
+                            "length" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundSamplesLength { sound }, info })),
+                            "number of channels" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundChannelCount { sound }, info })),
+                            "sample rate" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundSampleRate { sound }, info })),
+                            "samples" => Ok(Box::new_with(|| Expr { kind: ExprKind::SoundSamples { sound }, info })),
                             x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                         }
                     }
