@@ -17,6 +17,11 @@ fn base64_decode(content: &str) -> Result<Vec<u8>, Base64Error> {
     base64::engine::general_purpose::STANDARD.decode(content)
 }
 
+#[inline(never)]
+fn run_isolated<T, F: FnOnce() -> T>(f: F) -> T {
+    f()
+}
+
 trait BoxExt<T> {
     fn new_with<F: FnOnce() -> T>(f: F) -> Self;
     fn try_new_with<E, F: FnOnce() -> Result<T, E>>(f: F) -> Result<Self, E> where Self: Sized;
@@ -33,17 +38,22 @@ impl<T> BoxExt<T> for Box<T> {
 }
 
 trait VecExt<T> {
-    fn push_boxed(&mut self, value: Box<T>);
+    fn new_with_single<F: FnOnce() -> T>(f: F) -> Self;
     fn push_with<F: FnOnce() -> T>(&mut self, f: F);
+    fn push_boxed(&mut self, value: Box<T>);
 }
 impl<T> VecExt<T> for Vec<T> {
     #[inline(never)]
-    fn push_boxed(&mut self, value: Box<T>) {
-        self.push(*value);
+    fn new_with_single<F: FnOnce() -> T>(f: F) -> Self {
+        vec![f()]
     }
     #[inline(never)]
     fn push_with<F: FnOnce() -> T>(&mut self, f: F) {
         self.push(f());
+    }
+    #[inline(never)]
+    fn push_boxed(&mut self, value: Box<T>) {
+        self.push(*value);
     }
 }
 
@@ -248,14 +258,15 @@ pub struct Location {
     pub block_type: Option<CompactString>,
 }
 
-struct LocationRef<'a> {
+#[derive(Debug)]
+pub struct LocationRef<'a> {
     pub role: Option<&'a str>,
     pub entity: Option<&'a str>,
     pub collab_id: Option<&'a str>,
     pub block_type: Option<&'a str>,
 }
 impl LocationRef<'_> {
-    fn to_owned(&self) -> Location {
+    pub fn to_owned(&self) -> Location {
         Location {
             role: self.role.map(CompactString::new),
             entity: self.entity.map(CompactString::new),
@@ -482,7 +493,7 @@ impl<'a> SymbolTable<'a> {
 }
 #[test]
 fn test_sym_tab() {
-    let parser = Parser { name_transformer: Rc::new(crate::util::c_ident), ..Default::default() };
+    let parser = Parser { name_transformer: Box::new(crate::util::c_ident), ..Default::default() };
     let mut sym = SymbolTable::new(&parser);
     assert!(sym.orig_to_def.is_empty());
     assert!(sym.trans_to_orig.is_empty());
@@ -1119,7 +1130,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 block_type: Some(&stmt.name),
             });
             match stmt.name.as_str() {
-                "block" => stmts.push_boxed(self.parse_block(stmt)?),
+                "block" => {
+                    run_isolated(|| {
+                        stmts.append(&mut self.parse_block(stmt)?);
+                        Ok::<(), Box<Error>>(())
+                    })?;
+                }
                 "custom-block" => {
                     let res = self.parse_fn_call(stmt, &location)?;
                     stmts.push_with(|| {
@@ -1373,7 +1389,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         Ok((args, Box::new_with(|| BlockInfo { comment: comment.map(CompactString::new), location: location.collab_id.map(CompactString::new) })))
     }
     #[inline(never)]
-    fn parse_block(&mut self, stmt: &Xml) -> Result<Box<Stmt>, Box<Error>> {
+    fn parse_block(&mut self, stmt: &Xml) -> Result<Vec<Stmt>, Box<Error>> {
         let mut location = Box::new_with(|| LocationRef {
             role: Some(&self.role.name),
             entity: Some(&self.entity.name),
@@ -1394,7 +1410,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     let entry = self.decl_local(var.text.clone(), 0f64.into(), &location)?;
                     vars.push(entry.def.clone());
                 }
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::DeclareLocals { vars }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::DeclareLocals { vars }, info }))
             }
             "doSetVar" | "doChangeVar" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
@@ -1404,8 +1420,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let value = self.parse_expr(&stmt.children[1], &location)?;
                 match s {
-                    "doSetVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Assign { var: *var, value }, info })),
-                    "doChangeVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::AddAssign { var: *var, value }, info })),
+                    "doSetVar" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Assign { var: *var, value }, info })),
+                    "doChangeVar" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::AddAssign { var: *var, value }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1416,8 +1432,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error { kind: CompileError::DerefAssignment.into(), location: location.to_owned() })),
                 };
                 match s {
-                    "doShowVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ShowVar { var: *var }, info })),
-                    "doHideVar" => Ok(Box::new_with(|| Stmt { kind: StmtKind::HideVar { var: *var }, info })),
+                    "doShowVar" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ShowVar { var: *var }, info })),
+                    "doHideVar" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::HideVar { var: *var }, info })),
                     _ => unreachable!(),
                 }
             }
@@ -1433,7 +1449,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[3])?.stmts;
 
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts }, info }))
             }
             "doForEach" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
@@ -1446,30 +1462,30 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
                 let stmts = self.parse(&stmt.children[2])?.stmts;
 
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts }, info }))
             }
             "doRepeat" | "doUntil" | "doIf" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let expr = self.parse_expr(&stmt.children[0], &location)?;
                 let stmts = self.parse(&stmt.children[1])?.stmts;
                 match s {
-                    "doRepeat" => Ok(Box::new_with(|| Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info })),
-                    "doUntil" => Ok(Box::new_with(|| Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info })),
-                    "doIf" => Ok(Box::new_with(|| Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info })),
+                    "doRepeat" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info })),
+                    "doUntil" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info })),
+                    "doIf" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info })),
                     _ => unreachable!(),
                 }
             }
             "doForever" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::InfLoop { stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::InfLoop { stmts }, info }))
             }
             "doIfElse" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
                 let condition = self.parse_expr(&stmt.children[0], &location)?;
                 let then = self.parse(&stmt.children[1])?.stmts;
                 let otherwise = self.parse(&stmt.children[2])?.stmts;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }))
             }
             "doTryCatch" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
@@ -1479,26 +1495,26 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     _ => return Err(Box::new_with(|| Error { kind: ProjectError::UpvarNotConst.into(), location: location.to_owned() })),
                 };
                 let handler = self.parse(&stmt.children[2])?.stmts;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::TryCatch { code, var: *var, handler }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::TryCatch { code, var: *var, handler }, info }))
             }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::Warp { stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Warp { stmts }, info }))
             }
             "doDeleteFromList" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let list = self.parse_expr(&stmt.children[1], &location)?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemoveLast { list }, info })),
-                        "all" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemoveAll { list }, info })),
+                        "last" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListRemoveLast { list }, info })),
+                        "all" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListRemoveAll { list }, info })),
                         "" => Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                         x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0], &location)?;
-                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListRemove { list, index }, info }))
+                        Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListRemove { list, index }, info }))
                     }
                 }
             }
@@ -1508,14 +1524,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[2], &location)?;
                 match stmt.children[1].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsertLast { list, value }, info })),
-                        "random" | "any" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsertRandom { list, value }, info })),
+                        "last" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListInsertLast { list, value }, info })),
+                        "random" | "any" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListInsertRandom { list, value }, info })),
                         "" => Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                         x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[1], &location)?;
-                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListInsert { list, value, index }, info }))
+                        Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListInsert { list, value, index }, info }))
                     }
                 }
             }
@@ -1525,14 +1541,14 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let list = self.parse_expr(&stmt.children[1], &location)?;
                 match stmt.children[0].get(&["option"]) {
                     Some(opt) => match opt.text.as_str() {
-                        "last" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssignLast { list, value }, info })),
-                        "random" | "any" => Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssignRandom { list, value }, info })),
+                        "last" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListAssignLast { list, value }, info })),
+                        "random" | "any" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListAssignRandom { list, value }, info })),
                         "" => Err(Box::new_with(|| Error{ kind: CompileError::BlockOptionNotSelected.into(), location: location.to_owned() })),
                         x => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: x.into() }.into(), location: location.to_owned() })),
                     }
                     None => {
                         let index = self.parse_expr(&stmt.children[0], &location)?;
-                        Ok(Box::new_with(|| Stmt { kind: StmtKind::ListAssign { list, value, index }, info }))
+                        Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ListAssign { list, value, index }, info }))
                     }
                 }
             }
@@ -1547,7 +1563,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     "other scripts in sprite" => StopMode::OtherScriptsInSprite,
                     x => return Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("{s} with stop mode {x:?} is currently not supported") }.into(), location: location.to_owned() })),
                 };
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::Stop { mode }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Stop { mode }, info }))
             }
             "doSwitchToCostume" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
@@ -1555,30 +1571,30 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                 if val.name == "l" && val.get(&["option"]).is_some() {
                     match self.grab_option(val, &location)? {
-                        "Turtle" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume: Box::new_with(|| "".into()) }, info })),
+                        "Turtle" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetCostume { costume: Box::new_with(|| "".into()) }, info })),
                         x => Err(Box::new_with(|| Error { kind: CompileError::CurrentlyUnsupported { msg: format_compact!("{s} with builtin project costume ({x}) currently not supported") }.into(), location: location.to_owned() })),
                     }
                 } else {
                     let costume = self.parse_expr(val, &location)?;
-                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetCostume { costume }, info }))
+                    Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetCostume { costume }, info }))
                 }
             }
             "playSound" | "doPlaySoundUntilDone" => {
                 let blocking = s == "doPlaySoundUntilDone";
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let sound = self.parse_expr(&stmt.children[0], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::PlaySound { sound, blocking }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::PlaySound { sound, blocking }, info }))
             }
             "doPlayNote" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let notes = self.parse_expr(&stmt.children[0], &location)?;
                 let beats = self.parse_expr(&stmt.children[1], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::PlayNotes { notes, beats, blocking: true }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::PlayNotes { notes, beats, blocking: true }, info }))
             }
             "doRest" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let beats = self.parse_expr(&stmt.children[0], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::Rest { beats }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Rest { beats }, info }))
             }
             "setHeading" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
@@ -1587,12 +1603,12 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(child, &location)?;
                     match opt {
-                        "random" => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetHeadingRandom, info })),
+                        "random" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetHeadingRandom, info })),
                         _ => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: opt.into() }.into(), location: location.to_owned() })),
                     }
                 } else {
                     let value = self.parse_expr(child, &location)?;
-                    Ok(Box::new_with(|| Stmt { kind: StmtKind::SetHeading { value }, info }))
+                    Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetHeading { value }, info }))
                 }
             }
             "doGotoObject" => {
@@ -1602,15 +1618,15 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(child, &location)?;
                     match opt {
-                        "random position" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoRandom, info })),
-                        "mouse-pointer" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoMouse, info })),
-                        "center" => Ok(Box::new_with(|| Stmt { kind: StmtKind::GotoXY { x: Box::new_with(|| 0f64.into()), y: Box::new_with(|| 0f64.into()) }, info })),
+                        "random position" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::GotoRandom, info })),
+                        "mouse-pointer" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::GotoMouse, info })),
+                        "center" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::GotoXY { x: Box::new_with(|| 0f64.into()), y: Box::new_with(|| 0f64.into()) }, info })),
                         _ => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: opt.into() }.into(), location: location.to_owned() })),
                     }
                 }
                 else {
                     let target = self.parse_expr(child, &location)?;
-                    Ok(Box::new_with(|| Stmt { kind: StmtKind::Goto { target }, info }))
+                    Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Goto { target }, info }))
                 }
             }
             "doFaceTowards" => {
@@ -1620,19 +1636,19 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 if child.name == "l" && child.get(&["option"]).is_some() {
                     let opt = self.grab_option(child, &location)?;
                     match opt {
-                        "center" => Ok(Box::new_with(|| Stmt { kind: StmtKind::PointTowardsXY { x: Box::new_with(|| 0.0.into()), y: Box::new_with(|| 0.0.into()) }, info })),
+                        "center" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::PointTowardsXY { x: Box::new_with(|| 0.0.into()), y: Box::new_with(|| 0.0.into()) }, info })),
                         _ => Err(Box::new_with(|| Error { kind: ProjectError::BlockOptionUnknown { got: opt.into() }.into(), location: location.to_owned() })),
                     }
                 } else {
                     let target = self.parse_expr(child, &location)?;
-                    Ok(Box::new_with(|| Stmt { kind: StmtKind::PointTowards { target }, info }))
+                    Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::PointTowards { target }, info }))
                 }
             }
             "setColor" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 match stmt.get(&["color"]) {
                     Some(color) => match parse_color(&color.text) {
-                        Some(color) => Ok(Box::new_with(|| Stmt { kind: StmtKind::SetPenColor { color }, info })),
+                        Some(color) => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetPenColor { color }, info })),
                         None => Err(Box::new_with(|| Error { kind: ProjectError::ColorUnknownValue { color: color.text.clone() }.into(), location: location.to_owned() })),
                     }
                     None => Err(Box::new_with(|| Error { kind: CompileError::BlockOptionNotConst.into(), location: location.to_owned() })),
@@ -1640,7 +1656,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             }
             "doSocketMessage" => {
                 let res = self.parse_send_message_common(stmt, &location)?;
-                Ok(Box::new_with(|| {
+                Ok(Vec::new_with_single(|| {
                     let NetworkMessage { target, msg_type, values, info } = *res;
                     Stmt { kind: StmtKind::SendNetworkMessage { target, msg_type, values }, info }
                 }))
@@ -1654,8 +1670,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     args.push_boxed(self.parse_expr(arg, &location)?);
                 }
                 match is_run {
-                    true => Ok(Box::new_with(|| Stmt { kind: StmtKind::CallClosure { new_entity: None, closure, args }, info })),
-                    false => Ok(Box::new_with(|| Stmt { kind: StmtKind::ForkClosure { closure, args }, info })),
+                    true => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::CallClosure { new_entity: None, closure, args }, info })),
+                    false => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForkClosure { closure, args }, info })),
                 }
             }
             "doTellTo" => {
@@ -1666,87 +1682,93 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 for arg in stmt.children[2].children.iter() {
                     args.push_boxed(self.parse_expr(arg, &location)?);
                 }
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::CallClosure { new_entity: Some(entity), closure, args }, info }))
             }
             "setEffect" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let effect = self.parse_effect(&stmt.children[0], &location)?;
                 let value = self.parse_expr(&stmt.children[1], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::SetEffect { kind: effect, value }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetEffect { kind: effect, value }, info }))
             }
             "changeEffect" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let effect = self.parse_effect(&stmt.children[0], &location)?;
                 let delta = self.parse_expr(&stmt.children[1], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ChangeEffect { kind: effect, delta }, info }))
             }
             "setPenHSVA" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let attr = self.parse_pen_attr(&stmt.children[0], &location)?;
                 let value = self.parse_expr(&stmt.children[1], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::SetPenAttr { attr, value }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SetPenAttr { attr, value }, info }))
             }
             "changePenHSVA" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let attr = self.parse_pen_attr(&stmt.children[0], &location)?;
                 let delta = self.parse_expr(&stmt.children[1], &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::ChangePenAttr { attr, delta }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ChangePenAttr { attr, delta }, info }))
             }
             "doRunRPC" => {
                 let rpc = self.parse_rpc(stmt, &location)?;
-                Ok(Box::new_with(|| (*rpc).into()))
+                Ok(Vec::new_with_single(|| (*rpc).into()))
             }
             "createClone" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
                 let target = self.grab_entity(&stmt.children[0], BlockInfo::none(), &location)?;
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::Clone { target }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Clone { target }, info }))
             }
             "doSend" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let msg_type = self.parse_expr(&stmt.children[0], &location)?;
                 let target = Some(self.grab_entity(&stmt.children[1], BlockInfo::none(), &location)?);
-                Ok(Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target, wait: false }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target, wait: false }, info }))
             }
-            "doStopAllSounds" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::StopSounds, info })),
-            "doBroadcast" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
-            "doBroadcastAndWait" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Box::new_with(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })),
-            "doPauseAll" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::Pause, info })),
-            "write" => self.parse_2_args(stmt, &location).map(|(content, font_size, info)| Box::new_with(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
-            "doSocketResponse" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SendNetworkReply { value }, info })),
-            "changeScale" => self.parse_1_args(stmt, &location).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeSize { delta, }, info })),
-            "setScale" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetSize { value }, info })),
-            "doSayFor" => self.parse_2_args(stmt, &location).map(|(content, duration, info)| Box::new_with(|| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })),
-            "doThinkFor" => self.parse_2_args(stmt, &location).map(|(content, duration, info)| Box::new_with(|| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })),
-            "bubble" => self.parse_1_args(stmt, &location).map(|(content, info)| Box::new_with(|| Stmt { kind: StmtKind::Say { content, duration: None }, info })),
-            "doThink" => self.parse_1_args(stmt, &location).map(|(content, info)| Box::new_with(|| Stmt { kind: StmtKind::Think { content, duration: None }, info })),
-            "doThrow" => self.parse_1_args(stmt, &location).map(|(error, info)| Box::new_with(|| Stmt { kind: StmtKind::Throw { error }, info })),
-            "hide" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: false }, info })),
-            "show" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetVisible { value: true }, info })),
-            "removeClone" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::DeleteClone, info })),
-            "doWaitUntil" => self.parse_1_args(stmt, &location).map(|(condition, info)| Box::new_with(|| Stmt { kind: StmtKind::WaitUntil { condition, }, info })),
-            "changeSize" => self.parse_1_args(stmt, &location).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangePenSize { delta, }, info })),
-            "setSize" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetPenSize { value }, info })),
-            "doAddToList" => self.parse_2_args(stmt, &location).map(|(value, list, info)| Box::new_with(|| Stmt { kind: StmtKind::ListInsertLast { value, list }, info })),
-            "doReport" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::Return { value }, info })),
-            "doStamp" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::Stamp, info })),
-            "doWait" => self.parse_1_args(stmt, &location).map(|(seconds, info)| Box::new_with(|| Stmt { kind: StmtKind::Sleep { seconds, }, info })),
-            "forward" => self.parse_1_args(stmt, &location).map(|(distance, info)| Box::new_with(|| Stmt { kind: StmtKind::Forward { distance, }, info })),
-            "turn" => self.parse_1_args(stmt, &location).map(|(angle, info)| Box::new_with(|| Stmt { kind: StmtKind::TurnRight { angle, }, info })),
-            "turnLeft" => self.parse_1_args(stmt, &location).map(|(angle, info)| Box::new_with(|| Stmt { kind: StmtKind::TurnLeft { angle, }, info })),
-            "setXPosition" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetX { value }, info })),
-            "setYPosition" => self.parse_1_args(stmt, &location).map(|(value, info)| Box::new_with(|| Stmt { kind: StmtKind::SetY { value }, info })),
-            "changeXPosition" => self.parse_1_args(stmt, &location).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeX { delta }, info })),
-            "changeYPosition" => self.parse_1_args(stmt, &location).map(|(delta, info)| Box::new_with(|| Stmt { kind: StmtKind::ChangeY { delta }, info })),
-            "gotoXY" => self.parse_2_args(stmt, &location).map(|(x, y, info)| Box::new_with(|| Stmt { kind: StmtKind::GotoXY { x, y }, info })),
-            "bounceOffEdge" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::BounceOffEdge, info })),
-            "down" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetPenDown { value: true }, info })),
-            "up" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::SetPenDown { value: false }, info })),
-            "clear" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::PenClear, info })),
-            "doAsk" => self.parse_1_args(stmt, &location).map(|(prompt, info)| Box::new_with(|| Stmt { kind: StmtKind::Ask { prompt, }, info })),
-            "doResetTimer" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ResetTimer, info })),
-            "clearEffects" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::ClearEffects, info })),
-            "doWearNextCostume" => self.parse_0_args(stmt, &location).map(|info| Box::new_with(|| Stmt { kind: StmtKind::NextCostume, info })),
-            x => self.parse_unknown_common(stmt, &location).map(|(args, info)| Box::new_with(|| Stmt { kind: StmtKind::UnknownBlock { name: x.into(), args }, info })),
+            "doStopAllSounds" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::StopSounds, info })),
+            "doBroadcast" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: false }, info })),
+            "doBroadcastAndWait" => self.parse_1_args(stmt, &location).map(|(msg_type, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SendLocalMessage { msg_type, target: None, wait: true }, info })),
+            "doPauseAll" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::Pause, info })),
+            "write" => self.parse_2_args(stmt, &location).map(|(content, font_size, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Write { content, font_size }, info })),
+            "doSocketResponse" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SendNetworkReply { value }, info })),
+            "changeScale" => self.parse_1_args(stmt, &location).map(|(delta, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::ChangeSize { delta, }, info })),
+            "setScale" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SetSize { value }, info })),
+            "doSayFor" => self.parse_2_args(stmt, &location).map(|(content, duration, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Say { content, duration: Some(duration) }, info })),
+            "doThinkFor" => self.parse_2_args(stmt, &location).map(|(content, duration, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Think { content, duration: Some(duration) }, info })),
+            "bubble" => self.parse_1_args(stmt, &location).map(|(content, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Say { content, duration: None }, info })),
+            "doThink" => self.parse_1_args(stmt, &location).map(|(content, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Think { content, duration: None }, info })),
+            "doThrow" => self.parse_1_args(stmt, &location).map(|(error, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Throw { error }, info })),
+            "hide" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::SetVisible { value: false }, info })),
+            "show" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::SetVisible { value: true }, info })),
+            "removeClone" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::DeleteClone, info })),
+            "doWaitUntil" => self.parse_1_args(stmt, &location).map(|(condition, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::WaitUntil { condition, }, info })),
+            "changeSize" => self.parse_1_args(stmt, &location).map(|(delta, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::ChangePenSize { delta, }, info })),
+            "setSize" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SetPenSize { value }, info })),
+            "doAddToList" => self.parse_2_args(stmt, &location).map(|(value, list, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::ListInsertLast { value, list }, info })),
+            "doReport" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Return { value }, info })),
+            "doStamp" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::Stamp, info })),
+            "doWait" => self.parse_1_args(stmt, &location).map(|(seconds, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Sleep { seconds, }, info })),
+            "forward" => self.parse_1_args(stmt, &location).map(|(distance, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Forward { distance, }, info })),
+            "turn" => self.parse_1_args(stmt, &location).map(|(angle, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::TurnRight { angle, }, info })),
+            "turnLeft" => self.parse_1_args(stmt, &location).map(|(angle, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::TurnLeft { angle, }, info })),
+            "setXPosition" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SetX { value }, info })),
+            "setYPosition" => self.parse_1_args(stmt, &location).map(|(value, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::SetY { value }, info })),
+            "changeXPosition" => self.parse_1_args(stmt, &location).map(|(delta, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::ChangeX { delta }, info })),
+            "changeYPosition" => self.parse_1_args(stmt, &location).map(|(delta, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::ChangeY { delta }, info })),
+            "gotoXY" => self.parse_2_args(stmt, &location).map(|(x, y, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::GotoXY { x, y }, info })),
+            "bounceOffEdge" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::BounceOffEdge, info })),
+            "down" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::SetPenDown { value: true }, info })),
+            "up" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::SetPenDown { value: false }, info })),
+            "clear" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::PenClear, info })),
+            "doAsk" => self.parse_1_args(stmt, &location).map(|(prompt, info)| Vec::new_with_single(|| Stmt { kind: StmtKind::Ask { prompt, }, info })),
+            "doResetTimer" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::ResetTimer, info })),
+            "clearEffects" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::ClearEffects, info })),
+            "doWearNextCostume" => self.parse_0_args(stmt, &location).map(|info| Vec::new_with_single(|| Stmt { kind: StmtKind::NextCostume, info })),
+            x => {
+                let (args, info) = self.parse_unknown_common(stmt, &location)?;
+                match self.parser.stmt_replacements.iter().find(|r| r.0 == x) {
+                    Some(f) => f.1(args, info, &location),
+                    None => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::UnknownBlock { name: x.into(), args }, info }))
+                }
+            }
         }
     }
     #[inline(never)]
@@ -1851,7 +1873,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                     }
                     _ => self.parse_expr(script, location)?,
                 };
-                vec![Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() }]
+                Vec::new_with_single(|| Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() })
             }
         };
         assert_eq!(locals_len, self.locals.len());
@@ -2923,21 +2945,33 @@ pub struct Parser {
     /// allowing easy conversion of Snap! names to, e.g., valid C-like identifiers.
     /// The default operation performs no conversion.
     /// Note that non-default transform strategies may also require a custom [`Parser::autofill_generator`].
-    pub name_transformer: Rc<dyn Fn(&str) -> Result<CompactString, ()>>,
+    pub name_transformer: Box<dyn Fn(&str) -> Result<CompactString, ()>>,
 
     /// A generator used to produce symbol names for auto-fill closure arguments.
     /// The function receives a number that can be used to differentiate different generated arguments.
     /// It is expected that multiple calls to this function with the same input will produce the same output symbol name.
     /// The default is to produce a string of format `%n` where `n` is the input number.
     /// Note that, after generation, symbol names are still passed through [`Parser::name_transformer`] as usual.
-    pub autofill_generator: Rc<dyn Fn(usize) -> Result<CompactString, ()>>,
+    pub autofill_generator: Box<dyn Fn(usize) -> Result<CompactString, ()>>,
+
+    /// A mapping of unknown stmt blocks to functions that replace them with a sequence of zero or more other statements.
+    /// The mapping function receives as input the arguments list to the original block with replacements already recursively applied, as well as the block info for the original block and its code location.
+    /// Note that replacements are not further applied to the result of this function.
+    pub stmt_replacements: Vec<(CompactString, Box<dyn Fn(Vec<Expr>, Box<BlockInfo>, &LocationRef) -> Result<Vec<Stmt>, Box<Error>>>)>,
+
+    /// A mapping of unknown expr blocks to functions that replace them with another expression, which could be composed of several sub-expressions.
+    /// The mapping function receives as input the arguments list to the original block with replacements already recursively applied, as well as the block info for the original block and its code location.
+    /// Note that replacements are not further applied to the result of this function.
+    pub expr_replacements: Vec<(CompactString, Box<dyn Fn(Vec<Expr>, Box<BlockInfo>, &LocationRef) -> Result<Expr, Box<Error>>>)>,
 }
 impl Default for Parser {
     fn default() -> Self {
         Self {
             omit_nonhat_scripts: true,
-            name_transformer: Rc::new(|v| Ok(v.into())),
-            autofill_generator: Rc::new(|v| Ok(format_compact!("%{}", v))),
+            name_transformer: Box::new(|v| Ok(v.into())),
+            autofill_generator: Box::new(|v| Ok(format_compact!("%{}", v))),
+            stmt_replacements: vec![],
+            expr_replacements: vec![],
         }
     }
 }
