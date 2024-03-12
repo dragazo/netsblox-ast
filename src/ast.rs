@@ -17,11 +17,6 @@ fn base64_decode(content: &str) -> Result<Vec<u8>, Base64Error> {
     base64::engine::general_purpose::STANDARD.decode(content)
 }
 
-#[inline(never)]
-fn run_isolated<T, F: FnOnce() -> T>(f: F) -> T {
-    f()
-}
-
 trait BoxExt<T> {
     fn new_with<F: FnOnce() -> T>(f: F) -> Self;
     fn try_new_with<E, F: FnOnce() -> Result<T, E>>(f: F) -> Result<Self, E> where Self: Sized;
@@ -1113,16 +1108,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         }
     }
     #[inline(never)]
-    fn parse(&mut self, script: &Xml) -> Result<Script, Box<Error>> {
-        if script.children.is_empty() { return Ok(Script { hat: None, stmts: vec![] }) }
-
-        let (hat, stmts_xml) = match self.parse_hat(&script.children[0])? {
-            None => (None, script.children.as_slice()),
-            Some(hat) => (Some(hat), &script.children[1..]),
+    fn parse(&mut self, script_xml: &Xml) -> Result<Box<Script>, Box<Error>> {
+        let mut script = match script_xml.children.first() {
+            Some(x) => Box::try_new_with(|| Ok::<_, Box<Error>>(Script { hat: self.parse_hat(x)?, stmts: vec![] }))?,
+            None => Box::new_with(|| Script { hat: None, stmts: vec![] }),
         };
 
-        let mut stmts = vec![];
-        for stmt in stmts_xml {
+        for stmt in &script_xml.children[if script.hat.is_some() { 1 } else { 0 }..] {
             let location = Box::new_with(|| LocationRef {
                 role: Some(&self.role.name),
                 entity: Some(&self.entity.name),
@@ -1131,14 +1123,11 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
             });
             match stmt.name.as_str() {
                 "block" => {
-                    run_isolated(|| {
-                        stmts.append(&mut self.parse_block(stmt)?);
-                        Ok::<(), Box<Error>>(())
-                    })?;
+                    script.stmts.append(&mut self.parse_block(stmt)?);
                 }
                 "custom-block" => {
                     let res = self.parse_fn_call(stmt, &location)?;
-                    stmts.push_with(|| {
+                    script.stmts.push_with(|| {
                         let FnCall { function, args, upvars, info } = *res;
                         Stmt { kind: StmtKind::CallFn { function, args, upvars }, info }
                     });
@@ -1146,7 +1135,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 _ => return Err(Box::new_with(|| Error { kind: ProjectError::BlockUnknownType.into(), location: location.to_owned() })),
             }
         }
-        Ok(Script { hat, stmts })
+
+        Ok(script)
     }
     #[inline(never)]
     fn parse_hat(&mut self, stmt: &Xml) -> Result<Option<Box<Hat>>, Box<Error>> {
@@ -1447,9 +1437,9 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 let start = self.parse_expr(&stmt.children[1], &location)?;
                 let stop = self.parse_expr(&stmt.children[2], &location)?;
                 let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
-                let stmts = self.parse(&stmt.children[3])?.stmts;
+                let script = self.parse(&stmt.children[3])?;
 
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForLoop { var: *var, start, stop, stmts: script.stmts }, info }))
             }
             "doForEach" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
@@ -1460,47 +1450,48 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 };
                 let items = self.parse_expr(&stmt.children[1], &location)?;
                 let var = self.decl_local(CompactString::new(var), 0f64.into(), &location)?.def.ref_at(VarLocation::Local); // define after bounds, but before loop body
-                let stmts = self.parse(&stmt.children[2])?.stmts;
+                let script = self.parse(&stmt.children[2])?;
 
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts }, info }))
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::ForeachLoop { var: *var, items, stmts: script.stmts }, info }))
             }
             "doRepeat" | "doUntil" | "doIf" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
                 let expr = self.parse_expr(&stmt.children[0], &location)?;
-                let stmts = self.parse(&stmt.children[1])?.stmts;
+                let script = self.parse(&stmt.children[1])?;
+
                 match s {
-                    "doRepeat" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Repeat { times: expr, stmts }, info })),
-                    "doUntil" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts }, info })),
-                    "doIf" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::If { condition: expr, then: stmts }, info })),
+                    "doRepeat" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Repeat { times: expr, stmts: script.stmts }, info })),
+                    "doUntil" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::UntilLoop { condition: expr, stmts: script.stmts }, info })),
+                    "doIf" => Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::If { condition: expr, then: script.stmts }, info })),
                     _ => unreachable!(),
                 }
             }
             "doForever" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
-                let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::InfLoop { stmts }, info }))
+                let script = self.parse(&stmt.children[0])?;
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::InfLoop { stmts: script.stmts }, info }))
             }
             "doIfElse" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
                 let condition = self.parse_expr(&stmt.children[0], &location)?;
-                let then = self.parse(&stmt.children[1])?.stmts;
-                let otherwise = self.parse(&stmt.children[2])?.stmts;
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::IfElse { condition, then, otherwise }, info }))
+                let then_script = self.parse(&stmt.children[1])?;
+                let otherwise_script = self.parse(&stmt.children[2])?;
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::IfElse { condition, then: then_script.stmts, otherwise: otherwise_script.stmts }, info }))
             }
             "doTryCatch" => {
                 let info = self.check_children_get_info(stmt, 3, &location)?;
-                let code = self.parse(&stmt.children[0])?.stmts;
+                let code_script = self.parse(&stmt.children[0])?;
                 let var = match stmt.children[1].name.as_str() {
                     "l" => self.decl_local(stmt.children[1].text.clone(), 0f64.into(), &location)?.def.ref_at(VarLocation::Local),
                     _ => return Err(Box::new_with(|| Error { kind: ProjectError::UpvarNotConst.into(), location: location.to_owned() })),
                 };
-                let handler = self.parse(&stmt.children[2])?.stmts;
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::TryCatch { code, var: *var, handler }, info }))
+                let handler_script = self.parse(&stmt.children[2])?;
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::TryCatch { code: code_script.stmts, var: *var, handler: handler_script.stmts }, info }))
             }
             "doWarp" => {
                 let info = self.check_children_get_info(stmt, 1, &location)?;
-                let stmts = self.parse(&stmt.children[0])?.stmts;
-                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Warp { stmts }, info }))
+                let script = self.parse(&stmt.children[0])?;
+                Ok(Vec::new_with_single(|| Stmt { kind: StmtKind::Warp { stmts: script.stmts }, info }))
             }
             "doDeleteFromList" => {
                 let info = self.check_children_get_info(stmt, 2, &location)?;
@@ -2502,7 +2493,7 @@ impl<'a, 'b> EntityInfo<'a, 'b> {
                     }
                 }
 
-                scripts.push(ScriptInfo::new(&self).parse(script_xml)?);
+                scripts.push_boxed(ScriptInfo::new(&self).parse(script_xml)?);
             }
         }
 
