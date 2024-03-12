@@ -520,7 +520,7 @@ pub struct BlockInfo {
     pub location: Option<CompactString>,
 }
 impl BlockInfo {
-    fn none() -> Box<Self> {
+    pub fn none() -> Box<Self> {
         Box::new_with(|| BlockInfo { comment: None, location: None })
     }
 }
@@ -2344,7 +2344,13 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                         };
                         Ok(Box::new_with(|| Expr { kind: ExprKind::RealTime { query }, info }))
                     }
-                    x => self.parse_unknown_common(expr, &location).map(|(args, info)| Box::new_with(|| Expr { kind: ExprKind::UnknownBlock { name: x.into(), args }, info })),
+                    x => {
+                        let (args, info) = self.parse_unknown_common(expr, &location)?;
+                        match self.parser.expr_replacements.iter().find(|r| r.0 == x) {
+                            Some(f) => f.1(args, info, &location),
+                            None => Ok(Box::new_with(|| Expr { kind: ExprKind::UnknownBlock { name: x.into(), args }, info })),
+                        }
+                    }
                 }
             }
             _ => Err(Box::new_with(|| Error { kind: CompileError::UnknownBlockType.into(), location: location.to_owned() })),
@@ -2953,7 +2959,7 @@ pub struct Parser {
     /// A mapping of unknown expr blocks to functions that replace them with another expression, which could be composed of several sub-expressions.
     /// The mapping function receives as input the arguments list to the original block with replacements already recursively applied, as well as the block info for the original block and its code location.
     /// Note that replacements are not further applied to the result of this function.
-    pub expr_replacements: Vec<(CompactString, Box<dyn Fn(Vec<Expr>, Box<BlockInfo>, &LocationRef) -> Result<Expr, Box<Error>>>)>,
+    pub expr_replacements: Vec<(CompactString, Box<dyn Fn(Vec<Expr>, Box<BlockInfo>, &LocationRef) -> Result<Box<Expr>, Box<Error>>>)>,
 }
 impl Default for Parser {
     fn default() -> Self {

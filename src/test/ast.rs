@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use crate::*;
 
 #[test]
@@ -1796,6 +1797,326 @@ fn test_unknown_blocks() {
         }
         x => panic!("{x:?}"),
     }
+}
+
+#[test]
+fn test_replace() {
+    let script = include_str!("projects/replace.xml");
+    let parser = Parser {
+        omit_nonhat_scripts: false,
+        stmt_replacements: vec![
+            ("scopeBlock".into(), Box::new(|args, info, _| {
+                assert_eq!(args.len(), 1);
+                let f = args.into_iter().next().unwrap();
+
+                Ok(vec![
+                    Stmt { kind: StmtKind::UnknownBlock { name: "foo::enter".into(), args: vec![] }, info: BlockInfo::none() },
+                    Stmt { kind: StmtKind::CallClosure { new_entity: None, closure: Box::new(f), args: vec![] }, info },
+                    Stmt { kind: StmtKind::UnknownBlock { name: "foo::exit".into(), args: vec![] }, info: BlockInfo::none() },
+                ])
+            })),
+        ],
+        ..Default::default()
+    };
+    let ast = parser.parse(&script).unwrap();
+    let stmts = &ast.roles[0].entities[1].scripts[0].stmts;
+    assert_eq!(stmts.len(), 15);
+
+    match &stmts[0].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::enter");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[1].kind {
+        StmtKind::CallClosure { new_entity, closure, args } => {
+            assert!(new_entity.is_none());
+            assert_eq!(args.len(), 0);
+            match &closure.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Command);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 0);
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[2].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::exit");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+
+    match &stmts[3].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::enter");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[4].kind {
+        StmtKind::CallClosure { new_entity, closure, args } => {
+            assert!(new_entity.is_none());
+            assert_eq!(args.len(), 0);
+            match &closure.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Command);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 1);
+                    match &stmts[0].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "Hello!"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[5].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::exit");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+
+    match &stmts[6].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::enter");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[7].kind {
+        StmtKind::CallClosure { new_entity, closure, args } => {
+            assert!(new_entity.is_none());
+            assert_eq!(args.len(), 0);
+            match &closure.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Command);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 2);
+                    match &stmts[0].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello world 1"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[1].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello doggy 1"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[8].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::exit");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+
+    match &stmts[9].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::enter");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[10].kind {
+        StmtKind::CallClosure { new_entity, closure, args } => {
+            assert!(new_entity.is_none());
+            assert_eq!(args.len(), 0);
+            match &closure.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Command);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 5);
+                    match &stmts[0].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello world 2"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[1].kind {
+                        StmtKind::UnknownBlock { name, args } => {
+                            assert_eq!(name.as_str(), "foo::enter");
+                            assert_eq!(args.len(), 0);
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[2].kind {
+                        StmtKind::CallClosure { new_entity, closure, args } => {
+                            assert!(new_entity.is_none());
+                            assert_eq!(args.len(), 0);
+                            match &closure.kind {
+                                ExprKind::Closure { kind, params, captures, stmts } => {
+                                    assert_eq!(*kind, ClosureKind::Command);
+                                    assert_eq!(params.len(), 0);
+                                    assert_eq!(captures.len(), 0);
+                                    assert_eq!(stmts.len(), 0);
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[3].kind {
+                        StmtKind::UnknownBlock { name, args } => {
+                            assert_eq!(name.as_str(), "foo::exit");
+                            assert_eq!(args.len(), 0);
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[4].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello doggy 2"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[11].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::exit");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+
+    match &stmts[12].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::enter");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[13].kind {
+        StmtKind::CallClosure { new_entity, closure, args } => {
+            assert!(new_entity.is_none());
+            assert_eq!(args.len(), 0);
+            match &closure.kind {
+                ExprKind::Closure { kind, params, captures, stmts } => {
+                    assert_eq!(*kind, ClosureKind::Command);
+                    assert_eq!(params.len(), 0);
+                    assert_eq!(captures.len(), 0);
+                    assert_eq!(stmts.len(), 5);
+                    match &stmts[0].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello world 3"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[1].kind {
+                        StmtKind::UnknownBlock { name, args } => {
+                            assert_eq!(name.as_str(), "foo::enter");
+                            assert_eq!(args.len(), 0);
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[2].kind {
+                        StmtKind::CallClosure { new_entity, closure, args } => {
+                            assert!(new_entity.is_none());
+                            assert_eq!(args.len(), 0);
+                            match &closure.kind {
+                                ExprKind::Closure { kind, params, captures, stmts } => {
+                                    assert_eq!(*kind, ClosureKind::Command);
+                                    assert_eq!(params.len(), 0);
+                                    assert_eq!(captures.len(), 0);
+                                    assert_eq!(stmts.len(), 1);
+                                    match &stmts[0].kind {
+                                        StmtKind::Say { content, duration } => {
+                                            assert!(duration.is_none());
+                                            match &content.kind {
+                                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "middle 3"),
+                                                x => panic!("{x:?}"),
+                                            }
+                                        }
+                                        x => panic!("{x:?}"),
+                                    }
+                                }
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[3].kind {
+                        StmtKind::UnknownBlock { name, args } => {
+                            assert_eq!(name.as_str(), "foo::exit");
+                            assert_eq!(args.len(), 0);
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                    match &stmts[4].kind {
+                        StmtKind::Say { content, duration } => {
+                            assert!(duration.is_none());
+                            match &content.kind {
+                                ExprKind::Value(Value::String(x)) => assert_eq!(x.as_str(), "hello doggy 3"),
+                                x => panic!("{x:?}"),
+                            }
+                        }
+                        x => panic!("{x:?}"),
+                    }
+                }
+                x => panic!("{x:?}"),
+            }
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[14].kind {
+        StmtKind::UnknownBlock { name, args } => {
+            assert_eq!(name.as_str(), "foo::exit");
+            assert_eq!(args.len(), 0);
+        }
+        x => panic!("{x:?}"),
+    }
+
 }
 
 #[test]
