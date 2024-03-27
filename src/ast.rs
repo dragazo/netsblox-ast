@@ -947,6 +947,8 @@ pub enum ExprKind {
     Latitude,
     Longitude,
 
+    KeyDown { key: Box<Expr> },
+
     YPos,
     XPos,
     Heading,
@@ -1896,6 +1898,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         match expr.name.as_str() {
             "l" => match expr.children.first() {
                 Some(child) if child.name == "bool" => self.parse_bool(&child.text, &location),
+                Some(child) if child.name == "option" => Ok(Box::new_with(|| Expr { kind: ExprKind::Value(child.text.clone().into()), info: BlockInfo::none() })),
                 _ => match self.autofill_args.as_mut() {
                     Some(autofill_args) if expr.text.is_empty() => {
                         let var = Box::try_new_with(|| {
@@ -2030,6 +2033,8 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
 
                     "reportLatitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Latitude, info })),
                     "reportLongitude" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::Longitude, info })),
+
+                    "reportKeyPressed" => self.parse_1_args(expr, &location).map(|(key, info)| Box::new_with(|| Expr { kind: ExprKind::KeyDown { key }, info })),
 
                     "reportPenTrailsAsCostume" => self.parse_0_args(expr, &location).map(|info| Box::new_with(|| Expr { kind: ExprKind::ImageOfDrawings, info })),
 
