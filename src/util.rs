@@ -1,12 +1,10 @@
 use core::fmt::{self, Debug, Display};
 use alloc::string::ToString;
 
-use compact_str::{CompactString, format_compact};
-
 #[cfg(test)]
 use proptest::prelude::*;
 
-use super::XmlError;
+use crate::*;
 
 pub struct Punctuated<'a, T: Iterator + Clone>(pub T, pub &'a str);
 macro_rules! impl_punctuated {

@@ -4,14 +4,12 @@ use alloc::boxed::Box;
 use alloc::borrow::ToOwned;
 use core::{mem, iter, fmt};
 
-use compact_str::{CompactString, format_compact};
-
 use base64::engine::Engine as Base64Engine;
 use base64::DecodeError as Base64Error;
 
+use crate::*;
 use crate::rpcs::*;
-
-use crate::util::xml_unescape;
+use crate::util::*;
 
 fn base64_decode(content: &str) -> Result<Vec<u8>, Base64Error> {
     base64::engine::general_purpose::STANDARD.decode(content)
