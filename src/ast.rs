@@ -237,13 +237,13 @@ fn parse_xml_root<'a>(xml: &mut xmlparser::Tokenizer<'a>, root_name: &'a str) ->
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Error {
     pub kind: ErrorKind,
     pub location: Location,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Location {
     pub role: Option<CompactString>,
     pub entity: Option<CompactString>,
@@ -269,7 +269,7 @@ impl LocationRef<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     XmlError(XmlError),
     Base64Error(Base64Error),
@@ -281,14 +281,14 @@ impl From<Base64Error> for ErrorKind { fn from(e: Base64Error) -> Self { Self::B
 impl From<ProjectError> for ErrorKind { fn from(e: ProjectError) -> Self { Self::ProjectError(e) } }
 impl From<CompileError> for ErrorKind { fn from(e: CompileError) -> Self { Self::CompileError(e) } }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum XmlError {
     Read { error: xmlparser::Error },
     IllegalSequence { sequence: CompactString },
     UnexpectedEof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ProjectError {
     NoRoot,
     NoStage,
@@ -349,7 +349,7 @@ pub enum ProjectError {
     MessageTypeMultiplyDefined { msg_type: CompactString },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CompileError {
     AutofillGenerateError { input: usize },
     NameTransformError { name: CompactString},
