@@ -128,44 +128,42 @@ pub fn xml_escape(input: &str) -> CompactString {
     result.into()
 }
 
-// source: https://docs.babelmonkeys.de/RustyXML/src/xml/lib.rs.html#60-100
-// note: modified to suite our needs
 #[inline(never)]
 pub fn xml_unescape(input: &str) -> Result<CompactString, XmlError> {
     let mut result = alloc::string::String::with_capacity(input.len());
 
-    let mut it = input.split('&');
-    if let Some(sub) = it.next() {
-        result.push_str(sub); // Push everything before the first '&'
-    }
-
-    for sub in it {
-        match sub.find(';') {
-            Some(idx) => {
-                let ent = &sub[..idx];
-                match ent {
-                    "quot" => result.push('"'),
-                    "apos" => result.push('\''),
-                    "gt" => result.push('>'),
-                    "lt" => result.push('<'),
-                    "amp" => result.push('&'),
-                    ent => {
-                        let val = if ent.starts_with("#x") {
-                            u32::from_str_radix(&ent[2..], 16).ok()
-                        } else if ent.starts_with('#') {
-                            u32::from_str_radix(&ent[1..], 10).ok()
-                        } else {
-                            None
-                        };
-                        match val.and_then(char::from_u32) {
-                            Some(c) => result.push(c),
-                            None => return Err(XmlError::IllegalSequence { sequence: format_compact!("&{};", ent) }),
+    let mut chars = input.char_indices().fuse();
+    while let Some((start, start_ch)) = chars.next() {
+        match start_ch {
+            '&' => match chars.clone().skip_while(|(_, x)| x.is_ascii_digit() || x.is_ascii_alphabetic() || *x == '#').next() {
+                Some((stop, stop_ch)) if stop_ch == ';' => {
+                    match &input[start + 1..stop] {
+                        "quot" => result.push('"'),
+                        "apos" => result.push('\''),
+                        "gt" => result.push('>'),
+                        "lt" => result.push('<'),
+                        "amp" => result.push('&'),
+                        ent => {
+                            let val = if ent.starts_with("#x") {
+                                u32::from_str_radix(&ent[2..], 16).ok()
+                            } else if ent.starts_with('#') {
+                                u32::from_str_radix(&ent[1..], 10).ok()
+                            } else {
+                                None
+                            };
+                            match val.and_then(char::from_u32) {
+                                Some(c) => result.push(c),
+                                None => return Err(XmlError::IllegalSequence { sequence: format_compact!("&{};", ent) }),
+                            }
                         }
                     }
+                    while let Some((pos, _)) = chars.next() {
+                        if pos == stop { break }
+                    }
                 }
-                result.push_str(&sub[idx + 1..]);
+                _ => result.push(start_ch),
             }
-            None => return Err(XmlError::IllegalSequence { sequence: format_compact!("&{}", sub) }),
+            _ => result.push(start_ch),
         }
     }
 
@@ -180,4 +178,32 @@ proptest! {
         let back = xml_unescape(&encoded).unwrap();
         prop_assert_eq!(raw, back);
     }
+}
+
+#[test]
+fn test_xml_dec() {
+    assert_eq!(xml_unescape("hello world").unwrap(), "hello world");
+    assert_eq!(xml_unescape("hello &quot; world").unwrap(), "hello \" world");
+    assert_eq!(xml_unescape("hello &apos; world").unwrap(), "hello ' world");
+    assert_eq!(xml_unescape("hello &gt; world").unwrap(), "hello > world");
+    assert_eq!(xml_unescape("hello &lt; world").unwrap(), "hello < world");
+    assert_eq!(xml_unescape("hello &amp; world").unwrap(), "hello & world");
+    assert_eq!(xml_unescape("hello &#63; world").unwrap(), "hello ? world");
+    assert_eq!(xml_unescape("hello &#x3f; world").unwrap(), "hello ? world");
+    assert_eq!(xml_unescape("hello &#x3F; world").unwrap(), "hello ? world");
+    assert_eq!(xml_unescape("hello &#126; world").unwrap(), "hello ~ world");
+    assert_eq!(xml_unescape("hello &#126; world&#126").unwrap(), "hello ~ world&#126");
+    assert_eq!(xml_unescape("hello &#126; world&#126;").unwrap(), "hello ~ world~");
+    assert_eq!(xml_unescape("hello &#x7e; world").unwrap(), "hello ~ world");
+    assert_eq!(xml_unescape("hello &#x7e; world&#x7e").unwrap(), "hello ~ world&#x7e");
+    assert_eq!(xml_unescape("hello &#x7e; world&#x7e;").unwrap(), "hello ~ world~");
+    assert_eq!(xml_unescape("hello & ;world").unwrap(), "hello & ;world");
+    assert_eq!(xml_unescape("hello & world").unwrap(), "hello & world");
+    assert_eq!(xml_unescape("hello && world").unwrap(), "hello && world");
+    assert_eq!(xml_unescape("hello &&& world").unwrap(), "hello &&& world");
+    assert_eq!(xml_unescape("he&llo &&& world").unwrap(), "he&llo &&& world");
+    assert_eq!(xml_unescape("he&llo &&& world&").unwrap(), "he&llo &&& world&");
+    assert_eq!(xml_unescape("&he&llo &&& world&").unwrap(), "&he&llo &&& world&");
+    assert_eq!(xml_unescape("&&he&llo &&& world&").unwrap(), "&&he&llo &&& world&");
+    assert_eq!(xml_unescape("&&he&llo &&& world&&").unwrap(), "&&he&llo &&& world&&");
 }

@@ -16,8 +16,7 @@ fn main() {
         let parser = Parser::default();
         let res = parser.parse(&xml).expect("failed to translate");
         println!("{:?}", res);
-    }
-    else {
+    } else {
         eprintln!("unknown input file type");
         std::process::exit(1);
     }
