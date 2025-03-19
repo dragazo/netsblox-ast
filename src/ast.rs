@@ -1856,15 +1856,27 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
         let locals_len = self.locals.len();
         let stmts = match kind {
             ClosureKind::Command => self.parse(script)?.stmts,
-            ClosureKind::Reporter | ClosureKind::Predicate => {
-                let value = match script.name.as_str() {
-                    "autolambda" => {
-                        let _ = self.check_children_get_info(script, 1, location)?;
-                        self.parse_expr(&script.children[0], location)?
+            ClosureKind::Reporter | ClosureKind::Predicate => match script.name.as_str() {
+                "autolambda" => {
+                    let _ = self.check_children_get_info(script, 1, location)?;
+                    let value = self.parse_expr(&script.children[0], location)?;
+                    Vec::new_with_single(|| Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() })
+                }
+                "script" => {
+                    let mut stmts = self.parse(script)?.stmts;
+                    match self.autofill_args.as_mut() {
+                        Some(autofill_args) if stmts.is_empty() => {
+                            let var = new_autofill_arg(autofill_args, &self.parser, &location)?;
+                            stmts.push_boxed(Box::new_with(|| Stmt { kind: StmtKind::Return { value: Box::new(Expr { kind: ExprKind::Variable { var: *var }, info: BlockInfo::none() }) }, info: BlockInfo::none() }));
+                        }
+                        _ => (),
                     }
-                    _ => self.parse_expr(script, location)?,
-                };
-                Vec::new_with_single(|| Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() })
+                    stmts
+                }
+                _ => {
+                    let value = self.parse_expr(script, location)?;
+                    Vec::new_with_single(|| Stmt { kind: StmtKind::Return { value }, info: BlockInfo::none() })
+                }
             }
         };
         assert_eq!(locals_len, self.locals.len());
@@ -1899,21 +1911,7 @@ impl<'a, 'b, 'c> ScriptInfo<'a, 'b, 'c> {
                 Some(child) if child.name == "option" => Ok(Box::new_with(|| Expr { kind: ExprKind::Value(child.text.clone().into()), info: BlockInfo::none() })),
                 _ => match self.autofill_args.as_mut() {
                     Some(autofill_args) if expr.text.is_empty() => {
-                        let var = Box::try_new_with(|| {
-                            let input = autofill_args.len() + 1;
-                            let name = match self.parser.autofill_generator.as_ref()(input) {
-                                Ok(x) => x,
-                                Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::AutofillGenerateError { input }.into(), location: location.to_owned() })),
-                            };
-                            let trans_name = match self.parser.name_transformer.as_ref()(&name) {
-                                Ok(x) => x,
-                                Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
-                            };
-                            Ok(VariableRef { name, trans_name, location: VarLocation::Local })
-                        })?;
-
-                        autofill_args.push_with(|| (*var).clone());
-
+                        let var = new_autofill_arg(autofill_args, &self.parser, &location)?;
                         Ok(Box::new_with(|| Expr { kind: ExprKind::Variable { var: *var }, info: BlockInfo::none() }))
                     }
                     _ => Ok(Box::new_with(|| expr.text.clone().into())),
@@ -2609,6 +2607,7 @@ fn test_block_name_from_ref() {
     assert_eq!(block_name_from_ref("hello %world "), "hello \t ");
 }
 
+#[inline(never)]
 fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location: &LocationRef) -> Result<(), Box<Error>> {
     let mut location = Box::new_with(|| LocationRef {
         role: location.role,
@@ -2669,6 +2668,7 @@ fn parse_block_header<'a>(block: &'a Xml, funcs: &mut SymbolTable<'a>, location:
         Err(SymbolError::ConflictingTrans { trans_name, names }) => Err(Box::new_with(|| Error { kind: CompileError::BlocksWithSameTransName { trans_name, names }.into(), location: location.to_owned() })),
     }
 }
+#[inline(never)]
 fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, entity: Option<&EntityInfo>) -> Result<Function, Box<Error>> {
     let s = block.attr("s").unwrap().value.as_str(); // unwrap ok because we assume parse_block_header() was called before
     let entry = funcs.get(&block_name_from_def(s)).unwrap();
@@ -2723,6 +2723,25 @@ fn parse_block<'a>(block: &'a Xml, funcs: &SymbolTable<'a>, role: &RoleInfo, ent
             finalize(&entity)
         }
     }
+}
+#[inline(never)]
+fn new_autofill_arg(autofill_args: &mut Vec<VariableRef>, parser: &Parser, location: &LocationRef) -> Result<Box<VariableRef>, Box<Error>> {
+    let var = Box::try_new_with(|| {
+        let input = autofill_args.len() + 1;
+        let name = match parser.autofill_generator.as_ref()(input) {
+            Ok(x) => x,
+            Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::AutofillGenerateError { input }.into(), location: location.to_owned() })),
+        };
+        let trans_name = match parser.name_transformer.as_ref()(&name) {
+            Ok(x) => x,
+            Err(()) => return Err(Box::new_with(|| Error { kind: CompileError::NameTransformError { name }.into(), location: location.to_owned() })),
+        };
+        Ok(VariableRef { name, trans_name, location: VarLocation::Local })
+    })?;
+
+    autofill_args.push_with(|| (*var).clone());
+
+    Ok(var)
 }
 
 struct RoleInfo<'a> {

@@ -464,6 +464,131 @@ fn test_lambdas_nested_autofill() {
 }
 
 #[test]
+fn test_rings() {
+    let parser = Parser::default();
+    let ast = parser.parse(&include_str!("projects/rings.xml")).unwrap();
+    let stmts = &ast.roles[0].entities[1].scripts[0].stmts;
+    assert_eq!(stmts.len(), 7);
+    match &stmts[0].kind {
+        StmtKind::DeclareLocals { vars } => {
+            assert_eq!(vars.len(), 1);
+            assert_eq!(vars[0].name, "a");
+            assert_eq!(vars[0].trans_name, "a");
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[1].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Command);
+                assert_eq!(params.len(), 0);
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "1"),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[2].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Reporter);
+                assert_eq!(params.len(), 0);
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "2"),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[3].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Predicate);
+                assert_eq!(params.len(), 0);
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Value(Value::String(x)) => assert_eq!(x, "3"),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[4].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Command);
+                assert_eq!(params.len(), 0);
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 0);
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[5].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Reporter);
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+    match &stmts[6].kind {
+        StmtKind::Assign { var: _, value } => match &value.kind {
+            ExprKind::Closure { kind, params, captures, stmts } => {
+                assert_eq!(*kind, ClosureKind::Predicate);
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "%1");
+                assert_eq!(captures.len(), 0);
+                assert_eq!(stmts.len(), 1);
+                match &stmts[0].kind {
+                    StmtKind::Return { value } => match &value.kind {
+                        ExprKind::Variable { var } => assert_eq!(var.name, "%1"),
+                        x => panic!("{x:?}"),
+                    }
+                    x => panic!("{x:?}"),
+                }
+            }
+            x => panic!("{x:?}"),
+        }
+        x => panic!("{x:?}"),
+    }
+}
+
+#[test]
 fn test_lambdas_no_captures() {
     let script = format!(include_str!("script-template.xml"),
         globals = "", fields = "",
